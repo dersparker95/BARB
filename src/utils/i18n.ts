@@ -79,7 +79,6 @@ type TranslationTree = {
     zoomOut: string
     resetView: string
     goToDebug: string
-    openDocs: string
     history: string
     close: string
     statusOperational: string
@@ -246,7 +245,6 @@ const translations: Record<AppLang, TranslationTree> = {
       zoomOut: 'Alejar',
       resetView: 'Reiniciar vista',
       goToDebug: 'Ir a Debug',
-      openDocs: 'Abrir documentación',
       history: 'Historial',
       close: 'Cerrar',
       statusOperational: 'Operativa',
@@ -411,7 +409,6 @@ const translations: Record<AppLang, TranslationTree> = {
       zoomOut: 'Zoom out',
       resetView: 'Reset view',
       goToDebug: 'Go to Debug',
-      openDocs: 'Open documentation',
       history: 'History',
       close: 'Close',
       statusOperational: 'Operational',

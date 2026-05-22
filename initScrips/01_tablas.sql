@@ -54,15 +54,23 @@ CREATE TABLE REPUESTO (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE DISCIPLINA (
+    disciplina_id SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) UNIQUE NOT NULL,
+    color VARCHAR(20)
+);
+
 -- ==========================================
 -- 3. TABLAS PRINCIPALES (Infraestructura)
 -- ==========================================
 CREATE TABLE MAQUINA (
     maquina_id SERIAL PRIMARY KEY,
     planta_id INT NOT NULL,
+    disciplina_id INT NOT NULL,
     nombre VARCHAR(100) NOT NULL,
     codigo VARCHAR(50) UNIQUE NOT NULL,
-    CONSTRAINT fk_maquina_planta FOREIGN KEY (planta_id) REFERENCES PLANTA(planta_id)
+    CONSTRAINT fk_maquina_planta FOREIGN KEY (planta_id) REFERENCES PLANTA(planta_id),
+    CONSTRAINT fk_maquina_disciplina FOREIGN KEY (disciplina_id) REFERENCES DISCIPLINA(disciplina_id)
 );
 
 CREATE TABLE SENSOR (
@@ -277,3 +285,66 @@ CREATE TABLE LECTURA_SENSOR (
     estado estado_lectura NOT NULL DEFAULT 'normal',
     CONSTRAINT fk_lectura_sensor FOREIGN KEY (sensor_id) REFERENCES SENSOR(sensor_id) ON DELETE CASCADE
 );
+
+
+-- ==========================================
+-- 9. INSERCIÓN DE DATOS SEMILLA (SEED DATA)
+-- ==========================================
+
+-- 9.1 Usuarios del sistema (De la versión 2.0)
+INSERT INTO USUARIO (usuario_id, nombre, email, rol) VALUES 
+(1, 'Director de Mantenimiento', 'supervisor.barb@planta.com', 'Gerente'),
+(2, 'Carlos Mendoza', 'carlos.mendoza@planta.com', 'Técnico'),
+(3, 'Ana Silva', 'ana.silva@planta.com', 'Técnico'),
+(4, 'Roberto Tapia', 'roberto.tapia@planta.com', 'Técnico')
+ON CONFLICT (usuario_id) DO NOTHING;
+
+-- 9.2 Plantas de prueba (De la versión 1.0)
+INSERT INTO PLANTA (planta_id, nombre, ubicacion) VALUES 
+(1, 'Planta Chancado', 'Sector norte'),
+(2, 'Planta Concentradora', 'Sector central'),
+(3, 'Planta de Filtros', 'Sector sur')
+ON CONFLICT (planta_id) DO NOTHING;
+
+-- 9.3 Disciplinas Técnicas (De la versión 2.0, con colores)
+INSERT INTO DISCIPLINA (disciplina_id, nombre, color) VALUES 
+(1, 'Mecánica', 'blue'),
+(2, 'Eléctrica', 'yellow'),
+(3, 'Hidráulica', 'cyan'),
+(4, 'Neumática', 'purple'),
+(5, 'Automatización', 'green')
+ON CONFLICT (disciplina_id) DO NOTHING;
+
+-- 9.4 Máquinas Industriales (Las 10 de la versión 1.0 asignadas a las disciplinas)
+INSERT INTO MAQUINA (maquina_id, planta_id, disciplina_id, nombre, codigo) VALUES 
+(1, 1, 1, 'Chancador Primario', 'MCH-001'),
+(2, 1, 1, 'Chancador Secundario', 'MCH-002'),
+(3, 1, 1, 'Harnero Vibratorio', 'MCH-003'),
+(4, 2, 2, 'Sala Eléctrica', 'MEL-001'),
+(5, 2, 2, 'Centro de Control MCC', 'MEL-002'),
+(6, 2, 3, 'Bomba de Relaves', 'MHI-001'),
+(7, 3, 4, 'Compresor Principal', 'MNE-001'),
+(8, 3, 3, 'Bomba de Agua de Servicio', 'MHI-002'),
+(9, 3, 4, 'Línea de Aire Instrumental', 'MNE-002'),
+(10, 2, 2, 'Tablero General de Fuerza', 'MEL-003')
+ON CONFLICT (maquina_id) DO NOTHING;
+
+-- 9.5 Órdenes de Trabajo (Detalle v2.0 aplicadas a las 10 máquinas de v1.0, asignadas a los técnicos 2 y 3)
+INSERT INTO ORDEN_TRABAJO (
+    numero_ot, maquina_id, tecnico_id, creado_por, tipo, 
+    descripcion_problema, descripcion_reparacion, resolution, 
+    priority, severity, fecha_creacion, fecha_inicio, fecha_cierre, 
+    fecha_vencimiento, tiempo_reparacion_min, downtime_minutes, 
+    costo_estimado, costo_real, estado
+) VALUES 
+('OT-2026-001', 1, 2, 1, 'preventive', 'Mantenimiento preventivo trimestral en Chancador Primario.', 'Se cambiaron filtros y lubricaron rodamientos.', 'Operación exitosa.', 'low', 'low', '2026-05-10 08:00:00', '2026-05-10 08:30:00', '2026-05-10 10:30:00', '2026-05-15 00:00:00', 120, 120, 150.00, 145.50, 'completed'),
+('OT-2026-002', 6, 2, 1, 'corrective', 'Pérdida de presión en Bomba de Relaves.', 'Se reemplazó manguera de alta presión y sellos mecánicos.', 'Fuga contenida y presión estable.', 'urgent', 'critical', '2026-05-11 14:15:00', '2026-05-11 14:20:00', '2026-05-11 15:05:00', '2026-05-11 18:00:00', 45, 45, 500.00, 620.00, 'completed'),
+('OT-2026-003', 3, 3, 1, 'inspection', 'Ruido anómalo reportado en Harnero Vibratorio.', NULL, NULL, 'low', 'medium', '2026-05-17 09:00:00', NULL, NULL, '2026-05-20 18:00:00', NULL, 0, 50.00, NULL, 'pending'),
+('OT-2026-004', 2, 3, 1, 'predictive', 'Alerta de vibración en motor del Chancador Secundario.', 'Analizando alineación e integridad del eje.', NULL, 'high', 'high', '2026-05-18 10:00:00', '2026-05-18 10:30:00', NULL, '2026-05-19 12:00:00', NULL, 60, 300.00, NULL, 'in_progress'),
+('OT-2026-005', 4, 2, 1, 'corrective', 'Falla eléctrica intermitente en Sala Eléctrica.', 'Revisión de contactores. Botón de emergencia atascado.', 'Se liberó botón y reseteó sistema.', 'medium', 'low', '2026-05-12 11:00:00', '2026-05-12 11:10:00', '2026-05-12 11:15:00', '2026-05-13 18:00:00', 5, 5, 0.00, 0.00, 'cancelled'),
+('OT-2026-006', 7, 3, 1, 'preventive', 'Calibración de sensores y purga de Compresor Principal.', NULL, NULL, 'medium', 'medium', '2026-05-01 08:00:00', NULL, NULL, '2026-05-05 18:00:00', NULL, 0, 100.00, NULL, 'overdue'),
+('OT-2026-007', 8, 2, 1, 'corrective', 'Fuga de fluido en Bomba de Agua de Servicio.', 'Se reemplazó empaquetadura y probó estanqueidad.', 'Equipo 100% operativo.', 'high', 'high', '2026-05-15 16:00:00', '2026-05-15 16:05:00', '2026-05-15 16:35:00', '2026-05-16 12:00:00', 30, 30, 0.00, 15.00, 'completed'),
+('OT-2026-008', 5, 2, 1, 'inspection', 'Chequeo general de limpieza interna en Centro de Control MCC.', NULL, NULL, 'low', 'low', '2026-05-18 07:00:00', NULL, NULL, '2026-05-19 10:00:00', NULL, 0, 30.00, NULL, 'assigned'),
+('OT-2026-009', 9, 3, 1, 'corrective', 'Caída de presión en Línea de Aire Instrumental.', 'Inspección de válvulas y sellado de fugas en línea.', 'Presión neumática restablecida.', 'urgent', 'critical', '2026-05-14 02:00:00', '2026-05-14 02:15:00', '2026-05-14 06:15:00', '2026-05-14 08:00:00', 240, 240, 1200.00, 1450.00, 'completed'),
+('OT-2026-010', 10, 2, 1, 'predictive', 'Punto caliente térmico detectado en Tablero General de Fuerza.', 'Termografía, reapriete y limpieza de conexiones.', 'Temperatura en rangos normales.', 'medium', 'medium', '2026-05-16 09:00:00', '2026-05-16 09:30:00', '2026-05-16 10:15:00', '2026-05-17 18:00:00', 45, 0, 80.00, 45.00, 'completed')
+ON CONFLICT (numero_ot) DO NOTHING;

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import os
+import traceback
 from collections import Counter
 from datetime import datetime, timezone
 from io import StringIO
@@ -14,7 +15,8 @@ from pypdf import PdfReader
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from sqlalchemy import ForeignKey, String, create_engine, select
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, create_engine, select, text
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 from pathlib import Path
@@ -36,7 +38,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://.*",
+    allow_origins=["http://localhost", "http://localhost:5173", "http://127.0.0.1"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,36 +68,87 @@ class Base(DeclarativeBase):
 
 
 class Discipline(Base):
-    __tablename__ = "disciplines"
+    __tablename__ = "disciplina"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    id: Mapped[int] = mapped_column("disciplina_id", primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column("nombre", String(255), unique=True, nullable=False)
 
     machines: Mapped[list["Machine"]] = relationship(back_populates="discipline", cascade="all, delete-orphan")
 
 
 class Technician(Base):
-    __tablename__ = "technicians"
+    __tablename__ = "usuario"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    id: Mapped[int] = mapped_column("usuario_id", primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column("nombre", String(255), unique=True, nullable=False)
+
+
+class Plant(Base):
+    __tablename__ = "planta"
+
+    id: Mapped[int] = mapped_column("planta_id", primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column("nombre", String(255), unique=True, nullable=False)
+    location: Mapped[Optional[str]] = mapped_column("ubicacion", String(255), nullable=True)
 
 
 class Machine(Base):
-    __tablename__ = "machines"
+    __tablename__ = "maquina"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    id: Mapped[int] = mapped_column("maquina_id", primary_key=True, autoincrement=True)
+    plant_id: Mapped[int] = mapped_column(ForeignKey("planta.planta_id", ondelete="RESTRICT"), nullable=False)
+    discipline_id: Mapped[int] = mapped_column(ForeignKey("disciplina.disciplina_id", ondelete="RESTRICT"), nullable=False)
+    name: Mapped[str] = mapped_column("nombre", String(255), unique=True, nullable=False)
+    code: Mapped[str] = mapped_column("codigo", String(50), unique=True, nullable=False)
 
-    discipline_id: Mapped[int] = mapped_column(ForeignKey("disciplines.id", ondelete="RESTRICT"), nullable=False)
-
+    plant: Mapped["Plant"] = relationship()
     discipline: Mapped["Discipline"] = relationship(back_populates="machines")
+
+
+class OrdenTrabajo(Base):
+    __tablename__ = "orden_trabajo"
+
+    id: Mapped[int] = mapped_column("ot_id", Integer, primary_key=True, autoincrement=True)
+    numero_ot: Mapped[str] = mapped_column("numero_ot", String(40), unique=True, nullable=False)
+    maquina_id: Mapped[int] = mapped_column(ForeignKey("maquina.maquina_id", ondelete="RESTRICT"), nullable=False)
+    tecnico_id: Mapped[int] = mapped_column(ForeignKey("usuario.usuario_id", ondelete="RESTRICT"), nullable=False)
+    creado_por: Mapped[int] = mapped_column(ForeignKey("usuario.usuario_id", ondelete="RESTRICT"), nullable=False)
+    diagnostico_id: Mapped[Optional[int]] = mapped_column(ForeignKey("diagnostico.diagnostico_id"), nullable=True)
+    reporte_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reporte.reporte_id"), nullable=True)
+    tipo: Mapped[str] = mapped_column(String(40), nullable=False)
+    descripcion_problema: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+    descripcion_reparacion: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+    resolution: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+    priority: Mapped[str] = mapped_column(String(20), nullable=False)
+    severity: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    fecha_inicio: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    fecha_cierre: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    fecha_vencimiento: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    tiempo_reparacion_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    downtime_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    costo_estimado: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    costo_real: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    estado: Mapped[str] = mapped_column(String(40), nullable=False)
 
 
 def get_db_session():
     if SessionLocal is None:
         raise HTTPException(status_code=500, detail="DATABASE_URL no configurado")
     return SessionLocal()
+
+
+def fetch_rows(sql: str, params: Optional[dict[str, object]] = None) -> list[dict[str, object]]:
+    session = get_db_session()
+    try:
+        result = session.execute(text(sql), params or {})
+        return [dict(row) for row in result.mappings().all()]
+    finally:
+        session.close()
+
+
+def fetch_row(sql: str, params: Optional[dict[str, object]] = None) -> dict[str, object] | None:
+    rows = fetch_rows(sql, params)
+    return rows[0] if rows else None
 
 
 # -----------------------------------------------------------------------------
@@ -117,8 +170,17 @@ class MachineResponse(BaseModel):
     discipline_id: int
 
 
+class AssignedOTResponse(BaseModel):
+    id: int
+    numero_ot: str
+    planta: str
+    maquina: str
+    estado: str
+    priority: str
+
+
 # -----------------------------------------------------------------------------
-# Seed data (cuando las tablas están vacías)
+# Seed / bootstrap de catálogos
 # -----------------------------------------------------------------------------
 def seed_if_empty() -> None:
     if SessionLocal is None:
@@ -126,51 +188,287 @@ def seed_if_empty() -> None:
 
     session = get_db_session()
     try:
-        # Chequeo robusto: si hay al menos 1 disciplina, asumimos seed ya hecho
-        disciplines_count = session.execute(select(Discipline.id)).all()
-        if len(disciplines_count) > 0:
-            return
-
-        # Disciplinas
-        mec = Discipline(name="Mecánica")
-        elec = Discipline(name="Eléctrica")
-        instr = Discipline(name="Instrumentación")
-        hid = Discipline(name="Hidráulica")
-
-        session.add_all([mec, elec, instr, hid])
-        session.flush()  # asigna IDs
-
-        # Técnicos
-        tech_c = Technician(name="Carlos Mendoza")
-        tech_a = Technician(name="Ana Silva")
-        tech_r = Technician(name="Roberto Tapia")
-        tech_j = Technician(name="Juan Pérez")
-
-        session.add_all([tech_c, tech_a, tech_r, tech_j])
-        session.flush()
-
-        # Máquinas
-        session.add_all(
-            [
-                Machine(name="Compressor A1", discipline_id=mec.id),
-                Machine(name="Motor Drive D1", discipline_id=mec.id),
-                Machine(name="Hydraulic Press B3", discipline_id=hid.id),
-                Machine(name="Pump E4", discipline_id=elec.id),
-            ]
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS disciplina (
+                    disciplina_id SERIAL PRIMARY KEY,
+                    nombre VARCHAR(100) NOT NULL UNIQUE
+                )
+                """
+            )
         )
-
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS planta (
+                    planta_id SERIAL PRIMARY KEY,
+                    nombre VARCHAR(120) NOT NULL UNIQUE,
+                    ubicacion VARCHAR(255)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS usuario (
+                    usuario_id SERIAL PRIMARY KEY,
+                    nombre VARCHAR(100) NOT NULL,
+                    email VARCHAR(100) UNIQUE NOT NULL,
+                    rol VARCHAR(50) NOT NULL
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS maquina (
+                    maquina_id SERIAL PRIMARY KEY,
+                    planta_id INT NOT NULL REFERENCES planta(planta_id),
+                    disciplina_id INT NOT NULL REFERENCES disciplina(disciplina_id),
+                    nombre VARCHAR(100) NOT NULL,
+                    codigo VARCHAR(50) UNIQUE NOT NULL
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS orden_trabajo (
+                    ot_id SERIAL PRIMARY KEY,
+                    numero_ot VARCHAR(40) UNIQUE NOT NULL,
+                    maquina_id INT NOT NULL REFERENCES maquina(maquina_id),
+                    tecnico_id INT NOT NULL REFERENCES usuario(usuario_id),
+                    creado_por INT NOT NULL REFERENCES usuario(usuario_id),
+                    diagnostico_id INT REFERENCES diagnostico(diagnostico_id),
+                    reporte_id INT REFERENCES reporte(reporte_id),
+                    tipo VARCHAR(40) NOT NULL,
+                    descripcion_problema TEXT,
+                    descripcion_reparacion TEXT,
+                    resolution TEXT,
+                    priority VARCHAR(20) NOT NULL,
+                    severity VARCHAR(20),
+                    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    fecha_inicio TIMESTAMP,
+                    fecha_cierre TIMESTAMP,
+                    fecha_vencimiento TIMESTAMP,
+                    tiempo_reparacion_min INT,
+                    downtime_minutes INT,
+                    costo_estimado DECIMAL(12,2),
+                    costo_real DECIMAL(12,2),
+                    estado VARCHAR(40) NOT NULL DEFAULT 'pending'
+                )
+                """
+            )
+        )
         session.commit()
+
+        session.execute(
+            text("INSERT INTO disciplina (nombre) VALUES (:nombre) ON CONFLICT (nombre) DO NOTHING"),
+            [{"nombre": nombre} for nombre in ["Mecánica", "Eléctrica", "Neumática", "Hidráulica"]],
+        )
+        session.execute(
+            text("INSERT INTO planta (nombre, ubicacion) VALUES (:nombre, :ubicacion) ON CONFLICT (nombre) DO NOTHING"),
+            [
+                {"nombre": "Planta Chancado", "ubicacion": "Sector norte"},
+                {"nombre": "Planta Concentradora", "ubicacion": "Sector central"},
+                {"nombre": "Planta de Filtros", "ubicacion": "Sector sur"},
+            ],
+        )
+        session.execute(
+            text(
+                "INSERT INTO usuario (usuario_id, nombre, email, rol) VALUES (:usuario_id, :nombre, :email, :rol) "
+                "ON CONFLICT (usuario_id) DO NOTHING"
+            ),
+            [
+                {"usuario_id": 1, "nombre": "Técnico Prueba", "email": "tecnico.prueba@barb.local", "rol": "technician"},
+                {"usuario_id": 2, "nombre": "Supervisor Planta", "email": "supervisor.planta@barb.local", "rol": "supervisor"},
+                {"usuario_id": 3, "nombre": "Técnico Apoyo", "email": "tecnico.apoyo@barb.local", "rol": "technician"},
+            ],
+        )
+        session.commit()
+
+        discipline_rows = session.execute(text("SELECT disciplina_id AS id, nombre FROM disciplina")).mappings().all()
+        plant_rows = session.execute(text("SELECT planta_id AS id, nombre FROM planta")).mappings().all()
+        discipline_ids = {str(row["nombre"]): int(row["id"]) for row in discipline_rows}
+        plant_ids = {str(row["nombre"]): int(row["id"]) for row in plant_rows}
+
+        machine_payloads = [
+            {"maquina_id": 1, "planta_id": plant_ids["Planta Chancado"], "disciplina_id": discipline_ids["Mecánica"], "nombre": "Chancador Primario", "codigo": "MCH-001"},
+            {"maquina_id": 2, "planta_id": plant_ids["Planta Chancado"], "disciplina_id": discipline_ids["Mecánica"], "nombre": "Chancador Secundario", "codigo": "MCH-002"},
+            {"maquina_id": 3, "planta_id": plant_ids["Planta Concentradora"], "disciplina_id": discipline_ids["Eléctrica"], "nombre": "Sala Eléctrica", "codigo": "MEL-001"},
+            {"maquina_id": 4, "planta_id": plant_ids["Planta Concentradora"], "disciplina_id": discipline_ids["Eléctrica"], "nombre": "Centro de Control MCC", "codigo": "MEL-002"},
+            {"maquina_id": 5, "planta_id": plant_ids["Planta de Filtros"], "disciplina_id": discipline_ids["Neumática"], "nombre": "Compresor de Aire", "codigo": "MNE-001"},
+            {"maquina_id": 6, "planta_id": plant_ids["Planta de Filtros"], "disciplina_id": discipline_ids["Hidráulica"], "nombre": "Bomba de Alta Presión", "codigo": "MHI-001"},
+            {"maquina_id": 7, "planta_id": plant_ids["Planta Concentradora"], "disciplina_id": discipline_ids["Hidráulica"], "nombre": "Bomba de Agua Principal", "codigo": "MHI-002"},
+            {"maquina_id": 8, "planta_id": plant_ids["Planta Chancado"], "disciplina_id": discipline_ids["Neumática"], "nombre": "Faja Transportadora", "codigo": "MNE-002"},
+        ]
+        session.execute(
+            text(
+                "INSERT INTO maquina (maquina_id, planta_id, disciplina_id, nombre, codigo) "
+                "VALUES (:maquina_id, :planta_id, :disciplina_id, :nombre, :codigo) "
+                "ON CONFLICT (codigo) DO NOTHING"
+            ),
+            machine_payloads,
+        )
+        session.commit()
+
+        machine_rows = session.execute(text("SELECT maquina_id AS id, codigo FROM maquina")).mappings().all()
+        machine_ids = {str(row["codigo"]): int(row["id"]) for row in machine_rows}
+
+        ot_payloads = [
+            {
+                "ot_id": 1,
+                "numero_ot": "OT-2051",
+                "maquina_id": machine_ids["MCH-001"],
+                "tecnico_id": 1,
+                "creado_por": 2,
+                "priority": "high",
+                "severity": "low",
+                "estado": "assigned",
+                "tipo": "corrective",
+                "descripcion_problema": "Vibración elevada en Chancador Primario",
+            },
+            {
+                "ot_id": 2,
+                "numero_ot": "OT-2052",
+                "maquina_id": machine_ids["MEL-001"],
+                "tecnico_id": 1,
+                "creado_por": 2,
+                "priority": "medium",
+                "severity": "medium",
+                "estado": "in_progress",
+                "tipo": "inspection",
+                "descripcion_problema": "Revisión de sala eléctrica y protecciones",
+            },
+            {
+                "ot_id": 3,
+                "numero_ot": "OT-2053",
+                "maquina_id": machine_ids["MNE-001"],
+                "tecnico_id": 1,
+                "creado_por": 2,
+                "priority": "urgent",
+                "severity": "critical",
+                "estado": "assigned",
+                "tipo": "corrective",
+                "descripcion_problema": "Caída de presión en Compresor de Aire",
+            },
+            {
+                "ot_id": 4,
+                "numero_ot": "OT-2054",
+                "maquina_id": machine_ids["MHI-001"],
+                "tecnico_id": 1,
+                "creado_por": 2,
+                "priority": "low",
+                "severity": "low",
+                "estado": "assigned",
+                "tipo": "preventive",
+                "descripcion_problema": "Mantenimiento preventivo bomba de alta presión",
+            },
+            {
+                "ot_id": 5,
+                "numero_ot": "OT-2055",
+                "maquina_id": machine_ids["MCH-002"],
+                "tecnico_id": 1,
+                "creado_por": 2,
+                "priority": "medium",
+                "severity": "medium",
+                "estado": "in_progress",
+                "tipo": "inspection",
+                "descripcion_problema": "Revisión de alineamiento en Chancador Secundario",
+            },
+            {
+                "ot_id": 6,
+                "numero_ot": "OT-2056",
+                "maquina_id": machine_ids["MEL-002"],
+                "tecnico_id": 1,
+                "creado_por": 2,
+                "priority": "high",
+                "severity": "high",
+                "estado": "assigned",
+                "tipo": "corrective",
+                "descripcion_problema": "Falla intermitente en MCC principal",
+            },
+            {
+                "ot_id": 7,
+                "numero_ot": "OT-2057",
+                "maquina_id": machine_ids["MHI-002"],
+                "tecnico_id": 1,
+                "creado_por": 2,
+                "priority": "medium",
+                "severity": "medium",
+                "estado": "assigned",
+                "tipo": "preventive",
+                "descripcion_problema": "Chequeo de bomba de agua principal",
+            },
+            {
+                "ot_id": 8,
+                "numero_ot": "OT-2058",
+                "maquina_id": machine_ids["MNE-002"],
+                "tecnico_id": 1,
+                "creado_por": 2,
+                "priority": "high",
+                "severity": "high",
+                "estado": "in_progress",
+                "tipo": "corrective",
+                "descripcion_problema": "Deslizamiento en Faja Transportadora",
+            },
+            {
+                "ot_id": 9,
+                "numero_ot": "OT-2059",
+                "maquina_id": machine_ids["MCH-001"],
+                "tecnico_id": 1,
+                "creado_por": 2,
+                "priority": "low",
+                "severity": "low",
+                "estado": "assigned",
+                "tipo": "inspection",
+                "descripcion_problema": "Inspección general de lubricación en chancado",
+            },
+            {
+                "ot_id": 10,
+                "numero_ot": "OT-2060",
+                "maquina_id": machine_ids["MHI-001"],
+                "tecnico_id": 1,
+                "creado_por": 2,
+                "priority": "urgent",
+                "severity": "critical",
+                "estado": "assigned",
+                "tipo": "corrective",
+                "descripcion_problema": "Fuga en línea hidráulica de Bomba de Alta Presión",
+            },
+        ]
+        session.execute(
+            text(
+                "INSERT INTO orden_trabajo (ot_id, numero_ot, maquina_id, tecnico_id, creado_por, priority, severity, estado, tipo, descripcion_problema, fecha_creacion) "
+                "VALUES (:ot_id, :numero_ot, :maquina_id, :tecnico_id, :creado_por, :priority, :severity, :estado, :tipo, :descripcion_problema, CURRENT_TIMESTAMP) "
+                "ON CONFLICT (numero_ot) DO NOTHING"
+            ),
+            ot_payloads,
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
 
 
 @app.on_event("startup")
 def on_startup_seed() -> None:
-    # 1) Crear tablas si aún no existen
-    if engine is not None:
-        Base.metadata.create_all(bind=engine)
+    #seed_if_empty()
+    pass
 
-    # 2) Sembrar datos si las tablas están vacías
+
+@app.post("/api/seed")
+async def seed_endpoint() -> dict[str, str]:
+    seed_if_empty()
+    return {"message": "Seed ejecutado (si era necesario)"}
+@app.on_event("startup")
+def on_startup_seed() -> None:
     seed_if_empty()
 
 
@@ -589,80 +887,137 @@ async def health() -> dict[str, int | str]:
 # -----------------------------------------------------------------------------
 # Endpoints Catálogos (los requeridos por el frontend)
 # -----------------------------------------------------------------------------
+@app.get("/api/disciplinas", response_model=list[DisciplineResponse])
 @app.get("/api/disciplines", response_model=list[DisciplineResponse])
 async def get_disciplines() -> list[DisciplineResponse]:
-    if SessionLocal is None:
-        raise HTTPException(status_code=500, detail="DATABASE_URL no configurado")
-
     session = get_db_session()
     try:
-        rows = session.execute(select(Discipline).order_by(Discipline.name.asc())).scalars().all()
-        return [DisciplineResponse(id=r.id, name=r.name) for r in rows]
+        queries = [
+            """
+            SELECT disciplina_id AS id, nombre AS name
+            FROM DISCIPLINA
+            ORDER BY nombre ASC
+            """,
+            """
+            SELECT disciplina_id AS id, nombre AS name
+            FROM disciplines
+            ORDER BY nombre ASC
+            """,
+        ]
+
+        last_error: Exception | None = None
+        for sql in queries:
+            try:
+                rows = session.execute(text(sql)).mappings().all()
+                return [DisciplineResponse(id=int(row["id"]), name=str(row["name"])) for row in rows]
+            except ProgrammingError as exc:
+                last_error = exc
+                session.rollback()
+                continue
+
+        seed_if_empty()
+
+        for sql in queries:
+            try:
+                rows = session.execute(text(sql)).mappings().all()
+                return [DisciplineResponse(id=int(row["id"]), name=str(row["name"])) for row in rows]
+            except ProgrammingError as exc:
+                last_error = exc
+                session.rollback()
+                continue
+
+        raise HTTPException(status_code=500, detail=f"No se encontró la tabla DISCIPLINA ni disciplines. Último error: {last_error}")
+    except Exception as exc:
+        print("ERROR /api/disciplinas:", repr(exc))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error al listar disciplinas: {exc}")
     finally:
         session.close()
 
 
 @app.get("/api/technicians", response_model=list[TechnicianResponse])
 async def get_technicians() -> list[TechnicianResponse]:
-    if SessionLocal is None:
-        raise HTTPException(status_code=500, detail="DATABASE_URL no configurado")
+    rows = fetch_rows(
+        """
+        SELECT usuario_id AS id, nombre AS name
+        FROM USUARIO
+        WHERE rol IN ('technician', 'supervisor', 'engineer')
+        ORDER BY nombre ASC
+        """
+    )
+    return [TechnicianResponse(id=int(row["id"]), name=str(row["name"])) for row in rows]
 
-    session = get_db_session()
-    try:
-        rows = session.execute(select(Technician).order_by(Technician.name.asc())).scalars().all()
-        return [TechnicianResponse(id=r.id, name=r.name) for r in rows]
-    finally:
-        session.close()
 
-
+@app.get("/api/maquinas", response_model=list[MachineResponse])
 @app.get("/api/machines", response_model=list[MachineResponse])
-async def get_machines(discipline_id: Optional[int] = None) -> list[MachineResponse]:
-    if SessionLocal is None:
-        raise HTTPException(status_code=500, detail="DATABASE_URL no configurado")
+async def get_machines(disciplina_id: Optional[int] = None, discipline_id: Optional[int] = None) -> list[MachineResponse]:
+    params: dict[str, object] = {}
+    filtered_discipline_id = disciplina_id if disciplina_id is not None else discipline_id
+    sql = """
+        SELECT
+            m.maquina_id AS id,
+            m.nombre AS name,
+            m.disciplina_id AS discipline_id
+        FROM MAQUINA m
+    """
+    if filtered_discipline_id is not None:
+        sql += " WHERE m.disciplina_id = :discipline_id"
+        params["discipline_id"] = filtered_discipline_id
+    sql += " ORDER BY m.nombre ASC"
 
-    session = get_db_session()
+    rows = fetch_rows(sql, params)
+    return [
+        MachineResponse(
+            id=int(row["id"]),
+            name=str(row["name"]),
+            discipline_id=int(row["discipline_id"]),
+        )
+        for row in rows
+    ]
+
+
+@app.get("/api/ots/asignadas/{tecnico_id}", response_model=list[AssignedOTResponse])
+async def get_assigned_ots(tecnico_id: int) -> list[AssignedOTResponse]:
     try:
-        stmt = select(Machine).order_by(Machine.name.asc())
-        if discipline_id is not None:
-            stmt = stmt.where(Machine.discipline_id == discipline_id)
-
-        rows = session.execute(stmt).scalars().all()
-        return [MachineResponse(id=r.id, name=r.name, discipline_id=r.discipline_id) for r in rows]
-    finally:
-        session.close()
+        rows = fetch_rows(
+            """
+            SELECT
+                ot.ot_id AS id,
+                ot.numero_ot AS numero_ot,
+                pl.nombre AS planta,
+                ma.nombre AS maquina,
+                ot.estado AS estado,
+                ot.priority AS priority
+            FROM ORDEN_TRABAJO ot
+            INNER JOIN MAQUINA ma ON ma.maquina_id = ot.maquina_id
+            INNER JOIN PLANTA pl ON pl.planta_id = ma.planta_id
+            WHERE ot.tecnico_id = :tecnico_id
+            ORDER BY ot.numero_ot ASC
+            """,
+            {"tecnico_id": tecnico_id},
+        )
+        return [
+            AssignedOTResponse(
+                id=int(row["id"]),
+                numero_ot=str(row["numero_ot"]),
+                planta=str(row["planta"]),
+                maquina=str(row["maquina"]),
+                estado=str(row["estado"]),
+                priority=str(row["priority"]),
+            )
+            for row in rows
+        ]
+    except Exception as e:
+        print(f"Error en BD: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # -----------------------------------------------------------------------------
 # Work Orders (Persistencia real en PostgreSQL)
 # -----------------------------------------------------------------------------
-from sqlalchemy import Integer, DateTime
 from typing import Any
 
 UPLOAD_DIR = Path("static/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-
-class WorkOrder(Base):
-    __tablename__ = "work_orders"
-
-    id: Mapped[str] = mapped_column(primary_key=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-
-    # En frontend: payload.machine es el id numérico como string (ej "1")
-    machine_id: Mapped[int] = mapped_column(ForeignKey("machines.id", ondelete="RESTRICT"), nullable=False)
-
-    discipline_id: Mapped[int] = mapped_column(ForeignKey("disciplines.id", ondelete="RESTRICT"), nullable=False)
-    technician_id: Mapped[int] = mapped_column(ForeignKey("technicians.id", ondelete="RESTRICT"), nullable=False)
-
-    priority: Mapped[str] = mapped_column(String(32), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False)
-
-    description: Mapped[str] = mapped_column(String(2000), nullable=False)
-
-    photo_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 def _work_order_to_summary(order: WorkOrder) -> WorkOrderSummary:
@@ -1018,6 +1373,25 @@ async def chat(payload: ChatRequest) -> ChatResponse:
         language=payload.language,
     )
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/auth/login")
+async def login(req: LoginRequest):
+    return {
+        "token": "fake-jwt-token-123",
+        "user": {
+            "id": "1",
+            "name": "Técnico Prueba",
+            "email": req.email,
+            "role": "technician"
+        }
+    }
+
+@app.get("/api/chat/debug")
+async def chat_debug():
+    return []
 
 if __name__ == "__main__":
     import uvicorn

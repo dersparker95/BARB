@@ -12,7 +12,7 @@ const defaultState = {
   sessionId: null,
   sessionStart: null,
   docMessages: [] as Message[],
-  debugMessages: [] as Message[],
+  debugMessagesByMachine: {} as Record<string, Message[]>,
   user: null,
   apiBase:
     (import.meta.env.VITE_API_URL as string | undefined) ??
@@ -51,14 +51,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [sessionId, setSessionId] = useState<string | null>(defaultState.sessionId)
   const [sessionStart, setSessionStart] = useState<number | null>(defaultState.sessionStart)
   const [docMessages, setDocMessages] = useState<Message[]>(defaultState.docMessages)
-  const [debugMessages, setDebugMessages] = useState<Message[]>(defaultState.debugMessages)
+  const [debugMessagesByMachine, setDebugMessagesByMachine] = useState<Record<string, Message[]>>(defaultState.debugMessagesByMachine)
   const [user, setUser] = useState<User | null>(defaultState.user)
   const [apiBase, setApiBase] = useState<string>(defaultState.apiBase)
   const [lmBase, setLmBase] = useState<string>(defaultState.lmBase)
   const [loading, setLoading] = useState<boolean>(defaultState.loading)
 
   const pushDocMessage = useCallback((m: Message) => setDocMessages(prev => [...prev, m]), [])
-  const pushDebugMessage = useCallback((m: Message) => setDebugMessages(prev => [...prev, m]), [])
+  const getDebugMessages = useCallback((machineId: string | null | undefined) => {
+    if (!machineId) return []
+    return debugMessagesByMachine[machineId] ?? []
+  }, [debugMessagesByMachine])
+  const pushDebugMessage = useCallback((machineId: string, m: Message) => {
+    if (!machineId) return
+    setDebugMessagesByMachine(prev => {
+      const current = prev[machineId] ?? []
+      return { ...prev, [machineId]: [...current, m] }
+    })
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -108,7 +118,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sessionId,
     sessionStart,
     docMessages,
-    debugMessages,
+    debugMessagesByMachine,
+    getDebugMessages,
     user,
     apiBase,
     lmBase,

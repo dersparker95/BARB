@@ -37,7 +37,7 @@ const statusColor = (status: MachineNode['status']) => {
 const PlantTopology: React.FC = () => {
   const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const { lang, selectedMachine, setSelectedMachine, setDocMachine } = useAppContext()
+  const { lang, selectedMachine, setSelectedMachine } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
 
   const [viewBox, setViewBox] = useState(INITIAL_VB)
@@ -79,14 +79,6 @@ const PlantTopology: React.FC = () => {
     navigate('/debug')
   }
 
-  const goToDocs = (nodeId?: string) => {
-    const machineId = nodeId ?? tooltip.node?.id ?? selectedMachine
-    if (machineId) {
-      setSelectedMachine(machineId)
-      setDocMachine(machineId)
-    }
-    navigate('/docchat')
-  }
 
   const zoom = (factor: number) => {
     const cx = viewBox.x + viewBox.w / 2
@@ -203,16 +195,13 @@ const PlantTopology: React.FC = () => {
                 marginTop: 12,
                 display: 'grid',
                 gap: 8,
-                gridTemplateColumns: '1fr 1fr',
+                gridTemplateColumns: '1fr',
               }}
             >
               <button className="btn btn-sm btn-primary" onClick={() => goToDebug(tooltip.node?.id)}>
                 {t.topology.goToDebug}
               </button>
-              <button className="btn btn-sm btn-outline" onClick={() => goToDocs(tooltip.node?.id)}>
-                {t.topology.openDocs}
-              </button>
-              <button className="btn btn-sm btn-outline" style={{ gridColumn: '1 / -1' }} onClick={closeTooltip}>
+              <button className="btn btn-sm btn-outline" onClick={closeTooltip}>
                 {t.topology.close}
               </button>
             </div>

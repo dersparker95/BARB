@@ -65,15 +65,15 @@ const Login: React.FC = () => {
 
       <div className="login-card">
         <div className="login-icon">🏭</div>
-        <div className="login-title">BARB</div>
-        <div className="login-sub">{t.login.subtitle}</div>
+        <div className="login-title dark:text-white">BARB</div>
+        <div className="login-sub dark:text-gray-300">{t.login.subtitle}</div>
 
         <form onSubmit={submit}>
           <div className="form-field">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="form-input"
+              className="form-input dark:text-white"
               placeholder={t.login.usernamePlaceholder}
               autoComplete="username"
               aria-label={t.login.usernamePlaceholder}
@@ -100,7 +100,7 @@ const Login: React.FC = () => {
               id="role-select"
               value={role}
               onChange={(e) => setRole(e.target.value as any)}
-              className="form-select"
+              className="form-select dark:text-white"
               aria-label={t.login.chooseRole}
             >
               <option value="technician">{t.login.technician}</option>

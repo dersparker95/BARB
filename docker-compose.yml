@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Base de Datos Relacional para Usuarios y Máquinas
   db:
@@ -14,6 +12,12 @@ services:
       - "5432:5432"
     volumes:
       - ./init-scripts:/docker-entrypoint-initdb.d
+    # 👇 ESTE ES EL HEALTHCHECK AGREGADO (Con tu usuario barb_admin) 👇
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U barb_admin -d barb_database"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # Tu API en Python (RAG y Microservicios)
   backend:
@@ -26,11 +30,12 @@ services:
     volumes:
       # Sincroniza tu código en vivo
       - ./backend:/app
+    # 👇 ASÍ LE DECIMOS AL BACKEND QUE ESPERE A LA BD 👇
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
 
   frontend:
     build:
@@ -41,5 +46,6 @@ services:
       - "80:80"
     depends_on:
       - backend
+
 volumes:
   postgres_data:

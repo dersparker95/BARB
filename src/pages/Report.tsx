@@ -5,8 +5,9 @@ import { showToast } from '../components/Toast'
 
 const Report: React.FC = () => {
   const navigate = useNavigate()
-  const { selectedMachine, sessionStart, debugMessages } = useAppContext()
+  const { selectedMachine, sessionStart, getDebugMessages } = useAppContext()
 
+  const debugMessages = getDebugMessages(selectedMachine)
   const summaryText = debugMessages.filter(m => m.role === 'user').map(m => m.content).join('\n')
   const elapsed = sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : 0
 
