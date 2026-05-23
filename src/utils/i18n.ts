@@ -131,6 +131,7 @@ type TranslationTree = {
     usernamePlaceholder: string
     passwordPlaceholder: string
     loginButton: string
+    incorrectCredentials: string
     chooseRole: string
     technician: string
     engineer: string
@@ -298,6 +299,7 @@ const translations: Record<AppLang, TranslationTree> = {
       usernamePlaceholder: 'Usuario',
       passwordPlaceholder: 'Contraseña',
       loginButton: 'Ingresar',
+      incorrectCredentials: 'Usuario o contraseña incorrecta, vuelve a intentarlo.',
       chooseRole: 'Seleccionar rol',
       technician: 'Técnico',
       engineer: 'Ingeniero',
@@ -463,6 +465,7 @@ const translations: Record<AppLang, TranslationTree> = {
       usernamePlaceholder: 'Username',
       passwordPlaceholder: 'Password',
       loginButton: 'Login',
+      incorrectCredentials: 'Incorrect username or password, please try again.',
       chooseRole: 'Choose role',
       technician: 'Technician',
       engineer: 'Engineer',

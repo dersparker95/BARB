@@ -66,6 +66,7 @@ async function dataUrlToFile(dataUrl: string, fileName: string): Promise<File> {
 const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onClose, onCreate }) => {
   const [form, setForm] = useState<WorkOrderCreatePayload>({ ...(INITIAL_FORM as any) })
   const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState('')
 
   const [disciplinas, setDisciplinas] = useState<ApiDiscipline[]>([])
   const [tecnicos, setTecnicos] = useState<ApiTechnician[]>([])
@@ -127,6 +128,7 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
         setMachines(parsedMachines.filter(m => m.id && m.label && m.disciplinaId))
       } catch (e) {
         console.error('Error cargando catálogos', e)
+        setFormError('No se pudieron cargar los catálogos. Verifica que el backend esté disponible.')
         showToast('❌ No se pudieron cargar los catálogos (disciplinas/máquinas/técnicos)')
       }
     }
@@ -193,6 +195,7 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
   useEffect(() => {
     if (!isOpen) return
     setSubmitting(false)
+    setFormError('')
     setMachineQuery('')
     setIsMachineDropdownOpen(false)
     setPhotoPreview(null)
@@ -293,21 +296,25 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
     const description = safeTrim(form.description)
 
     if (!title) {
+      setFormError('Agrega un título para la OT.')
       showToast('⚠️ Agrega un título para la OT')
       return
     }
     if (!description) {
+      setFormError('Agrega los detalles para generar y asignar la orden.')
       showToast('⚠️ Agrega los detalles para generar y asignar la orden.')
       return
     }
 
     setSubmitting(true)
+    setFormError('')
     try {
       await onCreate({ ...form, title, description })
       localStorage.removeItem(STORAGE_KEY)
       onClose()
     } catch (error) {
       console.error('Error creating work order', error)
+      setFormError('No se pudo crear la OT. Revisa la conexión con el backend e inténtalo otra vez.')
     } finally {
       setSubmitting(false)
     }
@@ -325,9 +332,17 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
 
   const handlePhotoSelected = async (file: File | null) => {
     if (!file) return
-    setForm(prev => ({ ...prev, photoFile: file }))
-    const dataUrl = await fileToDataUrl(file)
-    setPhotoPreview(dataUrl)
+
+    try {
+      setForm(prev => ({ ...prev, photoFile: file }))
+      const dataUrl = await fileToDataUrl(file)
+      setPhotoPreview(dataUrl)
+      setFormError('')
+    } catch (error) {
+      console.error('Error procesando la foto', error)
+      setFormError('No se pudo leer la imagen seleccionada.')
+      showToast('❌ No se pudo leer la imagen seleccionada')
+    }
   }
 
   if (!isOpen) return null
@@ -347,6 +362,11 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
 
         <form onSubmit={handleSubmit} className="flex flex-col min-h-0">
           <div className="modal-body flex-1 overflow-y-auto">
+            {formError ? (
+              <div className="mb-4 rounded-xl border border-red-700 bg-red-950/70 px-4 py-3 text-sm text-red-100">
+                {formError}
+              </div>
+            ) : null}
             <div className="ot-detail-grid grid grid-cols-1 sm:grid-cols-2">
               <div className="ot-detail-field">
                 <div className="ot-detail-label">Título</div>

@@ -19,6 +19,7 @@ import { WorkOrder } from '../types'
 import TicketDetailModal from '../components/TicketDetailModal'
 import WorkOrderCreateModal, { type WorkOrderCreatePayload } from '../components/WorkOrderCreateModal'
 import { showToast } from '../components/Toast'
+import FinancialDashboard from '../components/FinancialDashboard'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
 
@@ -145,10 +146,13 @@ const Dashboard: React.FC = () => {
       if (showToastOnSuccess) {
         showToast('✅ OTs actualizadas correctamente')
       }
+
+      return normalized
     } catch (error) {
       console.error('Error loading work orders', error)
       showToast('❌ No se pudo conectar con el backend de OTs')
       setTickets([])
+      return []
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
@@ -292,7 +296,7 @@ const Dashboard: React.FC = () => {
       formData.append('status', payload.status)
       formData.append('description', payload.description)
 
-      // Nuevo: disciplina / técnico (para cuando el backend lo requiera)
+      // Campos exactos esperados por FastAPI
       formData.append('disciplinaId', payload.disciplinaId)
       formData.append('tecnicoId', payload.tecnicoId)
 
@@ -303,7 +307,6 @@ const Dashboard: React.FC = () => {
       const response = await fetch(`${API_URL}/work-orders`, {
         method: 'POST',
         body: formData,
-        // No setear Content-Type manualmente con FormData
       })
 
       if (!response.ok) {
@@ -311,9 +314,8 @@ const Dashboard: React.FC = () => {
       }
 
       const created = mapApiWorkOrder((await response.json()) as ApiWorkOrder)
-      setTickets(prev => [created, ...prev])
-      setSelectedTicket(created)
-      setLastRefresh(new Date().toLocaleTimeString('es-CL'))
+      const refreshed = await loadWorkOrders()
+      setSelectedTicket(refreshed.find(ticket => ticket.id === created.id) ?? created)
       showToast(`✅ OT ${created.id} creada correctamente`)
     } catch (error) {
       console.error('Error creating work order', error)
@@ -394,6 +396,8 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard-body">
+      <FinancialDashboard />
+
       <div className="dash-kpi-grid">
         <div className="kpi-card">
           <div className="kpi-card-top">
