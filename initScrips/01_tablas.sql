@@ -57,12 +57,20 @@ CREATE TABLE REPUESTO (
 -- ==========================================
 -- 3. TABLAS PRINCIPALES (Infraestructura)
 -- ==========================================
+CREATE TABLE DISCIPLINA (
+    disciplina_id SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) UNIQUE NOT NULL,
+    color VARCHAR(20)
+);
+
 CREATE TABLE MAQUINA (
     maquina_id SERIAL PRIMARY KEY,
     planta_id INT NOT NULL,
+    disciplina_id INT NOT NULL,
     nombre VARCHAR(100) NOT NULL,
     codigo VARCHAR(50) UNIQUE NOT NULL,
-    CONSTRAINT fk_maquina_planta FOREIGN KEY (planta_id) REFERENCES PLANTA(planta_id)
+    CONSTRAINT fk_maquina_planta FOREIGN KEY (planta_id) REFERENCES PLANTA(planta_id),
+    CONSTRAINT fk_maquina_disciplina FOREIGN KEY (disciplina_id) REFERENCES DISCIPLINA(disciplina_id)
 );
 
 CREATE TABLE SENSOR (
@@ -277,3 +285,52 @@ CREATE TABLE LECTURA_SENSOR (
     estado estado_lectura NOT NULL DEFAULT 'normal',
     CONSTRAINT fk_lectura_sensor FOREIGN KEY (sensor_id) REFERENCES SENSOR(sensor_id) ON DELETE CASCADE
 );
+
+-- ==========================================
+-- 9. INSERCIÓN DE DATOS SEMILLA (SEED DATA)
+-- ==========================================
+
+-- 9.1 Plantas de prueba
+INSERT INTO PLANTA (nombre, ubicacion) VALUES 
+('Planta Central San Bernardo', 'San Bernardo, Región Metropolitana, Chile');
+
+-- 9.2 Usuarios del sistema
+INSERT INTO USUARIO (nombre, email, rol) VALUES 
+('Director de Mantenimiento', 'supervisor.barb@planta.com', 'Gerente'),
+('Carlos Mendoza', 'carlos.mendoza@planta.com', 'Técnico'),
+('Ana Silva', 'ana.silva@planta.com', 'Técnico'),
+('Roberto Tapia', 'roberto.tapia@planta.com', 'Técnico');
+
+-- 9.3 Disciplinas Técnicas
+INSERT INTO DISCIPLINA (nombre, color) VALUES 
+('Mecánica', 'blue'),
+('Eléctrica', 'yellow'),
+('Hidráulica', 'cyan'),
+('Neumática', 'purple'),
+('Automatización', 'green');
+
+-- 9.4 Máquinas vinculadas a la Planta (1) y a sus disciplinas
+INSERT INTO MAQUINA (planta_id, disciplina_id, nombre, codigo) VALUES 
+(1, 1, 'Compressor A1', 'COMP-A1'),       -- 1 = Mecánica
+(1, 2, 'Motor Drive D1', 'MOTOR-D1'),     -- 2 = Eléctrica
+(1, 3, 'Hydraulic Press B3', 'PRESS-B3'), -- 3 = Hidráulica
+(1, 3, 'Pump E4', 'PUMP-E4');             -- 3 = Hidráulica
+
+-- 9.5 Inserción de 10 Órdenes de Trabajo (OT)
+INSERT INTO ORDEN_TRABAJO (
+    numero_ot, maquina_id, tecnico_id, creado_por, tipo, 
+    descripcion_problema, descripcion_reparacion, resolution, 
+    priority, severity, fecha_creacion, fecha_inicio, fecha_cierre, 
+    fecha_vencimiento, tiempo_reparacion_min, downtime_minutes, 
+    costo_estimado, costo_real, estado
+) VALUES 
+('OT-2026-001', 1, 2, 1, 'preventive', 'Mantenimiento preventivo trimestral.', 'Se cambiaron filtros y lubricaron rodamientos.', 'Operación exitosa.', 'low', 'low', '2026-05-10 08:00:00', '2026-05-10 08:30:00', '2026-05-10 10:30:00', '2026-05-15 00:00:00', 120, 120, 150.00, 145.50, 'completed'),
+('OT-2026-002', 3, 2, 1, 'corrective', 'Pérdida de presión hidráulica.', 'Se reemplazó manguera de alta presión.', 'Fuga contenida.', 'urgent', 'critical', '2026-05-11 14:15:00', '2026-05-11 14:20:00', '2026-05-11 15:05:00', '2026-05-11 18:00:00', 45, 45, 500.00, 620.00, 'completed'),
+('OT-2026-003', 2, 4, 1, 'inspection', 'Ruido anómalo reportado.', NULL, NULL, 'low', 'medium', '2026-05-17 09:00:00', NULL, NULL, '2026-05-20 18:00:00', NULL, 0, 50.00, NULL, 'pending'),
+('OT-2026-004', 4, 3, 1, 'predictive', 'Alerta de vibración en motor.', 'Analizando alineación.', NULL, 'high', 'high', '2026-05-18 10:00:00', '2026-05-18 10:30:00', NULL, '2026-05-19 12:00:00', NULL, 60, 300.00, NULL, 'in_progress'),
+('OT-2026-005', 1, 2, 1, 'corrective', 'Falla eléctrica en panel.', 'Botón atascado.', 'Se liberó botón.', 'medium', 'low', '2026-05-12 11:00:00', '2026-05-12 11:10:00', '2026-05-12 11:15:00', '2026-05-13 18:00:00', 5, 5, 0.00, 0.00, 'cancelled'),
+('OT-2026-006', 2, 4, 1, 'preventive', 'Calibración de sensores.', NULL, NULL, 'medium', 'medium', '2026-05-01 08:00:00', NULL, NULL, '2026-05-05 18:00:00', NULL, 0, 100.00, NULL, 'overdue'),
+('OT-2026-007', 3, 2, 1, 'corrective', 'Error E-041, prensa no baja.', 'Se reseteó válvula proporcional.', 'Equipo operativo.', 'high', 'high', '2026-05-15 16:00:00', '2026-05-15 16:05:00', '2026-05-15 16:35:00', '2026-05-16 12:00:00', 30, 30, 0.00, 15.00, 'completed'),
+('OT-2026-008', 4, 2, 1, 'inspection', 'Revisión de niveles de aceite.', NULL, NULL, 'low', 'low', '2026-05-18 07:00:00', NULL, NULL, '2026-05-19 10:00:00', NULL, 0, 30.00, NULL, 'assigned'),
+('OT-2026-009', 2, 4, 1, 'corrective', 'Corte de banda transportadora.', 'Empalme térmico y recableado.', 'Banda reparada.', 'urgent', 'critical', '2026-05-14 02:00:00', '2026-05-14 02:15:00', '2026-05-14 06:15:00', '2026-05-14 08:00:00', 240, 240, 1200.00, 1450.00, 'completed'),
+('OT-2026-010', 1, 2, 1, 'predictive', 'Punto caliente en tablero.', 'Reapriete de conexiones.', 'Temperatura normal.', 'medium', 'medium', '2026-05-16 09:00:00', '2026-05-16 09:30:00', '2026-05-16 10:15:00', '2026-05-17 18:00:00', 45, 0, 80.00, 45.00, 'completed');
