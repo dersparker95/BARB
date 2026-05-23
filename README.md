@@ -17,12 +17,7 @@ Este proyecto funciona con Docker, pero hay 3 puntos importantes detectados en l
    - En `docker-compose.yml` existe `postgres_data`, pero no está montado en el contenedor de `db`.
    - Resultado: si destruyes el contenedor, la data puede perderse.
 
-2. **La ruta de scripts SQL de inicialización no coincide con la carpeta del repositorio**
-   - El `docker-compose.yml` monta `./init-scripts:/docker-entrypoint-initdb.d`
-   - Pero en este repositorio la carpeta visible es `initScrips/`
-   - Antes del primer arranque, debes **renombrar la carpeta** o **corregir el volumen** en `docker-compose.yml`.
-
-3. **La app frontend usa variables de entorno en build time**
+2. **La app frontend usa variables de entorno en build time**
    - El frontend se compila dentro de la imagen Docker.
    - Si cambias `VITE_API_URL` o `VITE_LM_STUDIO_URL`, debes reconstruir la imagen del frontend.
 
@@ -84,37 +79,7 @@ VITE_LM_STUDIO_URL=http://host.docker.internal:1234/v1
 
 ---
 
-## 5) Ajuste obligatorio antes del primer arranque
-
-El `docker-compose.yml` espera esta carpeta:
-
-```text
-./init-scripts
-```
-
-Pero el repositorio trae:
-
-```text
-./initScrips
-```
-
-Debes hacer **una** de estas dos cosas:
-
-### Opción A: renombrar la carpeta
-Renombra:
-
-```text
-initScrips -> init-scripts
-```
-
-### Opción B: corregir `docker-compose.yml`
-Cambia el volumen del servicio `db` para que apunte a la carpeta real del proyecto.
-
-Si no haces esto, PostgreSQL no ejecutará los scripts de inicialización al crear el contenedor por primera vez.
-
----
-
-## 6) Levantar el proyecto desde cero
+## 5) Levantar el proyecto desde cero
 
 ### Paso 1: clonar o ubicarse en el proyecto
 
@@ -155,7 +120,7 @@ docker compose up --build -d
 
 ---
 
-## 7) URLs de acceso
+## 6) URLs de acceso
 
 Una vez levantado el stack:
 
@@ -166,7 +131,7 @@ Una vez levantado el stack:
 
 ---
 
-## 8) Verificación rápida
+## 7) Verificación rápida
 
 ### Backend
 
@@ -204,7 +169,7 @@ curl http://localhost:9000/api/work-orders
 
 ---
 
-## 9) Base de datos y scripts SQL
+## 8) Base de datos y scripts SQL
 
 ### Inicialización automática de PostgreSQL
 
@@ -251,7 +216,7 @@ docker compose exec db psql -U barb_admin -d barb_database -f /docker-entrypoint
 
 ---
 
-## 10) LM Studio y chat RAG
+## 9) LM Studio y chat RAG
 
 El backend intenta conectarse a LM Studio en:
 
@@ -276,7 +241,7 @@ El resto del sistema funciona igual, pero los endpoints de chat devolverán erro
 
 ---
 
-## 11) Comandos útiles de operación
+## 10) Comandos útiles de operación
 
 ### Ver logs
 
@@ -307,7 +272,7 @@ docker compose build frontend
 
 ---
 
-## 12) Auditoría resumida de Docker
+## 11) Auditoría resumida de Docker
 
 ### docker-compose.yml
 
@@ -344,7 +309,7 @@ docker compose build frontend
 
 ---
 
-## 13) Troubleshooting
+## 12) Troubleshooting
 
 ### El frontend abre, pero no carga datos
 
@@ -385,19 +350,18 @@ Si LM Studio no está activo, el endpoint `/api/chat` devolverá error de dispon
 
 ---
 
-## 14) Flujo recomendado de trabajo
+## 13) Flujo recomendado de trabajo
 
 1. Ajustar `.env`
-2. Corregir la ruta de scripts de PostgreSQL
-3. Levantar el stack con `docker compose up --build`
-4. Probar `http://localhost:9000/health`
-5. Abrir el frontend en `http://localhost`
-6. Ejecutar scripts SQL extra si necesitas la estructura industrial completa
-7. Revisar logs si algo falla
+2. Levantar el stack con `docker compose up --build`
+3. Probar `http://localhost:9000/health`
+4. Abrir el frontend en `http://localhost`
+5. Ejecutar scripts SQL extra si necesitas la estructura industrial completa
+6. Revisar logs si algo falla
 
 ---
 
-## 15) Resumen corto
+## 14) Resumen corto
 
 ```bash
 docker compose up --build
