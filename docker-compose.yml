@@ -13,11 +13,12 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./initScripts:/docker-entrypoint-initdb.d
 
   # Tu API en Python (RAG y Microservicios)
   backend:
     build: ./backend
+    command: python main.py
     ports:
       - "9000:9000"
     environment:
