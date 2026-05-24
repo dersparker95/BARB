@@ -11,7 +11,11 @@ import MachineMemory from './pages/MachineMemory'
 import Report from './pages/Report'
 import Forbidden from './pages/Forbidden'
 import { useAppContext } from './context/AppContext'
+<<<<<<< HEAD
 import type { Role } from './types'
+=======
+import Toast from './components/Toast'
+>>>>>>> origin/Benja-
 
 type GuardProps = {
   allowedRoles: Role[]
@@ -78,6 +82,7 @@ const RootRedirect: React.FC = () => <Navigate to="/login" replace />
 
 export default function App() {
   return (
+<<<<<<< HEAD
     <Routes>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<Login />} />
@@ -144,5 +149,31 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
+=======
+    <>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/"
+          element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+          }
+        >
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="menu" element={<Menu />} />
+          <Route path="docchat" element={<DocChat />} />
+          <Route path="debug" element={<Debug />} />
+          <Route path="topology" element={<Topology />} />
+          <Route path="memory/:machineId" element={<MachineMemory />} />
+          <Route path="report" element={<Report />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <Toast /> 
+    </>
+>>>>>>> origin/Benja-
   )
 }

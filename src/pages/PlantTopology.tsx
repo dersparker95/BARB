@@ -113,7 +113,6 @@ const PlantTopology: React.FC = () => {
             <div className="text-sm text-gray-500">{tooltip.node.cat} · {tooltip.node.status}</div>
             <div className="mt-2 flex gap-2">
               <button className="px-2 py-1 bg-blue-600 text-white rounded text-sm" onClick={() => goToDebug(tooltip.node?.id)}>Go to Debug</button>
-              <button className="px-2 py-1 bg-gray-100 rounded text-sm" onClick={() => navigate(`/memory/${tooltip.node?.id}`)}>History</button>
               <button className="px-2 py-1 bg-transparent text-sm" onClick={() => setTooltip({ visible: false, x: 0, y: 0 })}>Close</button>
             </div>
           </div>

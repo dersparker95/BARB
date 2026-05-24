@@ -1,14 +1,35 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
-import { getTranslations } from '../utils/i18n'
+import { getTranslations, normalizeLang } from '../utils/i18n'
 import { showToast } from '../components/Toast'
 
-type UploadFormState = {
+type UploadCategory = 'all' | 'electrical' | 'mechanical' | 'hydraulic' | 'pneumatic' | 'automation'
+
+interface UploadFormState {
   title: string
-  discipline: string
+  discipline: UploadCategory
   notes: string
   file: File | null
+}
+
+interface UploadCopy {
+  uploadTitle: string
+  uploadDescription: string
+  uploadName: string
+  uploadDiscipline: string
+  uploadNotes: string
+  uploadFile: string
+  uploadSubmit: string
+  uploadCancel: string
+  uploadHint: string
+  uploadSuccess: string
+  uploadError: string
+  uploadDragTitle: string
+  uploadDragHint: string
+  uploadReplace: string
+  uploadRemove: string
+  uploadPreparing: string
 }
 
 const EMPTY_UPLOAD: UploadFormState = {
@@ -18,14 +39,16 @@ const EMPTY_UPLOAD: UploadFormState = {
   file: null,
 }
 
-const Menu: React.FC = () => {
-  const { user, lang } = useAppContext()
-  const navigate = useNavigate()
-  const t = useMemo(() => getTranslations(lang), [lang])
-  const [uploadOpen, setUploadOpen] = useState(false)
-  const [uploadForm, setUploadForm] = useState<UploadFormState>(EMPTY_UPLOAD)
+const ACCEPTED_FILE_TYPES = '.pdf,.doc,.docx,.txt,.md,.xls,.xlsx,.png,.jpg,.jpeg'
 
-  const copy = lang === 'es'
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const getUploadCopy = (lang: string): UploadCopy =>
+  lang === 'es'
     ? {
         uploadTitle: 'Subida de documentos',
         uploadDescription: 'Carga manuales, fichas técnicas o procedimientos para el asistente documental.',
@@ -36,7 +59,13 @@ const Menu: React.FC = () => {
         uploadSubmit: 'Subir documento',
         uploadCancel: 'Cancelar',
         uploadHint: 'El archivo se guardará en el repositorio documental.',
-        uploadSuccess: '📄 Documento preparado para subida',
+        uploadSuccess: '📄 Documento enviado correctamente',
+        uploadError: '❌ No se pudo subir el documento',
+        uploadDragTitle: 'Arrastra y suelta tu archivo aquí',
+        uploadDragHint: 'o haz clic para seleccionar un archivo',
+        uploadReplace: 'Cambiar archivo',
+        uploadRemove: 'Remover archivo',
+        uploadPreparing: 'Preparando subida…',
       }
     : {
         uploadTitle: 'Document upload',
@@ -48,35 +77,108 @@ const Menu: React.FC = () => {
         uploadSubmit: 'Upload document',
         uploadCancel: 'Cancel',
         uploadHint: 'The file will be stored in the document repository.',
-        uploadSuccess: '📄 Document prepared for upload',
+        uploadSuccess: '📄 Document uploaded successfully',
+        uploadError: '❌ Could not upload the document',
+        uploadDragTitle: 'Drag and drop your file here',
+        uploadDragHint: 'or click to select a file',
+        uploadReplace: 'Change file',
+        uploadRemove: 'Remove file',
+        uploadPreparing: 'Preparing upload…',
       }
+
+const Menu: React.FC = () => {
+  const { user, lang, apiBase } = useAppContext()
+  const navigate = useNavigate()
+  const t = useMemo(() => getTranslations(lang), [lang])
+  const copy = useMemo(() => getUploadCopy(lang), [lang])
+
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [uploadForm, setUploadForm] = useState<UploadFormState>(EMPTY_UPLOAD)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isDragActive, setIsDragActive] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const openUpload = () => {
     setUploadForm(EMPTY_UPLOAD)
+    setUploadError(null)
+    setIsUploading(false)
+    setIsDragActive(false)
     setUploadOpen(true)
   }
 
-  const handleUploadSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const closeUpload = () => {
+    if (isUploading) return
+    setUploadOpen(false)
+    setUploadForm(EMPTY_UPLOAD)
+    setUploadError(null)
+    setIsDragActive(false)
+  }
 
-    if (!uploadForm.title.trim()) {
+  const canSubmit = uploadForm.title.trim().length > 0 && uploadForm.file !== null && !isUploading
+
+  const setSelectedFile = (file: File | null) => {
+    setUploadError(null)
+    setUploadForm(prev => ({ ...prev, file }))
+  }
+
+  const handleFiles = (files: FileList | null) => {
+    const nextFile = files?.[0] ?? null
+    if (!nextFile) return
+    setSelectedFile(nextFile)
+  }
+
+  const handleUploadSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    console.log("¡El botón funciona y la función se está ejecutando!") // Agrega esto
+
+    const title = uploadForm.title.trim()
+    if (!title) {
       showToast(lang === 'es' ? '⚠️ Escribe un nombre para el documento' : '⚠️ Add a name for the document')
       return
     }
 
     if (!uploadForm.file) {
-      showToast(lang === 'es' ? '⚠️ Selecciona un archivo' : '⚠️ Select a file')
+      showToast(lang === 'es' ? '⚠️ No has seleccionado ningún archivo' : '⚠️ No file selected')
       return
     }
 
-    showToast(copy.uploadSuccess)
-    setUploadOpen(false)
-    setUploadForm(EMPTY_UPLOAD)
+    setIsUploading(true)
+    setUploadError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadForm.file, uploadForm.file.name)
+      formData.append('title', title)
+      formData.append('discipline', uploadForm.discipline)
+      formData.append('notes', uploadForm.notes.trim())
+
+      const response = await fetch(`${apiBase.replace(/\/$/, '')}/documents/upload`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(await response.text().catch(() => response.statusText))
+      }
+
+      showToast(copy.uploadSuccess)
+      setUploadForm(EMPTY_UPLOAD)
+      setUploadOpen(false)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : copy.uploadError
+      console.error('Upload document error', error)
+      setUploadError(message)
+      showToast(copy.uploadError)
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   return (
     <div className="menu-body">
-      <div className="page-title">{t.menu.title}</div>
+      <div className="page-title dark:text-white">{t.menu.title}</div>
 
       <div className="menu-grid">
         <button className="menu-card" onClick={() => navigate('/docchat')}>
@@ -166,73 +268,274 @@ const Menu: React.FC = () => {
       </div>
 
       {uploadOpen && (
-        <div className="modal-overlay open" onClick={(event) => { if (event.target === event.currentTarget) setUploadOpen(false) }}>
-          <div className="modal-box" style={{ maxWidth: 560 }}>
+        <div
+          className="modal-overlay open"
+          onClick={event => {
+            if (event.target === event.currentTarget) closeUpload()
+          }}
+          role="presentation"
+        >
+          <div className="modal-box" style={{ maxWidth: 620 }}>
             <div className="modal-header">
-              <h2>{copy.uploadTitle}</h2>
-              <button className="modal-close" onClick={() => setUploadOpen(false)} aria-label={t.common.close}>✕</button>
+              <div>
+                <h2>{copy.uploadTitle}</h2>
+                <div style={{ marginTop: 4, fontSize: 12, color: 'var(--ink3)' }}>{copy.uploadDescription}</div>
+              </div>
+              <button className="modal-close" onClick={closeUpload} aria-label={t.common.close} disabled={isUploading}>
+                ✕
+              </button>
             </div>
 
             <form onSubmit={handleUploadSubmit} className="modal-body" style={{ display: 'grid', gap: 14 }}>
-              <p style={{ margin: 0, color: 'var(--ink2)', fontSize: 13, lineHeight: 1.6 }}>
-                {copy.uploadDescription}
-              </p>
-
-              <label className="sr-only" htmlFor="upload-title">{copy.uploadName}</label>
-              <input
-                id="upload-title"
-                className="form-input"
-                value={uploadForm.title}
-                onChange={(event) => setUploadForm(prev => ({ ...prev, title: event.target.value }))}
-                placeholder={copy.uploadName}
-                aria-label={copy.uploadName}
-              />
-
-              <label className="sr-only" htmlFor="upload-discipline">{copy.uploadDiscipline}</label>
-              <select
-                id="upload-discipline"
-                className="form-select"
-                value={uploadForm.discipline}
-                onChange={(event) => setUploadForm(prev => ({ ...prev, discipline: event.target.value }))}
-                aria-label={copy.uploadDiscipline}
-              >
-                <option value="all">{t.common.all}</option>
-                <option value="electrical">Electrical</option>
-                <option value="mechanical">Mechanical</option>
-                <option value="hydraulic">Hydraulic</option>
-                <option value="pneumatic">Pneumatic</option>
-                <option value="automation">Automation</option>
-              </select>
-
-              <label className="sr-only" htmlFor="upload-notes">{copy.uploadNotes}</label>
-              <textarea
-                id="upload-notes"
-                className="form-input"
-                value={uploadForm.notes}
-                onChange={(event) => setUploadForm(prev => ({ ...prev, notes: event.target.value }))}
-                placeholder={copy.uploadNotes}
-                aria-label={copy.uploadNotes}
-                rows={4}
-                style={{ resize: 'vertical', minHeight: 96 }}
-              />
-
-              <div style={{ display: 'grid', gap: 8 }}>
-                <label htmlFor="upload-file" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)' }}>
-                  {copy.uploadFile}
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label className="sr-only" htmlFor="upload-title">
+                  {copy.uploadName}
                 </label>
                 <input
-                  id="upload-file"
-                  type="file"
-                  onChange={(event) => setUploadForm(prev => ({ ...prev, file: event.target.files?.[0] || null }))}
-                  aria-label={copy.uploadFile}
+                  id="upload-title"
+                  className="form-input"
+                  value={uploadForm.title}
+                  onChange={event => setUploadForm(prev => ({ ...prev, title: event.target.value }))}
+                  placeholder={copy.uploadName}
+                  aria-label={copy.uploadName}
+                  disabled={isUploading}
                 />
               </div>
 
-              <div style={{ fontSize: 12, color: 'var(--ink3)' }}>{copy.uploadHint}</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label className="sr-only" htmlFor="upload-discipline">
+                  {copy.uploadDiscipline}
+                </label>
+                <select
+                  id="upload-discipline"
+                  className="form-select"
+                  value={uploadForm.discipline}
+                  onChange={event =>
+                    setUploadForm(prev => ({ ...prev, discipline: event.target.value as UploadCategory }))
+                  }
+                  aria-label={copy.uploadDiscipline}
+                  disabled={isUploading}
+                >
+                  <option value="all">{t.common.all}</option>
+                  <option value="electrical">Electrical</option>
+                  <option value="mechanical">Mechanical</option>
+                  <option value="hydraulic">Hydraulic</option>
+                  <option value="pneumatic">Pneumatic</option>
+                  <option value="automation">Automation</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label className="sr-only" htmlFor="upload-notes">
+                  {copy.uploadNotes}
+                </label>
+                <textarea
+                  id="upload-notes"
+                  className="form-input"
+                  value={uploadForm.notes}
+                  onChange={event => setUploadForm(prev => ({ ...prev, notes: event.target.value }))}
+                  placeholder={copy.uploadNotes}
+                  aria-label={copy.uploadNotes}
+                  rows={4}
+                  style={{ resize: 'vertical', minHeight: 96 }}
+                  disabled={isUploading}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gap: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)' }}>{copy.uploadFile}</div>
+
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={copy.uploadFile}
+                  onClick={() => {
+                    if (!isUploading) fileInputRef.current?.click()
+                  }}
+                  onKeyDown={event => {
+                    if (isUploading) return
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      fileInputRef.current?.click()
+                    }
+                  }}
+                  onDragEnter={event => {
+                    event.preventDefault()
+                    if (!isUploading) setIsDragActive(true)
+                  }}
+                  onDragOver={event => {
+                    event.preventDefault()
+                    if (!isUploading) setIsDragActive(true)
+                  }}
+                  onDragLeave={event => {
+                    event.preventDefault()
+                    setIsDragActive(false)
+                  }}
+                  onDrop={event => {
+                    event.preventDefault()
+                    setIsDragActive(false)
+                    if (isUploading) return
+                    handleFiles(event.dataTransfer.files)
+                  }}
+                  style={{
+                    border: '2px dashed var(--border)',
+                    borderRadius: 16,
+                    padding: 16,
+                    minHeight: 148,
+                    background: isDragActive ? 'var(--blue-bg)' : 'var(--surface)',
+                    boxShadow: isDragActive ? '0 0 0 2px rgba(26,95,168,0.12) inset' : 'none',
+                    cursor: isUploading ? 'not-allowed' : 'pointer',
+                    transition: 'background 160ms ease, box-shadow 160ms ease, border-color 160ms ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={ACCEPTED_FILE_TYPES}
+                    className="hidden"
+                    disabled={isUploading}
+                    onChange={event => {
+                      handleFiles(event.target.files)
+                      event.currentTarget.value = ''
+                    }}
+                  />
+
+                  {!uploadForm.file ? (
+                    <div style={{ textAlign: 'center', display: 'grid', gap: 8, justifyItems: 'center' }}>
+                      <div
+                        style={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: 999,
+                          border: '2px solid var(--blue)',
+                          background: 'white',
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: 'var(--blue)',
+                          fontSize: 22,
+                          boxShadow: '4px 4px 0 0 rgba(0,0,0,0.08)',
+                        }}
+                        aria-hidden="true"
+                      >
+                        ⤴
+                      </div>
+                      <div style={{ fontWeight: 700, color: 'var(--ink)' }}>{copy.uploadDragTitle}</div>
+                      <div style={{ fontSize: 12, color: 'var(--ink3)' }}>{copy.uploadDragHint}</div>
+                      <div style={{ fontSize: 11, color: 'var(--ink3)' }}>{copy.uploadHint}</div>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 14,
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                        <div
+                          aria-hidden="true"
+                          style={{
+                            width: 54,
+                            height: 54,
+                            borderRadius: 14,
+                            border: '2px solid var(--ink)',
+                            background: 'white',
+                            display: 'grid',
+                            placeItems: 'center',
+                            fontSize: 22,
+                            boxShadow: '5px 5px 0 0 rgba(0,0,0,0.1)',
+                            flexShrink: 0,
+                          }}
+                        >
+                          📎
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontWeight: 800,
+                              color: 'var(--ink)',
+                              lineHeight: 1.3,
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {uploadForm.file.name}
+                          </div>
+                          <div style={{ marginTop: 4, fontSize: 12, color: 'var(--ink3)' }}>
+                            {formatFileSize(uploadForm.file.size)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          onClick={event => {
+                            event.stopPropagation()
+                            fileInputRef.current?.click()
+                          }}
+                          disabled={isUploading}
+                        >
+                          {copy.uploadReplace}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          onClick={event => {
+                            event.stopPropagation()
+                            setSelectedFile(null)
+                          }}
+                          disabled={isUploading}
+                        >
+                          {copy.uploadRemove}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {uploadError && (
+                <div
+                  role="alert"
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(239,68,68,0.35)',
+                    background: 'rgba(239,68,68,0.08)',
+                    color: '#b91c1c',
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {uploadError}
+                </div>
+              )}
+
+              <div style={{ fontSize: 12, color: 'var(--ink3)' }}>
+                {isUploading ? copy.uploadPreparing : copy.uploadHint}
+              </div>
 
               <div className="modal-footer" style={{ padding: 0, borderTop: 'none', marginTop: 4 }}>
-                <button className="btn btn-primary" type="submit">{copy.uploadSubmit}</button>
-                <button className="btn btn-outline" type="button" onClick={() => setUploadOpen(false)}>
+                <button className="btn btn-primary" type="submit" disabled={isUploading}>
+                  {isUploading ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <span className="animate-spin" aria-hidden="true">
+                        ⟳
+                      </span>
+                      {lang === 'es' ? 'Subiendo…' : 'Uploading…'}
+                    </span>
+                  ) : (
+                    copy.uploadSubmit
+                  )}
+                </button>
+                <button className="btn btn-outline" type="button" onClick={closeUpload} disabled={isUploading}>
                   {copy.uploadCancel}
                 </button>
               </div>

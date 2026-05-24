@@ -49,19 +49,27 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
 
   return (
     <div className="modal-overlay open" onClick={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <div className="modal-box">
+      <div
+        className={`modal-box ${dark ? 'bg-slate-900 text-gray-100 border border-slate-700' : ''}`}
+      >
         <div className="modal-header">
-          <h2>{t.settings.title}</h2>
-          <button className="modal-close" onClick={onClose} aria-label={t.common.close}>✕</button>
+          <h2 className={dark ? 'text-gray-100' : ''}>{t.settings.title}</h2>
+          <button
+            className={`modal-close ${dark ? 'bg-slate-700 text-gray-100' : ''}`}
+            onClick={onClose}
+            aria-label={t.common.close}
+          >
+            ✕
+          </button>
         </div>
 
         <div className="modal-body">
           <div className="settings-section">
-            <h3>{t.settings.appearanceLanguage}</h3>
+            <h3 className={dark ? 'text-gray-100' : ''}>{t.settings.appearanceLanguage}</h3>
             <div className="settings-block">
               <div className="settings-row">
                 <div>
-                  <div className="sr-label">{t.settings.darkTheme}</div>
+                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.settings.darkTheme}</div>
                 </div>
                 <label className="toggle" aria-label={t.settings.darkTheme}>
                   <input
@@ -77,10 +85,10 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
 
               <div className="settings-row">
                 <div>
-                  <div className="sr-label">{t.common.language}</div>
+                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.common.language}</div>
                 </div>
                 <select
-                  className="form-select"
+                  className={`form-select ${dark ? 'bg-slate-800 border-slate-600 text-gray-100' : ''}`}
                   value={localLang}
                   title={t.common.language}
                   aria-label={t.common.language}
@@ -95,37 +103,37 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
           </div>
 
           <div className="settings-section">
-            <h3>{t.settings.account}</h3>
+            <h3 className={dark ? 'text-gray-100' : ''}>{t.settings.account}</h3>
             <div className="settings-block">
               <div className="settings-row">
                 <div>
-                  <div className="sr-label">{t.common.username}</div>
-                  <div className="sr-sub">{user?.name || t.settings.guest}</div>
+                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.common.username}</div>
+                  <div className={`sr-sub ${dark ? 'text-gray-300' : ''}`}>{user?.name || t.settings.guest}</div>
                 </div>
               </div>
               <div className="settings-row">
                 <div>
-                  <div className="sr-label">{t.common.role}</div>
-                  <div className="sr-sub capitalize">{user?.role || '—'}</div>
+                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.common.role}</div>
+                  <div className={`sr-sub capitalize ${dark ? 'text-gray-300' : ''}`}>{user?.role || '—'}</div>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="settings-section">
-            <h3>{t.settings.systemConnections}</h3>
+            <h3 className={dark ? 'text-gray-100' : ''}>{t.settings.systemConnections}</h3>
             <div className="settings-block">
               <div className="settings-row">
-                <div className="sr-label">{t.settings.appVersion}</div>
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink2)' }}>2.1.0 (React)</div>
+                <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.settings.appVersion}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: dark ? 'var(--ink2)' : 'var(--ink2)' }}>2.1.0 (React)</div>
               </div>
 
               <div className="settings-row">
                 <div>
-                  <div className="sr-label">{t.settings.fastApiEndpoint}</div>
+                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.settings.fastApiEndpoint}</div>
                 </div>
                 <input
-                  className="form-input"
+                  className={`form-input ${dark ? 'bg-slate-800 border-slate-600 text-gray-100 placeholder:text-gray-400' : ''}`}
                   value={localApi}
                   onChange={(event) => setLocalApi(event.target.value)}
                   title={t.settings.fastApiEndpoint}
@@ -137,10 +145,10 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
 
               <div className="settings-row">
                 <div>
-                  <div className="sr-label">{t.settings.lmStudioEndpoint}</div>
+                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.settings.lmStudioEndpoint}</div>
                 </div>
                 <input
-                  className="form-input"
+                  className={`form-input ${dark ? 'bg-slate-800 border-slate-600 text-gray-100 placeholder:text-gray-400' : ''}`}
                   value={localLm}
                   onChange={(event) => setLocalLm(event.target.value)}
                   title={t.settings.lmStudioEndpoint}
@@ -152,9 +160,9 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
 
               <div className="settings-row">
                 <div>
-                  <div className="sr-label">{t.settings.testConnections}</div>
+                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.settings.testConnections}</div>
                 </div>
-                <button className="btn btn-sm btn-outline" onClick={testConnections}>
+                <button className={`btn btn-sm btn-outline ${dark ? 'text-gray-100 border-slate-600 hover:bg-slate-800' : ''}`} onClick={testConnections}>
                   {t.settings.testConnections}
                 </button>
               </div>
@@ -164,7 +172,9 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
 
         <div className="modal-footer">
           <button className="btn btn-primary" onClick={handleSave}>{t.settings.saveChanges}</button>
-          <button className="btn btn-outline" onClick={onClose}>{t.common.cancel}</button>
+          <button className={`btn btn-outline ${dark ? 'text-gray-100 border-slate-600 hover:bg-slate-800' : ''}`} onClick={onClose}>
+            {t.common.cancel}
+          </button>
         </div>
       </div>
     </div>

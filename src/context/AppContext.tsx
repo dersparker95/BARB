@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { AppContextValue, Message, Role, User } from '../types'
 import createApiService from '../services/api'
 
+// === LÓGICA DE PERSISTENCIA DE SESIÓN (De tu HEAD) ===
 type StoredAuth = {
   user: Pick<User, 'id' | 'name' | 'role'>
   token: string
@@ -57,6 +58,7 @@ const readStoredAuth = (): StoredAuth | null => {
 
 const AppContext = createContext<AppContextValue | undefined>(undefined)
 
+// === ESTADO POR DEFECTO UNIFICADO ===
 const defaultState = {
   currentScreen: 'login',
   dark: false,
@@ -68,7 +70,8 @@ const defaultState = {
   sessionId: null as string | null,
   sessionStart: null as number | null,
   docMessages: [] as Message[],
-  debugMessages: [] as Message[],
+  // Estado rescatado de Benja para las pantallas de máquinas:
+  debugMessagesByMachine: {} as Record<string, Message[]>,
   user: null as User | null,
   apiBase: ((import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api') as string,
   lmBase: ((import.meta.env.VITE_LM_STUDIO_URL as string | undefined) ?? (import.meta.env.VITE_LM_BASE as string | undefined) ?? '/lm') as string,
@@ -91,8 +94,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [sessionId, setSessionId] = useState<string | null>(defaultState.sessionId)
   const [sessionStart, setSessionStart] = useState<number | null>(defaultState.sessionStart)
   const [docMessages, setDocMessages] = useState<Message[]>(defaultState.docMessages)
-  const [debugMessages, setDebugMessages] = useState<Message[]>(defaultState.debugMessages)
+  
+  // Estado de mensajes por máquina rescatado de Benja
+  const [debugMessagesByMachine, setDebugMessagesByMachine] = useState<Record<string, Message[]>>(defaultState.debugMessagesByMachine)
 
+  // Autenticación segura de tu HEAD
   const [user, setUser] = useState<User | null>(() => {
     const stored = readStoredAuth()
     if (!stored) return defaultState.user
@@ -109,7 +115,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [loading, setLoading] = useState<boolean>(defaultState.loading)
 
   const pushDocMessage = useCallback((m: Message) => setDocMessages(prev => [...prev, m]), [])
-  const pushDebugMessage = useCallback((m: Message) => setDebugMessages(prev => [...prev, m]), [])
+  
+  // Funciones adaptadas para soportar el formato de Benja
+  const getDebugMessages = useCallback((machineId: string | null | undefined) => {
+    if (!machineId) return []
+    return debugMessagesByMachine[machineId] ?? []
+  }, [debugMessagesByMachine])
+  
+  const pushDebugMessage = useCallback((machineId: string, m: Message) => {
+    if (!machineId) return
+    setDebugMessagesByMachine(prev => {
+      const current = prev[machineId] ?? []
+      return { ...prev, [machineId]: [...current, m] }
+    })
+  }, [])
 
   const authService = useMemo(() => createApiService(apiBase, lmBase), [apiBase, lmBase])
 
@@ -210,7 +229,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sessionId,
     sessionStart,
     docMessages,
-    debugMessages,
+    debugMessagesByMachine,
+    getDebugMessages,
     user,
     apiBase,
     lmBase,
@@ -232,8 +252,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLoading,
   }
 
-  // Exponer helpers sin tocar tipos actuales: se consumen vía setUser/setLoading/login en siguientes cambios
-  // (Login.tsx se ajustará para llamar endpoint real y no navegar con datos hardcodeados.)
   ;(value as AppContextValue & { login?: typeof login; logout?: typeof logout }).login = login
   ;(value as AppContextValue & { login?: typeof login; logout?: typeof logout }).logout = logout
 
