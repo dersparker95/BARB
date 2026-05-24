@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import ChatBubble, { Thinking } from '../components/ChatBubble'
-import { Message, SourceHit } from '../types'
+import { SourceHit } from '../types'
 import { getTranslations, normalizeLang } from '../utils/i18n'
 import { tokenize } from '../utils/rag'
 
@@ -22,35 +22,61 @@ interface ManualDoc {
   chunks: Array<{ text: string; page: number; doc: string }>
 }
 
-interface AssignedOT {
-  id: number
-  numero_ot: string
-  planta: string
-  maquina: string
-  estado: string
-  priority: string
+interface PlantRecord {
+  id: number | string
+  name?: string
+  nombre?: string
+  ubicacion?: string
 }
 
 interface DisciplineRecord {
-  id: number
-  name: string
+  id: number | string
+  name?: string
+  nombre?: string
 }
 
 interface MachineRecord {
-  id: number
-  name: string
-  discipline_id: number
+  id: number | string
+  name?: string
+  nombre?: string
+  discipline_id?: number | string | null
+  disciplineId?: number | string | null
+  plant_id?: number | string | null
+  plantId?: number | string | null
+  planta_id?: number | string | null
+  plant_name?: string | null
+  plant?: string | null
 }
 
-interface PlantOption {
-  id: string
-  label: { es: string; en: string }
+interface WorkOrderRecord {
+  id: number | string
+  numero_ot?: string | number
+  title?: string
+  nombre?: string
+  description?: string
+  descripcion_problema?: string
+  machine?: string | null
+  machine_name?: string | null
+  machineId?: number | string | null
+  machine_id?: number | string | null
+  plant?: string | null
+  planta?: string | null
+  plant_name?: string | null
+  plant_id?: number | string | null
+  disciplina?: string | null
+  discipline?: string | null
+  discipline_id?: number | string | null
+  priority?: string
+  status?: string
+  estado?: string
+  age_minutes?: number
+  machine_meta?: MachineRecord | null
 }
 
-const PLANTS: PlantOption[] = [
-  { id: 'plant1', label: { es: 'Planta principal de producción', en: 'Main Production Plant' } },
-  { id: 'plant2', label: { es: 'Línea de ensamblaje 2', en: 'Assembly Line 2' } },
-  { id: 'plant3', label: { es: 'Bodega / almacén', en: 'Warehouse Facility' } },
+const PLANTS_FALLBACK: PlantRecord[] = [
+  { id: 1, name: 'Planta principal de producción', ubicacion: 'Main Production Plant' },
+  { id: 2, name: 'Línea de ensamblaje 2', ubicacion: 'Assembly Line 2' },
+  { id: 3, name: 'Bodega / almacén', ubicacion: 'Warehouse Facility' },
 ]
 
 const fmtSize = (bytes: number): string => {
@@ -92,12 +118,68 @@ const retrieveFromManual = (query: string, chunks: ManualDoc['chunks'], k = 4) =
     .filter(chunk => chunk.score > 0)
 }
 
+const normalizeCatalogName = (record: { name?: string; nombre?: string } | null | undefined): string => {
+  if (!record) return ''
+  return String(record.name ?? record.nombre ?? '').trim()
+}
+
+const normalizePlantLabel = (
+  record: { name?: string; nombre?: string; ubicacion?: string } | null | undefined
+): string => {
+  if (!record) return ''
+  return String(record.name ?? record.nombre ?? record.ubicacion ?? '').trim()
+}
+
+const normalizeMachineLabel = (record: MachineRecord | null | undefined): string => {
+  if (!record) return ''
+  return String(record.name ?? record.nombre ?? '').trim()
+}
+
+const normalizeWorkOrderMachine = (ot: WorkOrderRecord): string => {
+  return String(ot.machine_name ?? ot.machine ?? ot.machineId ?? ot.machine_id ?? '').trim()
+}
+
+const normalizeWorkOrderPlant = (ot: WorkOrderRecord, machine: MachineRecord | null): string => {
+  const raw = String(ot.plant_name ?? ot.plant ?? ot.planta ?? '').trim()
+  if (raw) return raw
+
+  const machinePlant =
+    machine?.plant_name ??
+    machine?.plant ??
+    machine?.plant_id ??
+    machine?.plantId ??
+    machine?.planta_id
+
+  return machinePlant ? String(machinePlant).trim() : ''
+}
+
+const normalizeWorkOrderDiscipline = (ot: WorkOrderRecord, machine: MachineRecord | null): string => {
+  const raw = String(ot.discipline ?? ot.disciplina ?? ot.discipline_id ?? '').trim()
+  if (raw) return raw
+
+  const machineDiscipline = machine?.discipline_id ?? machine?.disciplineId
+  return machineDiscipline === null || machineDiscipline === undefined ? '' : String(machineDiscipline).trim()
+}
+
+const getWorkOrderTitle = (ot: WorkOrderRecord): string => {
+  return String(ot.numero_ot ?? ot.title ?? ot.nombre ?? `OT ${ot.id}`).trim()
+}
+
+const getWorkOrderStatus = (ot: WorkOrderRecord): string => {
+  return String(ot.status ?? ot.estado ?? 'Open').trim()
+}
+
+const getWorkOrderPriority = (ot: WorkOrderRecord): string => {
+  return String(ot.priority ?? 'Medium').trim()
+}
+
 const DocChat: React.FC = () => {
   const {
     apiBase,
     lmBase,
     discipline,
     plant,
+    docMachine,
     docMessages,
     pushDocMessage,
     loading,
@@ -118,15 +200,11 @@ const DocChat: React.FC = () => {
   const [uploadPct, setUploadPct] = useState(0)
   const [dragOver, setDragOver] = useState(false)
 
-  const [assignedOts, setAssignedOts] = useState<AssignedOT[]>([])
-  const [assignedOtsLoading, setAssignedOtsLoading] = useState(false)
-
+  const [plants, setPlants] = useState<PlantRecord[]>([])
   const [disciplines, setDisciplines] = useState<DisciplineRecord[]>([])
-  const [selectedDisciplineId, setSelectedDisciplineId] = useState('')
   const [machines, setMachines] = useState<MachineRecord[]>([])
-  const [selectedMachineId, setSelectedMachineId] = useState('')
-  const [disciplinesLoading, setDisciplinesLoading] = useState(false)
-  const [machinesLoading, setMachinesLoading] = useState(false)
+  const [workOrders, setWorkOrders] = useState<WorkOrderRecord[]>([])
+  const [catalogsLoading, setCatalogsLoading] = useState(false)
 
   const areaRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -135,13 +213,45 @@ const DocChat: React.FC = () => {
   const isEs = normalizeLang(lang) === 'es'
   const apiRoot = apiBase.replace(/\/$/, '')
   const lmRoot = lmBase.replace(/\/$/, '')
-  const currentPlant = PLANTS.find(p => p.id === plant) ?? PLANTS[0]
   const langKey = normalizeLang(lang) as 'es' | 'en'
 
   const activeManual = useMemo(
     () => manuals.find(m => m.id === activeManualId) ?? null,
     [manuals, activeManualId]
   )
+
+  const normalizedPlants = useMemo<PlantRecord[]>(() => {
+    if (plants.length > 0) return plants
+    return PLANTS_FALLBACK
+  }, [plants])
+
+  const selectedPlantRecord = useMemo(() => {
+    const selected = normalizedPlants.find(item => String(item.id) === String(plant))
+    return selected ?? normalizedPlants[0] ?? null
+  }, [normalizedPlants, plant])
+
+  const selectedDisciplineRecord = useMemo(() => {
+    if (!discipline) return null
+    return disciplines.find(item => normalizeCatalogName(item) === discipline) ?? null
+  }, [discipline, disciplines])
+
+  const selectedMachineRecord = useMemo(() => {
+    if (!docMachine || docMachine === 'all') return null
+    return (
+      machines.find(item => String(item.id) === docMachine) ??
+      machines.find(item => normalizeMachineLabel(item) === docMachine) ??
+      null
+    )
+  }, [docMachine, machines])
+
+  const availableMachines = useMemo(() => {
+    if (!selectedDisciplineRecord) return machines
+    return machines.filter(machine => {
+      const machineDiscipline = machine.discipline_id ?? machine.disciplineId
+      if (machineDiscipline === undefined || machineDiscipline === null || machineDiscipline === '') return true
+      return String(machineDiscipline) === String(selectedDisciplineRecord.id)
+    })
+  }, [machines, selectedDisciplineRecord])
 
   useEffect(() => {
     if (location.state && typeof location.state === 'object') {
@@ -158,103 +268,116 @@ const DocChat: React.FC = () => {
   useEffect(() => {
     let alive = true
 
-    const loadDisciplines = async () => {
-      setDisciplinesLoading(true)
+    const loadCatalogs = async () => {
+      setCatalogsLoading(true)
       try {
-        const response = await fetch(`${apiRoot}/disciplinas`, { method: 'GET' })
-        if (!response.ok) return
-        const data = await response.json() as DisciplineRecord[]
+        const [plantsRes, disciplinesRes, machinesRes, workOrdersRes] = await Promise.all([
+          fetch(`${apiRoot}/plants`, { method: 'GET' }),
+          fetch(`${apiRoot}/disciplines`, { method: 'GET' }),
+          fetch(`${apiRoot}/machines`, { method: 'GET' }),
+          fetch(`${apiRoot}/work-orders`, { method: 'GET' }),
+        ])
+
+        const [plantsData, disciplinesData, machinesData, workOrdersData] = await Promise.all([
+          plantsRes.ok ? plantsRes.json() : Promise.resolve([]),
+          disciplinesRes.ok ? disciplinesRes.json() : Promise.resolve([]),
+          machinesRes.ok ? machinesRes.json() : Promise.resolve([]),
+          workOrdersRes.ok ? workOrdersRes.json() : Promise.resolve([]),
+        ])
+
         if (!alive) return
-        setDisciplines(data)
+
+        setPlants(Array.isArray(plantsData) ? plantsData : [])
+        setDisciplines(Array.isArray(disciplinesData) ? disciplinesData : [])
+        setMachines(Array.isArray(machinesData) ? machinesData : [])
+        setWorkOrders(Array.isArray(workOrdersData) ? workOrdersData : [])
       } catch {
         if (!alive) return
+        setPlants([])
         setDisciplines([])
+        setMachines([])
+        setWorkOrders([])
       } finally {
-        if (alive) setDisciplinesLoading(false)
+        if (alive) setCatalogsLoading(false)
       }
     }
 
-    void loadDisciplines()
+    void loadCatalogs()
     return () => { alive = false }
   }, [apiRoot])
 
   useEffect(() => {
-    if (!disciplines.length || !discipline) return
-    const match = disciplines.find(item => item.name === discipline)
-    if (match && String(match.id) !== selectedDisciplineId) {
-      setSelectedDisciplineId(String(match.id))
-    }
-  }, [discipline, disciplines, selectedDisciplineId])
+    if (!selectedDisciplineRecord) return
+    if (docMachine === 'all') return
 
-  useEffect(() => {
-    let alive = true
+    const machineStillValid = availableMachines.some(
+      machine => String(machine.id) === docMachine || normalizeMachineLabel(machine) === docMachine
+    )
 
-    const loadMachines = async () => {
-      if (!selectedDisciplineId) {
-        setMachines([])
-        setSelectedMachineId('')
-        setDocMachine('all')
-        return
-      }
-
-      setMachinesLoading(true)
-      try {
-        const response = await fetch(
-          `${apiRoot}/maquinas?disciplina_id=${encodeURIComponent(selectedDisciplineId)}`,
-          { method: 'GET' }
-        )
-        if (!response.ok) return
-        const data = await response.json() as MachineRecord[]
-        if (!alive) return
-        setMachines(data)
-      } catch {
-        if (!alive) return
-        setMachines([])
-      } finally {
-        if (alive) setMachinesLoading(false)
-      }
-    }
-
-    void loadMachines()
-    return () => { alive = false }
-  }, [apiRoot, selectedDisciplineId, setDocMachine])
-
-  useEffect(() => {
-    if (!selectedMachineId) {
-      setSelectedMachine(null)
+    if (!machineStillValid) {
       setDocMachine('all')
-      return
+      setSelectedMachine(null)
     }
+  }, [availableMachines, docMachine, selectedDisciplineRecord, setDocMachine, setSelectedMachine])
 
-    const selectedMachineRecord = machines.find(item => String(item.id) === selectedMachineId)
-    if (!selectedMachineRecord) return
+  const filteredOTs = useMemo(() => {
+    const selectedPlantId = String(plant || '')
+    const selectedDisciplineId = selectedDisciplineRecord ? String(selectedDisciplineRecord.id) : ''
+    const selectedMachineId = docMachine && docMachine !== 'all' ? String(docMachine) : ''
 
-    setDocMachine(selectedMachineRecord.name)
-    setSelectedMachine(String(selectedMachineRecord.id))
-  }, [machines, selectedMachineId, setDocMachine, setSelectedMachine])
+    return workOrders.filter(ot => {
+      const machineMatch =
+        selectedMachineId === ''
+          ? true
+          : (() => {
+              const otMachineName = normalizeWorkOrderMachine(ot)
+              const machineById = machines.find(machine => String(machine.id) === selectedMachineId)
+              const machineByName = machines.find(machine => normalizeMachineLabel(machine) === selectedMachineId)
+              const selectedMachineLabel = normalizeMachineLabel(machineById ?? machineByName ?? null)
+              if (selectedMachineLabel) {
+                return otMachineName === selectedMachineLabel || otMachineName === selectedMachineId
+              }
+              return otMachineName === selectedMachineId
+            })()
+
+      const machineForOt =
+        machines.find(machine => normalizeMachineLabel(machine) === normalizeWorkOrderMachine(ot)) ??
+        machines.find(machine => String(machine.id) === String(ot.machineId ?? ot.machine_id ?? '')) ??
+        null
+
+      const disciplineMatch =
+        selectedDisciplineId === ''
+          ? true
+          : (() => {
+              const otDiscipline = normalizeWorkOrderDiscipline(ot, machineForOt)
+              if (!otDiscipline) return true
+              return otDiscipline === selectedDisciplineId || otDiscipline === normalizeCatalogName(selectedDisciplineRecord)
+            })()
+
+      const plantMatch =
+        selectedPlantId === ''
+          ? true
+          : (() => {
+              const selectedPlantLabel = normalizePlantLabel(selectedPlantRecord)
+              const otPlant = normalizeWorkOrderPlant(ot, machineForOt)
+              if (!otPlant) return true
+              return (
+                otPlant === selectedPlantId ||
+                otPlant === selectedPlantLabel ||
+                otPlant === String(selectedPlantRecord?.id ?? '')
+              )
+            })()
+
+      return machineMatch && disciplineMatch && plantMatch
+    })
+  }, [docMachine, machines, plant, selectedDisciplineRecord, selectedPlantRecord, workOrders])
 
   useEffect(() => {
-    let alive = true
-
-    const loadAssignedOts = async () => {
-      setAssignedOtsLoading(true)
-      try {
-        const response = await fetch(`${apiRoot}/ots/asignadas/1`, { method: 'GET' })
-        if (!response.ok) return
-        const data = await response.json() as AssignedOT[]
-        if (!alive) return
-        setAssignedOts(data)
-      } catch {
-        if (!alive) return
-        setAssignedOts([])
-      } finally {
-        if (alive) setAssignedOtsLoading(false)
-      }
+    const selectedPlantId = String(plant || '')
+    if (!selectedPlantId && normalizedPlants[0]) {
+      setPlant(String(normalizedPlants[0].id))
     }
-
-    void loadAssignedOts()
-    return () => { alive = false }
-  }, [apiRoot])
+  }, [normalizedPlants, plant, setPlant])
 
   const processFile = useCallback(async (file: File) => {
     setUploading(true)
@@ -362,7 +485,7 @@ const DocChat: React.FC = () => {
     setLoading(true)
     setInput('')
 
-    const contextMachine = selectedMachineId ? Number(selectedMachineId) : null
+    const contextMachine = selectedMachineRecord ? Number(selectedMachineRecord.id) : null
     const el = document.getElementById('doc-input')
     if (el) (el as HTMLTextAreaElement).style.height = 'auto'
 
@@ -404,7 +527,7 @@ const DocChat: React.FC = () => {
       ? chunks.map((chunk, index) => `[FRAGMENTO ${index + 1} — ${chunk.doc} p.${chunk.page}]\n${chunk.text}`).join('\n\n')
       : '[Sin manual cargado — responde con conocimiento general de mantenimiento industrial]'
     const manualNote = activeManual ? `Manual activo: ${activeManual.name}.` : ''
-    const machineName = selectedMachineId ? machines.find(item => String(item.id) === selectedMachineId)?.name : null
+    const machineName = selectedMachineRecord?.name ?? null
     const system = `Eres BARB, asistente experto en mantenimiento industrial. Disciplina: ${discipline}. ${machineName ? `Equipo seleccionado: ${machineName}.` : ''} ${manualNote}\nResponde en ${isEs ? 'español' : 'inglés'}, paso a paso, citando página del manual cuando disponible. Usa ⚠️ para advertencias de seguridad.\n\nCONTEXTO MANUAL:\n${ctx}`
 
     try {
@@ -456,32 +579,39 @@ const DocChat: React.FC = () => {
         <div className="panel-section">
           <span className="panel-label">
             🗂️ {isEs ? 'OTs asignadas' : 'Assigned OTs'}
-            <span className="ml-count">{assignedOts.length}</span>
+            <span className="ml-count">{filteredOTs.length}</span>
           </span>
 
           <div className="manual-list-scroll">
-            {assignedOts.map(ot => (
-              <button
-                key={ot.id}
-                className="manual-item"
-                type="button"
-                title={`${ot.numero_ot} · ${ot.planta} · ${ot.maquina} · ${ot.estado} · ${ot.priority}`}
-                onClick={() => {}}
-              >
-                <div className="mi-icon">🛠️</div>
-                <div className="mi-body">
-                  <div className="mi-name">{ot.numero_ot}</div>
-                  <div className="mi-meta">{ot.planta}</div>
-                  <div className="mi-meta">{ot.maquina}</div>
-                  <div className="mi-meta">{ot.estado} · {ot.priority}</div>
-                </div>
-                <span className="mi-badge">OT</span>
-              </button>
-            ))}
+            {filteredOTs.map(ot => {
+              const title = getWorkOrderTitle(ot)
+              const machineLabel = normalizeWorkOrderMachine(ot) || '—'
+              const status = getWorkOrderStatus(ot)
+              const priority = getWorkOrderPriority(ot)
 
-            {assignedOtsLoading && (
+              return (
+                <button
+                  key={String(ot.id)}
+                  className="manual-item"
+                  type="button"
+                  title={`${title} · ${machineLabel} · ${status} · ${priority}`}
+                  onClick={() => {}}
+                >
+                  <div className="mi-icon">🛠️</div>
+                  <div className="mi-body">
+                    <div className="mi-name">{title}</div>
+                    <div className="mi-meta">{normalizeWorkOrderPlant(ot, ot.machine_meta ?? null) || selectedPlantRecord?.name || selectedPlantRecord?.nombre || '—'}</div>
+                    <div className="mi-meta">{machineLabel}</div>
+                    <div className="mi-meta">{status} · {priority}</div>
+                  </div>
+                  <span className="mi-badge">OT</span>
+                </button>
+              )
+            })}
+
+            {catalogsLoading && (
               <div style={{ fontSize: 11, color: 'var(--ink3)', textAlign: 'center', padding: '8px 0' }}>
-                {isEs ? 'Cargando OTs...' : 'Loading work orders...'}
+                {isEs ? 'Cargando catálogos...' : 'Loading catalogs...'}
               </div>
             )}
           </div>
@@ -494,13 +624,18 @@ const DocChat: React.FC = () => {
           <select
             aria-label={isEs ? 'Seleccionar planta' : 'Select plant'}
             className="form-select"
-            value={plant}
+            value={String(plant)}
             onChange={e => setPlant(e.target.value)}
-            disabled={loading}
+            disabled={loading || catalogsLoading}
           >
-            {PLANTS.map(p => (
-              <option key={p.id} value={p.id}>{p.label[langKey]}</option>
-            ))}
+            {normalizedPlants.map(p => {
+              const label = normalizePlantLabel(p)
+              return (
+                <option key={String(p.id)} value={String(p.id)}>
+                  {label || p.ubicacion || String(p.id)}
+                </option>
+              )
+            })}
           </select>
         </div>
 
@@ -509,22 +644,24 @@ const DocChat: React.FC = () => {
           <select
             aria-label={isEs ? 'Seleccionar disciplina' : 'Select discipline'}
             className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60"
-            value={selectedDisciplineId}
+            value={discipline ?? ''}
             onChange={e => {
-              const nextId = e.target.value
-              setSelectedDisciplineId(nextId)
-              const selected = disciplines.find(item => String(item.id) === nextId)
-              setDiscipline(selected?.name ?? null)
-              setSelectedMachineId('')
+              const nextName = e.target.value
+              setDiscipline(nextName || null)
+              setDocMachine('all')
+              setSelectedMachine(null)
             }}
-            disabled={loading || disciplinesLoading}
+            disabled={loading || catalogsLoading}
           >
             <option value="">{isEs ? 'Seleccionar disciplina...' : 'Select discipline...'}</option>
-            {disciplines.map(option => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
+            {disciplines.map(option => {
+              const name = normalizeCatalogName(option)
+              return (
+                <option key={String(option.id)} value={name}>
+                  {name || String(option.id)}
+                </option>
+              )
+            })}
           </select>
         </div>
 
@@ -533,16 +670,23 @@ const DocChat: React.FC = () => {
           <select
             aria-label={isEs ? 'Seleccionar máquina' : 'Select machine'}
             className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60"
-            value={selectedMachineId}
-            onChange={e => setSelectedMachineId(e.target.value)}
-            disabled={loading || machinesLoading || !selectedDisciplineId}
+            value={docMachine === 'all' ? '' : docMachine}
+            onChange={e => {
+              const nextMachineId = e.target.value
+              setDocMachine(nextMachineId || 'all')
+              setSelectedMachine(nextMachineId || null)
+            }}
+            disabled={loading || catalogsLoading || !selectedDisciplineRecord}
           >
             <option value="">{isEs ? 'Seleccionar máquina...' : 'Select machine...'}</option>
-            {machines.map(option => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
+            {availableMachines.map(option => {
+              const machineName = normalizeMachineLabel(option)
+              return (
+                <option key={String(option.id)} value={String(option.id)}>
+                  {machineName || String(option.id)}
+                </option>
+              )
+            })}
           </select>
         </div>
       </div>
@@ -568,16 +712,16 @@ const DocChat: React.FC = () => {
             </span>
           ) : (
             <>
-              <span className="ctx-tag plant">📍 {currentPlant.label[langKey]}</span>
+          <span className="ctx-tag plant">📍 {String(normalizePlantLabel(selectedPlantRecord) || plant)}</span>
               {activeManual && (
                 <span className="ctx-tag" style={{ background: 'var(--blue-bg)', color: 'var(--blue)' }}>
                   📖 {activeManual.name.length > 26 ? `${activeManual.name.slice(0, 24)}…` : activeManual.name}
                 </span>
               )}
               <span className="ctx-tag disc-au">◉ {discipline}</span>
-              {selectedMachineId && (
+              {selectedMachineRecord && (
                 <span className="ctx-tag machine">
-                  ⚙ {machines.find(option => String(option.id) === selectedMachineId)?.name ?? selectedMachineId}
+                  ⚙ {selectedMachineRecord.name ?? selectedMachineRecord.nombre ?? selectedMachineRecord.id}
                 </span>
               )}
             </>
@@ -673,6 +817,8 @@ const DocChat: React.FC = () => {
             type="file"
             accept=".pdf,.txt,.md"
             className="hidden"
+            aria-label={isEs ? 'Cargar manual desde archivo' : 'Upload manual from file'}
+            title={isEs ? 'Cargar manual desde archivo' : 'Upload manual from file'}
             onChange={e => {
               void handleFiles(e.target.files)
               e.currentTarget.value = ''

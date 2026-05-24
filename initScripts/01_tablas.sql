@@ -225,6 +225,19 @@ CREATE TABLE ORDEN_TRABAJO (
     CONSTRAINT fk_ot_reporte     FOREIGN KEY (reporte_id)     REFERENCES REPORTE(reporte_id)
 );
 
+CREATE TABLE OT_FOTO (
+    ot_foto_id    SERIAL PRIMARY KEY,
+    ot_id         INT NOT NULL,
+    file_name     VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255) NOT NULL,
+    content_type  VARCHAR(100) NOT NULL,
+    file_path     VARCHAR(500) NOT NULL,
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_ot_foto_ot FOREIGN KEY (ot_id) REFERENCES ORDEN_TRABAJO(ot_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_ot_foto_ot_id ON OT_FOTO(ot_id);
+
 -- ==========================================
 -- 7. PLANIFICACIÓN PREVENTIVA
 -- ==========================================

@@ -26,14 +26,29 @@ services:
       - "9000:9000"
     environment:
       - DATABASE_URL=postgresql://barb_admin:barb_password123@db:5432/barb_database
+      - REDIS_URL=redis://redis:6379/0
+      - UPLOAD_DIR=/app/uploads
     volumes:
       - ./backend:/app
+      - ./uploads:/app/uploads
     # 👇 ASÍ LE DECIMOS AL BACKEND QUE ESPERE A LA BD 👇
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  redis:
+    image: redis:7-alpine
+    container_name: barb_redis
+    ports:
+      - "6379:6379"
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
 
   frontend:
     build:
@@ -47,3 +62,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
