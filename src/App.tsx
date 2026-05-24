@@ -11,11 +11,9 @@ import MachineMemory from './pages/MachineMemory'
 import Report from './pages/Report'
 import Forbidden from './pages/Forbidden'
 import { useAppContext } from './context/AppContext'
-<<<<<<< HEAD
 import type { Role } from './types'
-=======
+// Rescatado de la rama de Benja:
 import Toast from './components/Toast'
->>>>>>> origin/Benja-
 
 type GuardProps = {
   allowedRoles: Role[]
@@ -82,98 +80,76 @@ const RootRedirect: React.FC = () => <Navigate to="/login" replace />
 
 export default function App() {
   return (
-<<<<<<< HEAD
-    <Routes>
-      <Route path="/" element={<RootRedirect />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/403" element={<Forbidden />} />
-
-      <Route element={<ProtectedLayout children={<Layout />} />}>
-        <Route
-          path="/dashboard"
-          element={
-            <RoleGuard allowedRoles={routeRoles('/dashboard')}>
-              <Dashboard />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="/menu"
-          element={
-            <RoleGuard allowedRoles={routeRoles('/menu')}>
-              <Menu />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="/docchat"
-          element={
-            <RoleGuard allowedRoles={routeRoles('/docchat')}>
-              <DocChat />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="/debug"
-          element={
-            <RoleGuard allowedRoles={routeRoles('/debug')}>
-              <Debug />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="/topology"
-          element={
-            <RoleGuard allowedRoles={routeRoles('/topology')}>
-              <Topology />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="/memory/:machineId"
-          element={
-            <RoleGuard allowedRoles={routeRoles('/memory/')}>
-              <MachineMemory />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="/report"
-          element={
-            <RoleGuard allowedRoles={routeRoles('/report')}>
-              <Report />
-            </RoleGuard>
-          }
-        />
-      </Route>
-
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
-=======
     <>
       <Routes>
+        <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
-          element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="menu" element={<Menu />} />
-          <Route path="docchat" element={<DocChat />} />
-          <Route path="debug" element={<Debug />} />
-          <Route path="topology" element={<Topology />} />
-          <Route path="memory/:machineId" element={<MachineMemory />} />
-          <Route path="report" element={<Report />} />
+        <Route path="/403" element={<Forbidden />} />
+
+        <Route element={<ProtectedLayout children={<Layout />} />}>
+          <Route
+            path="/dashboard"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/dashboard')}>
+                <Dashboard />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/menu"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/menu')}>
+                <Menu />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/docchat"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/docchat')}>
+                <DocChat />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/debug"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/debug')}>
+                <Debug />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/topology"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/topology')}>
+                <Topology />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/memory/:machineId"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/memory/')}>
+                <MachineMemory />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/report"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/report')}>
+                <Report />
+              </RoleGuard>
+            }
+          />
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-      <Toast /> 
+      
+      {/* Componente Toast global de notificaciones rescatado */}
+      <Toast />
     </>
->>>>>>> origin/Benja-
   )
 }

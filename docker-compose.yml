@@ -9,24 +9,15 @@ services:
     ports:
       - "5432:5432"
     volumes:
-<<<<<<< HEAD
       - postgres_data:/var/lib/postgresql/data
       - ./initScripts:/docker-entrypoint-initdb.d
     restart: always
-=======
-      - ./init-scripts:/docker-entrypoint-initdb.d
-    # 👇 ESTE ES EL HEALTHCHECK AGREGADO (Con tu usuario barb_admin) 👇
->>>>>>> origin/Benja-
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U barb_admin -d barb_database"]
       interval: 5s
       timeout: 5s
-<<<<<<< HEAD
       retries: 10
       start_period: 10s
-=======
-      retries: 5
->>>>>>> origin/Benja-
 
   backend:
     build: ./backend
