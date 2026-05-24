@@ -1,16 +1,13 @@
 import { WorkOrder, User, Message, Role } from '../types'
 
 export type AuthLoginResponse = {
-  status: string
-  access_token: string
-  token_type: string
+  token: string
   user: {
-    id: string
+    id: string | number
     name: string
     role: Role
   }
 }
-
 async function callAPI<T>(base: string, path: string, opts?: RequestInit): Promise<T> {
   const url = base + path
   const headers = { 'Content-Type': 'application/json', ...(opts?.headers as any) }
@@ -43,10 +40,16 @@ export const createApiService = (apiBase = 'http://localhost:9000/api', lmBase =
         method: 'GET',
       }),
     plants: async () => callAPI<any>(apiBase, '/plants', { method: 'GET' }),
+    machines: async () => callAPI<any>(apiBase, '/machines', { method: 'GET' }),
+    technicians: async () => callAPI<any>(apiBase, '/technicians', { method: 'GET' }),
+    
+    // AGREGA ESTE BLOQUE DE CHAT:
     chat: {
       documents: async (payload: any) => callAPI<any>(apiBase, '/chat/documents', { method: 'POST', body: JSON.stringify(payload) }),
       debug: async (payload: any) => callAPI<any>(apiBase, '/chat/debug', { method: 'POST', body: JSON.stringify(payload) }),
     },
+    // HASTA AQUÍ
+    
     debug: {
       startSession: async (payload: any) => callAPI<any>(apiBase, '/debug/sessions', { method: 'POST', body: JSON.stringify(payload) }),
     },

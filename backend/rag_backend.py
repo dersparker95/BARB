@@ -1,86 +1,87 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
+from typing import Optional
+
+import bcrypt
 import httpx
 import psycopg2
-from datetime import datetime
-from typing import List, Optional
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from psycopg2.extras import RealDictCursor
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import ForeignKey, String, create_engine, select
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
-
-from pathlib import Path
-import uuid
-
-# -----------------------------------------------------------------------------
-# CONFIGURACIÓN DE CONEXIONES
-# -----------------------------------------------------------------------------
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://barb_admin:barb_password123@db:5432/barb_database",
 )
 LM_STUDIO_URL = os.getenv("LM_STUDIO_URL", "http://host.docker.internal:1234/v1")
 
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 
-def _get_db_counts():
+def _query_all(sql: str, params: Optional[dict] = None):
     conn = get_db_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute("SELECT COUNT(*) AS count FROM ORDEN_TRABAJO;")
-        total_ots = cursor.fetchone()["count"]
-
-        cursor.execute("SELECT COUNT(*) AS count FROM MAQUINA;")
-        total_maquinas = cursor.fetchone()["count"]
-
-        cursor.execute("SELECT COUNT(*) AS count FROM REPORTE;")
-        total_reportes = cursor.fetchone()["count"]
-
-        return {
-            "work_orders": total_ots,
-            "machines": total_maquinas,
-            "documents": total_reportes,
-        }
+        with conn.cursor() as cursor:
+            cursor.execute(sql, params or {})
+            return cursor.fetchall()
     finally:
-        cursor.close()
         conn.close()
 
 
-# -----------------------------------------------------------------------------
-# APP
-# -----------------------------------------------------------------------------
-app = FastAPI(
-    title="BARB Plant Memory API",
-    version="1.2.0",
-    description="API local conectada directamente a las tablas reales de PostgreSQL.",
-)
+def _query_one(sql: str, params: Optional[dict] = None):
+    rows = _query_all(sql, params)
+    return rows[0] if rows else None
+
+
+def hash_password(raw_password: str) -> str:
+    return bcrypt.hashpw(raw_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(raw_password: str, stored_password: str) -> bool:
+    stored = (stored_password or "").strip()
+    if stored.startswith("$2"):
+        try:
+            return bcrypt.checkpw(raw_password.encode("utf-8"), stored.encode("utf-8"))
+        except ValueError:
+            return False
+    return stored == raw_password
+
+
+def serialize_user(user: dict) -> dict:
+    return {
+        "usuario_id": int(user["usuario_id"]),
+        "nombre": str(user["nombre"]),
+        "email": str(user["email"]),
+        "rol": str(user["rol"]).lower(),
+        "activo": bool(user["activo"]),
+        "created_at": user["created_at"].isoformat() if user.get("created_at") else None,
+    }
+
+
+app = FastAPI(title="BARB Plant Memory API", version="1.4.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://.*",
+    allow_origins=[
+        "http://localhost",
+        "http://localhost:80",
+        "http://localhost:5173",
+        "http://127.0.0.1",
+        "http://127.0.0.1:80",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# (startup intentionally empty: no DB migrations/inserts at app start)
-# -----------------------------------------------------------------------------
-# SCHEMAS Pydantic
-# -----------------------------------------------------------------------------
-class WorkOrderCreateRequest(BaseModel):
-    title: str
-    machine: str  # Enviará el código o identificador de MAQUINA (ej: MAQUINA.codigo)
-    priority: str = Field(default="medium")
-    description: str = Field(default="")
-    status: str = Field(default="pending")
 
 
 class LoginRequest(BaseModel):
@@ -90,19 +91,25 @@ class LoginRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    context_machine: Optional[str] = None
     language: str = Field(default="es")
 
 
-class ChatResponse(BaseModel):
-    reply: str
-    sources: List[str]
-    language: str
+class UserCreateRequest(BaseModel):
+    nombre: str
+    email: str
+    password: str
+    rol: str
+    activo: bool = True
 
 
-# -----------------------------------------------------------------------------
-# ENDPOINTS BASE
-# -----------------------------------------------------------------------------
+class UserUpdateRequest(BaseModel):
+    nombre: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+    rol: Optional[str] = None
+    activo: Optional[bool] = None
+
+
 @app.get("/")
 async def root():
     return {"service": "BARB API", "status": "online"}
@@ -112,378 +119,84 @@ async def root():
 @app.get("/api/health")
 async def health():
     try:
-        db_counts = _get_db_counts()
-        return {"status": "online", **db_counts}
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "online"}
     except Exception as e:
         return {"status": "error_db", "detail": str(e)}
 
 
-# -----------------------------------------------------------------------------
-# Fase 2: Diagnóstico LLM (no requiere ping directo desde frontend)
-# -----------------------------------------------------------------------------
 @app.get("/api/health/llm")
 async def health_llm():
-    db_status = None
-    try:
-        db_status = {"status": "online", **_get_db_counts()}
-    except Exception as e:
-        db_status = {"status": "error_db", "detail": str(e)}
+    db_status = await health()
+    lm_status = {"status": "offline", "detail": "LM Studio no configurado o no disponible."}
 
-    lm_status = {"status": "offline", "detail": "LM Studio no respondió o es inalcanzable."}
     try:
-        # Endpoint estándar OpenAI compatible (LM Studio)
         async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{LM_STUDIO_URL}/models",
-                timeout=5.0,
-            )
+            resp = await client.get(f"{LM_STUDIO_URL}/models", timeout=5.0)
             if resp.status_code == 200:
                 lm_status = {"status": "online", "detail": "LM Studio respondió 200 OK."}
             else:
-                lm_status = {
-                    "status": "error",
-                    "detail": f"LM Studio respondió {resp.status_code}.",
-                }
-    except httpx.RequestError as e:
-        lm_status = {"status": "offline", "detail": f"RequestError: {str(e)}"}
+                lm_status = {"status": "error", "detail": f"LM Studio respondió {resp.status_code}."}
     except Exception as e:
-        lm_status = {"status": "offline", "detail": f"Error: {str(e)}"}
+        lm_status = {"status": "offline", "detail": str(e)}
 
-    # Respuesta unificada para el frontend
-    overall_status = "online"
-    if lm_status.get("status") != "online" or (db_status and db_status.get("status") != "online"):
-        overall_status = "degraded"
-
-    return {
-        "status": overall_status,
-        "llm": lm_status,
-        "db": db_status,
-    }
-
-# -----------------------------------------------------------------------------
-# Endpoints Catálogos (los requeridos por el frontend)
-# -----------------------------------------------------------------------------
-@app.get("/api/disciplines", response_model=list[DisciplineResponse])
-async def get_disciplines() -> list[DisciplineResponse]:
-    if SessionLocal is None:
-        raise HTTPException(status_code=500, detail="DATABASE_URL no configurado")
-
-    session = get_db_session()
-    try:
-        rows = session.execute(select(Discipline).order_by(Discipline.name.asc())).scalars().all()
-        return [DisciplineResponse(id=r.id, name=r.name) for r in rows]
-    finally:
-        session.close()
+    overall = "online" if db_status.get("status") == "online" and lm_status.get("status") == "online" else "degraded"
+    return {"status": overall, "db": db_status, "llm": lm_status}
 
 
-@app.get("/api/technicians", response_model=list[TechnicianResponse])
-async def get_technicians() -> list[TechnicianResponse]:
-    if SessionLocal is None:
-        raise HTTPException(status_code=500, detail="DATABASE_URL no configurado")
-
-    session = get_db_session()
-    try:
-        rows = session.execute(select(Technician).order_by(Technician.name.asc())).scalars().all()
-        return [TechnicianResponse(id=r.id, name=r.name) for r in rows]
-    finally:
-        session.close()
-
-
-@app.get("/api/machines", response_model=list[MachineResponse])
-async def get_machines(discipline_id: Optional[int] = None) -> list[MachineResponse]:
-    if SessionLocal is None:
-        raise HTTPException(status_code=500, detail="DATABASE_URL no configurado")
-
-    session = get_db_session()
-    try:
-        stmt = select(Machine).order_by(Machine.name.asc())
-        if discipline_id is not None:
-            stmt = stmt.where(Machine.discipline_id == discipline_id)
-
-        rows = session.execute(stmt).scalars().all()
-        return [MachineResponse(id=r.id, name=r.name, discipline_id=r.discipline_id) for r in rows]
-    finally:
-        session.close()
-
-# -----------------------------------------------------------------------------
-# Work Orders (Persistencia real en PostgreSQL)
-# -----------------------------------------------------------------------------
-from sqlalchemy import Integer, DateTime
-from typing import Any
-
-UPLOAD_DIR = Path("static/uploads")
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-
-class WorkOrder(Base):
-    __tablename__ = "work_orders"
-
-    id: Mapped[str] = mapped_column(primary_key=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-
-    # En frontend: payload.machine es el id numérico como string (ej "1")
-    machine_id: Mapped[int] = mapped_column(ForeignKey("machines.id", ondelete="RESTRICT"), nullable=False)
-
-    discipline_id: Mapped[int] = mapped_column(ForeignKey("disciplines.id", ondelete="RESTRICT"), nullable=False)
-    technician_id: Mapped[int] = mapped_column(ForeignKey("technicians.id", ondelete="RESTRICT"), nullable=False)
-
-    priority: Mapped[str] = mapped_column(String(32), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False)
-
-    description: Mapped[str] = mapped_column(String(2000), nullable=False)
-
-    photo_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-def _work_order_to_summary(order: WorkOrder) -> WorkOrderSummary:
-    return WorkOrderSummary(
-        id=order.id,
-        title=order.title,
-        machine=str(order.machine_id),
-        priority=order.priority,  # type: ignore[assignment]
-        status=order.status,  # type: ignore[assignment]
-        age_minutes=minutes_between(order.created_at),
-    )
-
-
-def _work_order_to_detail(order: WorkOrder) -> WorkOrderDetail:
-    return WorkOrderDetail(
-        id=order.id,
-        title=order.title,
-        machine=str(order.machine_id),
-        priority=order.priority,  # type: ignore[assignment]
-        status=order.status,  # type: ignore[assignment]
-        age_minutes=minutes_between(order.created_at),
-        description=order.description,
-        created_at=order.created_at,
-        updated_at=order.updated_at,
-        closed_at=order.closed_at,
-    )
-
-
-# -----------------------------------------------------------------------------
-# AUTENTICACIÓN
-# -----------------------------------------------------------------------------
 @app.post("/auth/login")
 @app.post("/api/auth/login")
 async def login(payload: LoginRequest):
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT usuario_id, nombre, email, rol
-            FROM USUARIO
-            WHERE email = %s;
-            """,
-            (payload.email,),
-        )
-        user = cursor.fetchone()
-        cursor.close()
+    email = payload.email.strip().lower()
+    password = payload.password
 
-        if not user:
-            raise HTTPException(status_code=401, detail="Usuario no registrado en la base de datos local.")
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email y contraseña requeridos.")
 
-        # Bypass temporal en memoria:
-        # válida si y solo si la contraseña es exactamente "password123"
-        if payload.password != "password123":
-            raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+    user = _query_one(
+        """
+        SELECT usuario_id, nombre, email, password_hash, rol, activo
+        FROM usuario
+        WHERE lower(email) = lower(%(email)s)
+        LIMIT 1
+        """,
+        {"email": email},
+    )
 
-        return {
-            "status": "success",
-            "access_token": "session-token-valid",
-            "token_type": "bearer",
-            "user": {
-                "id": user["usuario_id"],
-                "name": user["nombre"],
-                "role": user["rol"],
-            },
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error de conexión DB: {str(e)}")
-    finally:
-        if conn:
-            conn.close()
+    if not user or not user.get("activo", True):
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrecta")
+
+    if not verify_password(password, str(user.get("password_hash") or "")):
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrecta")
+
+    return {
+        "token": "barb-token",
+        "user": {
+            "id": int(user["usuario_id"]),
+            "name": str(user["nombre"]),
+            "role": str(user["rol"]).lower(),
+        },
+    }
 
 
-# -----------------------------------------------------------------------------
-# ITERACIÓN 1 (Bloque 1): MAQUINA + USUARIO + Detalle OT (GET/POST)
-# -----------------------------------------------------------------------------
-
-# ---- MAQUINA ----
-@app.get("/api/maquinas")
-async def list_machines():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT maquina_id, nombre, codigo, planta_id
-            FROM MAQUINA
-            ORDER BY codigo;
-            """
-        )
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return rows
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al listar máquinas: {str(e)}")
+@app.post("/api/auth/logout")
+@app.post("/auth/logout")
+async def logout():
+    return {"status": "success"}
 
 
-@app.get("/api/maquinas/{maquina_id}")
-async def get_machine_by_id(maquina_id: int):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT maquina_id, planta_id, nombre, codigo
-            FROM MAQUINA
-            WHERE maquina_id = %s;
-            """,
-            (maquina_id,),
-        )
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        if not row:
-            raise HTTPException(status_code=404, detail="MAQUINA no encontrada.")
-
-        return row
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al obtener MAQUINA: {str(e)}")
-
-
-class MachineCreateRequest(BaseModel):
-    planta_id: int
-    nombre: str
-    codigo: str
-
-
-@app.post("/api/maquinas", status_code=201)
-async def create_machine(payload: MachineCreateRequest):
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO MAQUINA (planta_id, nombre, codigo)
-            VALUES (%s, %s, %s)
-            RETURNING maquina_id, planta_id, nombre, codigo;
-            """,
-            (payload.planta_id, payload.nombre, payload.codigo),
-        )
-        row = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return row
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al crear MAQUINA: {str(e)}")
-
-
-class MachineUpdateRequest(BaseModel):
-    planta_id: Optional[int] = None
-    nombre: Optional[str] = None
-    codigo: Optional[str] = None
-
-
-@app.put("/api/maquinas/{maquina_id}")
-async def update_machine(maquina_id: int, payload: MachineUpdateRequest):
-    conn = None
-    try:
-        if payload.planta_id is None and payload.nombre is None and payload.codigo is None:
-            raise HTTPException(status_code=400, detail="Debe enviar al menos un campo a actualizar.")
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            UPDATE MAQUINA
-            SET
-                planta_id = COALESCE(%s, planta_id),
-                nombre = COALESCE(%s, nombre),
-                codigo = COALESCE(%s, codigo)
-            WHERE maquina_id = %s
-            RETURNING maquina_id, planta_id, nombre, codigo;
-            """,
-            (payload.planta_id, payload.nombre, payload.codigo, maquina_id),
-        )
-        row = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        if not row:
-            raise HTTPException(status_code=404, detail="MAQUINA no encontrada para actualizar.")
-        return row
-    except HTTPException:
-        if conn:
-            conn.rollback()
-        raise
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al actualizar MAQUINA: {str(e)}")
-
-
-@app.delete("/api/maquinas/{maquina_id}", status_code=204)
-async def delete_machine(maquina_id: int):
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM MAQUINA WHERE maquina_id = %s;", (maquina_id,))
-        deleted = cursor.rowcount
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        if deleted == 0:
-            raise HTTPException(status_code=404, detail="MAQUINA no encontrada para eliminar.")
-        return None
-    except HTTPException:
-        if conn:
-            conn.rollback()
-        raise
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al eliminar MAQUINA: {str(e)}")
-
-
-# ---- USUARIO ----
 @app.get("/api/usuarios")
 async def list_users():
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
+        rows = _query_all(
             """
-            SELECT usuario_id, nombre, email, rol
-            FROM USUARIO
-            ORDER BY usuario_id;
+            SELECT usuario_id, nombre, email, rol, activo, created_at
+            FROM usuario
+            ORDER BY usuario_id
             """
         )
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return rows
+        return [serialize_user(r) for r in rows]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al listar usuarios: {str(e)}")
 
@@ -491,795 +204,193 @@ async def list_users():
 @app.get("/api/usuarios/{usuario_id}")
 async def get_user_by_id(usuario_id: int):
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
+        row = _query_one(
             """
-            SELECT usuario_id, nombre, email, rol
-            FROM USUARIO
-            WHERE usuario_id = %s;
+            SELECT usuario_id, nombre, email, rol, activo, created_at
+            FROM usuario
+            WHERE usuario_id = %(usuario_id)s
+            LIMIT 1
             """,
-            (usuario_id,),
+            {"usuario_id": usuario_id},
         )
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
         if not row:
             raise HTTPException(status_code=404, detail="USUARIO no encontrado.")
-        return row
+        return serialize_user(row)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener USUARIO: {str(e)}")
 
 
-class UserCreateRequest(BaseModel):
-    nombre: str
-    email: str
-    rol: str
 
 
-@app.post("/api/usuarios", status_code=201)
-async def create_user(payload: UserCreateRequest):
-    conn = None
+@app.get("/api/stats/financial-impact")
+def get_financial_impact():
+    query = text(
+        """
+        SELECT
+            COALESCE(AVG(tiempo_reparacion_min), 0) AS mttr,
+            COALESCE(SUM(costo_real), 0) AS costo_total_acumulado,
+            COALESCE(SUM(downtime_minutes), 0) * 2000 AS ahorro_estimado
+        FROM orden_trabajo
+        WHERE estado = 'completed'
+        """
+    )
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO USUARIO (nombre, email, rol)
-            VALUES (%s, %s, %s)
-            RETURNING usuario_id, nombre, email, rol;
-            """,
-            (payload.nombre, payload.email, payload.rol),
-        )
-        row = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return row
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al crear USUARIO: {str(e)}")
+        with engine.connect() as conn:
+            res = conn.execute(query).mappings().one()
+            return {
+                "mttr": float(res["mttr"]),
+                "costo_total_acumulado": float(res["costo_total_acumulado"]),
+                "ahorro_estimado": float(res["ahorro_estimado"]),
+            }
+    except Exception:
+        return {"mttr": 0.0, "costo_total_acumulado": 0.0, "ahorro_estimado": 0.0}
 
 
-class UserUpdateRequest(BaseModel):
-    nombre: Optional[str] = None
-    email: Optional[str] = None
-    rol: Optional[str] = None
-
-
-@app.put("/api/usuarios/{usuario_id}")
-async def update_user(usuario_id: int, payload: UserUpdateRequest):
-    conn = None
-    try:
-        if payload.nombre is None and payload.email is None and payload.rol is None:
-            raise HTTPException(status_code=400, detail="Debe enviar al menos un campo a actualizar.")
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            UPDATE USUARIO
-            SET
-                nombre = COALESCE(%s, nombre),
-                email = COALESCE(%s, email),
-                rol = COALESCE(%s, rol)
-            WHERE usuario_id = %s
-            RETURNING usuario_id, nombre, email, rol;
-            """,
-            (payload.nombre, payload.email, payload.rol, usuario_id),
-        )
-        row = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        if not row:
-            raise HTTPException(status_code=404, detail="USUARIO no encontrado para actualizar.")
-        return row
-    except HTTPException:
-        if conn:
-            conn.rollback()
-        raise
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al actualizar USUARIO: {str(e)}")
-
-
-@app.delete("/api/usuarios/{usuario_id}", status_code=204)
-async def delete_user(usuario_id: int):
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM USUARIO WHERE usuario_id = %s;", (usuario_id,))
-        deleted = cursor.rowcount
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        if deleted == 0:
-            raise HTTPException(status_code=404, detail="USUARIO no encontrado para eliminar.")
-        return None
-    except HTTPException:
-        if conn:
-            conn.rollback()
-        raise
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al eliminar USUARIO: {str(e)}")
-
-
-# ---- DETALLE OT: OT_REPUESTO ----
-@app.get("/api/ot-repuestos")
-async def list_ot_repuestos(ot_id: int):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT
-                otr.ot_repuesto_id,
-                otr.ot_id,
-                otr.repuesto_id,
-                r.codigo AS repuesto_codigo,
-                r.nombre AS repuesto_nombre,
-                otr.cantidad,
-                otr.costo_unitario,
-                otr.notas,
-                otr.fecha_uso
-            FROM OT_REPUESTO otr
-            JOIN REPUESTO r ON otr.repuesto_id = r.repuesto_id
-            WHERE otr.ot_id = %s
-            ORDER BY otr.fecha_uso DESC;
-            """,
-            (ot_id,),
-        )
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return rows
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al listar OT_REPUESTO: {str(e)}")
-
-
-class OtRepuestoCreateRequest(BaseModel):
-    ot_id: int
-    repuesto_id: int
-    cantidad: float
-    costo_unitario: Optional[float] = None
-    notas: Optional[str] = None
-
-
-@app.post("/api/ot-repuestos", status_code=201)
-async def create_ot_repuesto(payload: OtRepuestoCreateRequest):
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO OT_REPUESTO (ot_id, repuesto_id, cantidad, costo_unitario, notas)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING ot_repuesto_id, ot_id, repuesto_id, cantidad, costo_unitario, notas, fecha_uso;
-            """,
-            (
-                payload.ot_id,
-                payload.repuesto_id,
-                payload.cantidad,
-                payload.costo_unitario,
-                payload.notas,
-            ),
-        )
-        row = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return row
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al crear OT_REPUESTO: {str(e)}")
-
-
-# ---- DETALLE OT: OT_AUDIT_LOG ----
-@app.get("/api/ot-audit-logs")
-async def list_ot_audit_logs(ot_id: int):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT
-                l.audit_id,
-                l.ot_id,
-                l.usuario_id,
-                u.nombre AS usuario_nombre,
-                l.estado_anterior,
-                l.estado_nuevo,
-                l.comentario,
-                l.timestamp
-            FROM OT_AUDIT_LOG l
-            JOIN USUARIO u ON l.usuario_id = u.usuario_id
-            WHERE l.ot_id = %s
-            ORDER BY l.timestamp DESC;
-            """,
-            (ot_id,),
-        )
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return rows
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al listar OT_AUDIT_LOG: {str(e)}")
-
-
-class OtAuditLogCreateRequest(BaseModel):
-    ot_id: int
-    usuario_id: int
-    estado_anterior: Optional[str] = None
-    estado_nuevo: str
-    comentario: Optional[str] = None
-
-
-@app.post("/api/ot-audit-logs", status_code=201)
-async def create_ot_audit_log(payload: OtAuditLogCreateRequest):
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO OT_AUDIT_LOG (ot_id, usuario_id, estado_anterior, estado_nuevo, comentario)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING audit_id, ot_id, usuario_id, estado_anterior, estado_nuevo, comentario, timestamp;
-            """,
-            (
-                payload.ot_id,
-                payload.usuario_id,
-                payload.estado_anterior,
-                payload.estado_nuevo,
-                payload.comentario,
-            ),
-        )
-        row = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return row
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al crear OT_AUDIT_LOG: {str(e)}")
-
-
-# -----------------------------------------------------------------------------
-# PLANTA (Prioridad 1): CRUD completo
-# -----------------------------------------------------------------------------
-@app.get("/api/plantas")
-async def list_plants():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT planta_id, nombre, ubicacion
-            FROM PLANTA
-            ORDER BY planta_id;
-            """
-        )
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return rows
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al listar PLANTAS: {str(e)}")
-
-
-@app.get("/api/plantas/{planta_id}")
-async def get_plant_by_id(planta_id: int):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT planta_id, nombre, ubicacion
-            FROM PLANTA
-            WHERE planta_id = %s;
-            """,
-            (planta_id,),
-        )
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        if not row:
-            raise HTTPException(status_code=404, detail="PLANTA no encontrada.")
-        return row
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al obtener PLANTA: {str(e)}")
-
-
-class PlantCreateRequest(BaseModel):
-    nombre: str
-    ubicacion: Optional[str] = None
-
-
-@app.post("/api/plantas", status_code=201)
-async def create_plant(payload: PlantCreateRequest):
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO PLANTA (nombre, ubicacion)
-            VALUES (%s, %s)
-            RETURNING planta_id, nombre, ubicacion;
-            """,
-            (payload.nombre, payload.ubicacion),
-        )
-        row = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return row
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al crear PLANTA: {str(e)}")
-
-
-class PlantUpdateRequest(BaseModel):
-    nombre: Optional[str] = None
-    ubicacion: Optional[str] = None
-
-
-@app.put("/api/plantas/{planta_id}")
-async def update_plant(planta_id: int, payload: PlantUpdateRequest):
-    conn = None
-    try:
-        nombre = payload.nombre
-        ubicacion = payload.ubicacion
-
-        # Validación simple: al menos un campo debe venir
-        if nombre is None and ubicacion is None:
-            raise HTTPException(status_code=400, detail="Debe enviar al menos un campo a actualizar.")
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            UPDATE PLANTA
-            SET
-                nombre = COALESCE(%s, nombre),
-                ubicacion = COALESCE(%s, ubicacion)
-            WHERE planta_id = %s
-            RETURNING planta_id, nombre, ubicacion;
-            """,
-            (nombre, ubicacion, planta_id),
-        )
-        row = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        if not row:
-            raise HTTPException(status_code=404, detail="PLANTA no encontrada para actualizar.")
-        return row
-    except HTTPException:
-        if conn:
-            conn.rollback()
-        raise
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al actualizar PLANTA: {str(e)}")
-
-
-@app.delete("/api/plantas/{planta_id}", status_code=204)
-async def delete_plant(planta_id: int):
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            DELETE FROM PLANTA
-            WHERE planta_id = %s;
-            """,
-            (planta_id,),
-        )
-        deleted = cursor.rowcount
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        if deleted == 0:
-            raise HTTPException(status_code=404, detail="PLANTA no encontrada para eliminar.")
-        return None
-    except HTTPException:
-        if conn:
-            conn.rollback()
-        raise
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al eliminar PLANTA: {str(e)}")
-
-
-# -----------------------------------------------------------------------------
-# OT: WORK ORDERS
-# -----------------------------------------------------------------------------
-@app.get("/work-orders")
 @app.get("/api/work-orders")
-async def list_work_orders():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        query = """
-            SELECT
-                ot.numero_ot AS id,
-                ot.descripcion_problema AS title,
-                m.nombre AS machine,
-                ot.priority AS priority,
-                ot.estado AS status,
-                0 AS age_minutes
-            FROM ORDEN_TRABAJO ot
-            JOIN MAQUINA m ON ot.maquina_id = m.maquina_id;
+@app.get("/api/work_orders")
+def get_work_orders():
+    query = text(
         """
-        cursor.execute(query)
-        records = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return records
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al listar OTs: {str(e)}")
-
-
-@app.post("/work-orders", status_code=201)
-@app.post("/api/work-orders", status_code=201)
-async def create_work_order(payload: WorkOrderCreateRequest):
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # Resolver MAQUINA por codigo o nombre (payload.machine puede venir de cualquiera)
-        machine_value = (payload.machine or "").strip()
-        if not machine_value:
-            raise HTTPException(status_code=400, detail="Campo machine vacío.")
-
-        cursor.execute(
-            """
-            SELECT maquina_id
-            FROM MAQUINA
-            WHERE codigo = %s OR nombre = %s;
-            """,
-            (machine_value, machine_value),
-        )
-        res_m = cursor.fetchone()
-
-        if not res_m:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "MAQUINA no encontrada para el campo machine. "
-                    "Se esperaba que fuera MAQUINA.codigo o MAQUINA.nombre. "
-                    f"Recibido: '{payload.machine}'."
-                ),
-            )
-
-        maquina_id = res_m["maquina_id"]
-
-        # Obtener un técnico válido (USUARIO)
-        cursor.execute("SELECT usuario_id FROM USUARIO LIMIT 1;")
-        res_u = cursor.fetchone()
-        tecnico_id = res_u["usuario_id"] if res_u else 1
-        if not tecnico_id:
-            raise HTTPException(status_code=500, detail="No se encontró técnico válido en USUARIO.")
-
-        # Generar correlativo para numero_ot (único)
-        timestamp_str = datetime.now().strftime("%M%S")
-        nuevo_numero_ot = f"WO-10{timestamp_str}"
-
-        insert_query = """
-            INSERT INTO ORDEN_TRABAJO (
-                numero_ot,
-                maquina_id,
-                tecnico_id,
-                creado_por,
-                tipo,
-                descripcion_problema,
-                priority,
-                estado
-            ) VALUES (%s, %s, %s, %s, 'corrective', %s, %s, %s)
-            RETURNING numero_ot, descripcion_problema, estado;
+        SELECT
+            ot.numero_ot,
+            ot.estado,
+            ot.tiempo_reparacion_min,
+            ot.costo_real,
+            ot.descripcion_problema,
+            m.nombre AS machine_name,
+            ot.fecha_creacion
+        FROM orden_trabajo ot
+        JOIN maquina m ON m.maquina_id = ot.maquina_id
+        ORDER BY ot.numero_ot DESC
         """
-
-        priority = payload.priority.lower()
-        
-        # Mapeo forzado para evitar el error del ENUM "open"
-        estado_web = payload.status.lower()
-        estado = "pending" if estado_web == "open" else estado_web
-
-        cursor.execute(
-            insert_query,
-            (
-                nuevo_numero_ot,
-                maquina_id,
-                tecnico_id,
-                tecnico_id,
-                payload.title,
-                priority,
-                estado,
-            ),
-        )
-        nueva_ot = cursor.fetchone()
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return {
-            "id": nueva_ot["numero_ot"],
-            "title": nueva_ot["descripcion_problema"],
-            "machine": payload.machine,
-            "priority": priority.capitalize(),
-            "status": nueva_ot["estado"],
-            "age_minutes": 0,
-        }
-    except HTTPException:
-        if conn:
-            conn.rollback()
-        raise
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al insertar en DB: {str(e)}")
-
-
-# -----------------------------------------------------------------------------
-# ORDEN TRABAJO (Prioridad 1): detalle + PUT + DELETE
-# -----------------------------------------------------------------------------
-
-class WorkOrderUpdateRequest(BaseModel):
-    machine: Optional[str] = None  # codigo o nombre
-    title: Optional[str] = None
-    priority: Optional[str] = None
-    status: Optional[str] = None  # estado_ot
-
-_ALLOWED_PRIORITY_OT = {"low", "medium", "high", "urgent"}
-_ALLOWED_ESTADO_OT = {"pending", "assigned", "in_progress", "completed", "cancelled", "overdue"}
-
-
-@app.get("/api/work-orders/by-numero-ot/{numero_ot}")
-@app.get("/work-orders/by-numero-ot/{numero_ot}")
-async def get_work_order_id_by_numero_ot(numero_ot: str):
+    )
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT ot_id, numero_ot
-            FROM ORDEN_TRABAJO
-            WHERE numero_ot = %s;
-            """,
-            (numero_ot,),
-        )
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
+        with engine.connect() as conn:
+            rows = conn.execute(query).mappings().all()
+            resultados = []
+            for r in rows:
+                estado_bd = str(r.get("estado", "pending")).lower()
+                estado_visual = "Closed" if estado_bd == "completed" else ("In Progress" if estado_bd in {"in_progress", "assigned"} else "Open")
+                costo_bd = r.get("costo_real")
+                costo_seguro = float(costo_bd) if costo_bd is not None else 0.0
+                tiempo_bd = r.get("tiempo_reparacion_min")
+                tiempo_seguro = int(tiempo_bd) if tiempo_bd is not None else 0
 
-        if not row:
-            raise HTTPException(status_code=404, detail="ORDEN_TRABAJO no encontrada para ese numero_ot.")
-        return row
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al obtener ot_id por numero_ot: {str(e)}")
-
-
-@app.get("/api/work-orders/{ot_id}")
-@app.get("/work-orders/{ot_id}")
-async def get_work_order_by_id(ot_id: int):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT
-                ot.ot_id,
-                ot.numero_ot AS id,
-                ot.descripcion_problema AS title,
-                m.nombre AS machine,
-                m.codigo AS machine_codigo,
-                ot.priority AS priority,
-                ot.estado AS status,
-                ot.tecnico_id,
-                ot.creado_por,
-                ot.tipo,
-                ot.diagnostico_id,
-                ot.reporte_id,
-                ot.fecha_creacion,
-                ot.fecha_inicio,
-                ot.fecha_cierre,
-                ot.fecha_vencimiento
-            FROM ORDEN_TRABAJO ot
-            JOIN MAQUINA m ON ot.maquina_id = m.maquina_id
-            WHERE ot.ot_id = %s;
-            """,
-            (ot_id,),
-        )
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        if not row:
-            raise HTTPException(status_code=404, detail="ORDEN_TRABAJO no encontrada.")
-
-        return row
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al obtener OT: {str(e)}")
-
-
-@app.put("/api/work-orders/{ot_id}")
-@app.put("/work-orders/{ot_id}")
-async def update_work_order(ot_id: int, payload: WorkOrderUpdateRequest):
-    conn = None
-    try:
-        if (
-            payload.machine is None
-            and payload.title is None
-            and payload.priority is None
-            and payload.status is None
-        ):
-            raise HTTPException(status_code=400, detail="Debe enviar al menos un campo a actualizar.")
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # Obtener valores actuales para rellenar COALESCE de forma segura
-        cursor.execute("SELECT * FROM ORDEN_TRABAJO WHERE ot_id = %s;", (ot_id,))
-        current = cursor.fetchone()
-        if not current:
-            cursor.close()
-            conn.close()
-            raise HTTPException(status_code=404, detail="ORDEN_TRABAJO no encontrada.")
-
-        maquina_id = current["maquina_id"]
-        if payload.machine:
-            machine_value = payload.machine.strip()
-            cursor.execute(
-                """
-                SELECT maquina_id
-                FROM MAQUINA
-                WHERE codigo = %s OR nombre = %s;
-                """,
-                (machine_value, machine_value),
-            )
-            res_m = cursor.fetchone()
-            if not res_m:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "MAQUINA no encontrada para el campo machine. "
-                        f"Recibido: '{payload.machine}'."
-                    ),
+                resultados.append(
+                    {
+                        "id": str(r.get("numero_ot", "000")),
+                        "title": str(r.get("descripcion_problema") or f"OT {r.get('numero_ot')}"),
+                        "machine": str(r.get("machine_name") or "1"),
+                        "priority": "High" if costo_seguro > 500 else "Medium",
+                        "status": estado_visual,
+                        "age_minutes": tiempo_seguro,
+                    }
                 )
-            maquina_id = res_m["maquina_id"]
-
-        title = payload.title if payload.title is not None else current.get("descripcion_problema")
-        priority = payload.priority.lower() if payload.priority is not None else current.get("priority")
-        estado = payload.status.lower() if payload.status is not None else current.get("estado")
-
-        if priority not in _ALLOWED_PRIORITY_OT:
-            raise HTTPException(status_code=400, detail=f"priority inválida. Permitidos: {sorted(_ALLOWED_PRIORITY_OT)}")
-        if estado not in _ALLOWED_ESTADO_OT:
-            raise HTTPException(status_code=400, detail=f"status inválido. Permitidos: {sorted(_ALLOWED_ESTADO_OT)}")
-
-        cursor.execute(
-            """
-            UPDATE ORDEN_TRABAJO
-            SET
-                maquina_id = %s,
-                descripcion_problema = %s,
-                priority = %s,
-                estado = %s
-            WHERE ot_id = %s
-            RETURNING ot_id, numero_ot, descripcion_problema, priority, estado;
-            """,
-            (maquina_id, title, priority, estado, ot_id),
-        )
-        row = cursor.fetchone()
-        conn.commit()
-
-        cursor.close()
-        conn.close()
-
-        return {
-            "ot_id": row["ot_id"],
-            "numero_ot": row["numero_ot"],
-            "title": row["descripcion_problema"],
-            "priority": row["priority"].capitalize(),
-            "status": row["estado"],
-        }
-    except HTTPException:
-        if conn:
-            conn.rollback()
-        raise
+            return resultados
     except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al actualizar OT: {str(e)}")
+        print(f"Error BD: {e}")
+        return []
 
 
-@app.delete("/api/work-orders/{ot_id}", status_code=204)
-@app.delete("/work-orders/{ot_id}", status_code=204)
-async def delete_work_order(ot_id: int):
-    conn = None
+@app.get("/api/machines")
+def get_machines():
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("DELETE FROM ORDEN_TRABAJO WHERE ot_id = %s;", (ot_id,))
-        deleted = cursor.rowcount
-        conn.commit()
-
-        cursor.close()
-        conn.close()
-
-        if deleted == 0:
-            raise HTTPException(status_code=404, detail="ORDEN_TRABAJO no encontrada para eliminar.")
-        return None
-    except HTTPException:
-        if conn:
-            conn.rollback()
-        raise
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al eliminar OT: {str(e)}")
+        rows = _query_all(
+            """
+            SELECT maquina_id AS id, nombre, disciplina_id
+            FROM maquina
+            ORDER BY nombre
+            """
+        )
+        return [{"id": int(r["id"]), "name": r["nombre"], "discipline_id": r["disciplina_id"]} for r in rows]
+    except Exception:
+        return [{"id": 1, "name": "Planta Principal", "discipline_id": 1}]
 
 
-# -----------------------------------------------------------------------------
-# PIPELINE RAG (LM STUDIO)
-# -----------------------------------------------------------------------------
-@app.post("/chat", response_model=ChatResponse)
-@app.post("/api/chat", response_model=ChatResponse)
-async def chat(payload: ChatRequest) -> ChatResponse:
-    lm_payload = {
-        "model": "local-model",
-        "messages": [
-            {"role": "system", "content": "Asistente experto en mantenimiento de la planta BARB."},
-            {"role": "user", "content": payload.message},
-        ],
-        "temperature": 0.4,
-    }
+@app.get("/api/disciplines")
+def get_disciplines():
+    try:
+        rows = _query_all(
+            """
+            SELECT disciplina_id AS id, nombre
+            FROM disciplina
+            ORDER BY nombre
+            """
+        )
+        return [{"id": int(r["id"]), "name": r["nombre"]} for r in rows]
+    except Exception:
+        return [{"id": 1, "name": "General"}]
+
+
+@app.get("/api/plants")
+@app.get("/api/plantas")
+def get_plants():
+    try:
+        rows = _query_all(
+            """
+            SELECT planta_id AS id, nombre, ubicacion
+            FROM planta
+            ORDER BY planta_id
+            """
+        )
+        return [
+            {"id": int(r["id"]), "name": r["nombre"], "ubicacion": r["ubicacion"]}
+            for r in rows
+        ]
+    except Exception:
+        return [{"id": 1, "name": "Planta Central San Bernardo", "ubicacion": "San Bernardo, Región Metropolitana, Chile"}]
+
+
+@app.get("/api/technicians")
+def get_technicians():
+    try:
+        rows = _query_all(
+            """
+            SELECT usuario_id AS id, nombre, email, rol
+            FROM usuario
+            WHERE lower(rol) = 'tecnico' AND COALESCE(activo, true) = true
+            ORDER BY nombre
+            """
+        )
+        return [{"id": int(r["id"]), "name": r["nombre"], "email": r["email"], "role": r["rol"]} for r in rows]
+    except Exception:
+        return []
+
+
+@app.post("/api/chat")
+@app.post("/chat")
+async def chat(payload: ChatRequest):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{LM_STUDIO_URL}/chat/completions",
-                json=lm_payload,
+                json={
+                    "model": "local-model",
+                    "messages": [
+                        {"role": "system", "content": "Asistente experto en mantenimiento de la planta BARB."},
+                        {"role": "user", "content": payload.message},
+                    ],
+                    "temperature": 0.4,
+                },
                 timeout=30.0,
             )
             if response.status_code != 200:
                 raise HTTPException(status_code=502, detail="LM Studio devolvió un error.")
 
-            res_json = response.json()
-            reply = res_json["choices"][0]["message"]["content"]
-            return ChatResponse(reply=reply, sources=["Manual_Local.pdf"], language=payload.language)
+            data = response.json()
+            reply = data["choices"][0]["message"]["content"]
+            return {"reply": reply, "sources": ["Manual_Local.pdf"], "language": payload.language}
     except httpx.RequestError:
-        raise HTTPException(
-            status_code=503,
-            detail="LM Studio local inalcanzable desde el contenedor backend.",
-        )
+        raise HTTPException(status_code=503, detail="LM Studio local inalcanzable desde el contenedor backend.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("rag_backend:app", host="0.0.0.0", port=9000, reload=True)

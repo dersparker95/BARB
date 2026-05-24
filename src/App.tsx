@@ -74,17 +74,18 @@ const ProtectedLayout: React.FC<{ children: React.ReactElement }> = ({ children 
   return children
 }
 
+const RootRedirect: React.FC = () => <Navigate to="/login" replace />
+
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<Login />} />
       <Route path="/403" element={<Forbidden />} />
 
-      <Route path="/" element={<ProtectedLayout children={<Layout />} />}>
-        <Route index element={<Navigate to="dashboard" replace />} />
-
+      <Route element={<ProtectedLayout children={<Layout />} />}>
         <Route
-          path="dashboard"
+          path="/dashboard"
           element={
             <RoleGuard allowedRoles={routeRoles('/dashboard')}>
               <Dashboard />
@@ -92,7 +93,7 @@ export default function App() {
           }
         />
         <Route
-          path="menu"
+          path="/menu"
           element={
             <RoleGuard allowedRoles={routeRoles('/menu')}>
               <Menu />
@@ -100,7 +101,7 @@ export default function App() {
           }
         />
         <Route
-          path="docchat"
+          path="/docchat"
           element={
             <RoleGuard allowedRoles={routeRoles('/docchat')}>
               <DocChat />
@@ -108,7 +109,7 @@ export default function App() {
           }
         />
         <Route
-          path="debug"
+          path="/debug"
           element={
             <RoleGuard allowedRoles={routeRoles('/debug')}>
               <Debug />
@@ -116,7 +117,7 @@ export default function App() {
           }
         />
         <Route
-          path="topology"
+          path="/topology"
           element={
             <RoleGuard allowedRoles={routeRoles('/topology')}>
               <Topology />
@@ -124,7 +125,7 @@ export default function App() {
           }
         />
         <Route
-          path="memory/:machineId"
+          path="/memory/:machineId"
           element={
             <RoleGuard allowedRoles={routeRoles('/memory/')}>
               <MachineMemory />
@@ -132,7 +133,7 @@ export default function App() {
           }
         />
         <Route
-          path="report"
+          path="/report"
           element={
             <RoleGuard allowedRoles={routeRoles('/report')}>
               <Report />
@@ -141,7 +142,7 @@ export default function App() {
         />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   )
 }

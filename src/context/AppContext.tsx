@@ -36,12 +36,21 @@ const readStoredAuth = (): StoredAuth | null => {
   if (typeof window === 'undefined') return null
   const raw = window.localStorage.getItem(AUTH_STORAGE_KEY)
   const parsed = safeParseJson(raw)
-  if (!parsed || typeof parsed !== 'object') return null
+  if (!parsed || typeof parsed !== 'object') {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY)
+    return null
+  }
 
   const obj = parsed as Partial<StoredAuth>
-  if (!obj.user || typeof obj.token !== 'string' || typeof obj.savedAt !== 'number') return null
-  if (!obj.user.id || !obj.user.name) return null
-  if (obj.user.role !== 'gerente' && obj.user.role !== 'admin' && obj.user.role !== 'tecnico') return null
+  const isValidRole = obj.user?.role === 'gerente' || obj.user?.role === 'admin' || obj.user?.role === 'tecnico'
+  const isValidUser = Boolean(obj.user?.id && obj.user?.name && isValidRole)
+  const isValidToken = typeof obj.token === 'string' && obj.token.trim().length > 0
+  const isValidSavedAt = typeof obj.savedAt === 'number' && Number.isFinite(obj.savedAt)
+
+  if (!isValidUser || !isValidToken || !isValidSavedAt) {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY)
+    return null
+  }
 
   return obj as StoredAuth
 }
@@ -177,10 +186,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const resp = await authService.auth.login(params.email, params.password)
         const nextUser: User = {
-          id: resp.user?.id ?? String(Date.now()),
+          id: String(resp.user?.id ?? Date.now()), 
           name: resp.user?.name ?? params.email,
           role: (resp.user?.role as Role) ?? 'tecnico',
-          token: String(resp.access_token ?? 'session-token-valid'),
+          token: String(resp.token ?? 'session-token-valid'), 
         }
         setUser(nextUser)
         return nextUser
@@ -190,7 +199,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
     [authService],
   )
-
   const value: AppContextValue = {
     currentScreen,
     dark,
