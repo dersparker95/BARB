@@ -437,7 +437,10 @@ app = FastAPI(title="BARB Plant Memory API", version="1.5.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://barb-7jfguz636-tvasquezms-projects.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
