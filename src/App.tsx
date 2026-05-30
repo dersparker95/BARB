@@ -1,5 +1,5 @@
 import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Layout from './layout/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -9,35 +9,147 @@ import Debug from './pages/Debug'
 import Topology from './pages/Topology'
 import MachineMemory from './pages/MachineMemory'
 import Report from './pages/Report'
+import Forbidden from './pages/Forbidden'
 import { useAppContext } from './context/AppContext'
+import type { Role } from './types'
+// Rescatado de la rama de Benja:
+import Toast from './components/Toast'
 
-const ProtectedRoute = ({ children }: { children: React.ReactElement }) => {
-  const { user } = useAppContext()
-  return user ? children : <Navigate to="/login" replace />
+type GuardProps = {
+  allowedRoles: Role[]
+  children: React.ReactElement
 }
+
+function hasRolePermission(userRole: Role | null, allowedRoles: Role[]): boolean {
+  if (!userRole) return false
+  return allowedRoles.includes(userRole)
+}
+
+// Guard genérico por rol. Si no hay sesión -> /login
+// Si hay sesión pero no corresponde -> /403
+const RoleGuard: React.FC<GuardProps> = ({ allowedRoles, children }) => {
+  const { user } = useAppContext()
+  const location = useLocation()
+
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  if (!hasRolePermission(user.role, allowedRoles)) {
+    return <Navigate to="/403" replace />
+  }
+
+  return children
+}
+
+const routeRoles = (path: string): Role[] => {
+  if (path.startsWith('/dashboard')) return ['gerente', 'admin']
+  if (path.startsWith('/menu')) return ['tecnico', 'gerente', 'admin']
+  if (path.startsWith('/docchat')) return ['tecnico', 'gerente', 'admin']
+  if (path.startsWith('/topology')) return ['tecnico', 'gerente', 'admin']
+  if (path.startsWith('/memory/')) return ['tecnico', 'gerente', 'admin']
+  if (path.startsWith('/debug')) return ['tecnico', 'gerente', 'admin']
+  if (path.startsWith('/report')) return ['gerente', 'admin']
+  return ['tecnico', 'gerente', 'admin']
+}
+
+const ProtectedLayout: React.FC<{ children: React.ReactElement }> = ({ children }) => {
+  const { user } = useAppContext()
+  const location = useLocation()
+
+  if (!user) return <Navigate to="/login" replace />
+
+  const isTecnico = user.role === 'tecnico'
+  const pathname = location.pathname
+
+  if (isTecnico) {
+    const blockedPath =
+      pathname.startsWith('/dashboard') ||
+      pathname.startsWith('/upload') ||
+      pathname.startsWith('/reports/upload')
+
+    if (blockedPath) {
+      return <Navigate to="/403" replace />
+    }
+  }
+
+  return children
+}
+
+const RootRedirect: React.FC = () => <Navigate to="/login" replace />
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route
-        path="/"
-        element={
-        <ProtectedRoute>
-          <Layout />
-        </ProtectedRoute>
-        }
-      >
-        <Route index element={<Navigate to="dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="menu" element={<Menu />} />
-        <Route path="docchat" element={<DocChat />} />
-        <Route path="debug" element={<Debug />} />
-        <Route path="topology" element={<Topology />} />
-        <Route path="memory/:machineId" element={<MachineMemory />} />
-        <Route path="report" element={<Report />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/403" element={<Forbidden />} />
+
+        <Route element={<ProtectedLayout children={<Layout />} />}>
+          <Route
+            path="/dashboard"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/dashboard')}>
+                <Dashboard />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/menu"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/menu')}>
+                <Menu />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/docchat"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/docchat')}>
+                <DocChat />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/debug"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/debug')}>
+                <Debug />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/topology"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/topology')}>
+                <Topology />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/memory/:machineId"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/memory/')}>
+                <MachineMemory />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/report"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/report')}>
+                <Report />
+              </RoleGuard>
+            }
+          />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+      
+      {/* Componente Toast global de notificaciones rescatado */}
+      <Toast />
+    </>
   )
 }

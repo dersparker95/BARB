@@ -10,16 +10,18 @@ export const WO_STATUS_LABEL: Record<WOStatus, string> = {
   closed: 'Closed'
 }
 
-function isoMinutesAgo(minutes: number) {
-  return new Date(Date.now() - minutes * 60000).toISOString()
-}
-
 export function seedDemoTickets(): WorkOrder[] {
   return [
-    { id: 'WO-1001', title: 'Replace filter FA-001', description: 'Filter clogged', machineId: 'comp-a1', status: 'open', priority: 'high', createdAt: isoMinutesAgo(240), createdBy: 'carlos.tech' },
-    { id: 'WO-1002', title: 'Inspect hydraulic line', description: 'Pressure drop observed', machineId: 'press-b3', status: 'in_progress', priority: 'medium', createdAt: isoMinutesAgo(480), createdBy: 'ana.eng' },
-    { id: 'WO-1003', title: 'Motor overheating analysis', description: 'Code E-041', machineId: 'motor-d1', status: 'done', priority: 'high', createdAt: isoMinutesAgo(1440), closedAt: isoMinutesAgo(1200), createdBy: 'luis.tech' },
-    { id: 'WO-1004', title: 'Preventive lubrication', description: 'Routine 2000h', machineId: 'cnc-c2', status: 'closed', priority: 'low', createdAt: isoMinutesAgo(10000), closedAt: isoMinutesAgo(9000), createdBy: 'maintenance' },
+    { id: 'OT-2026-001', title: 'Mantenimiento preventivo', description: 'Mantenimiento preventivo trimestral en Chancador Primario.', machineId: '1', status: 'closed', priority: 'low', createdAt: '2026-05-10T08:00:00Z', closedAt: '2026-05-10T10:30:00Z', createdBy: 'Tecnico 2' },
+    { id: 'OT-2026-002', title: 'Pérdida de presión', description: 'Pérdida de presión en Bomba de Relaves.', machineId: '6', status: 'closed', priority: 'high', createdAt: '2026-05-11T14:15:00Z', closedAt: '2026-05-11T15:05:00Z', createdBy: 'Tecnico 2' },
+    { id: 'OT-2026-003', title: 'Ruido anómalo', description: 'Ruido anómalo reportado en Harnero Vibratorio.', machineId: '3', status: 'open', priority: 'medium', createdAt: '2026-05-17T09:00:00Z', createdBy: 'Tecnico 3' },
+    { id: 'OT-2026-004', title: 'Alerta de vibración', description: 'Alerta de vibración en motor del Chancador Secundario.', machineId: '2', status: 'in_progress', priority: 'high', createdAt: '2026-05-18T10:00:00Z', createdBy: 'Tecnico 3' },
+    { id: 'OT-2026-005', title: 'Falla eléctrica', description: 'Falla eléctrica intermitente en Sala Eléctrica.', machineId: '4', status: 'closed', priority: 'medium', createdAt: '2026-05-12T11:00:00Z', closedAt: '2026-05-12T11:15:00Z', createdBy: 'Tecnico 2' },
+    { id: 'OT-2026-006', title: 'Calibración de sensores', description: 'Calibración de sensores y purga de Compresor Principal.', machineId: '7', status: 'open', priority: 'medium', createdAt: '2026-05-01T08:00:00Z', createdBy: 'Tecnico 3' },
+    { id: 'OT-2026-007', title: 'Fuga de fluido', description: 'Fuga de fluido en Bomba de Agua de Servicio.', machineId: '8', status: 'closed', priority: 'high', createdAt: '2026-05-15T16:00:00Z', closedAt: '2026-05-15T16:35:00Z', createdBy: 'Tecnico 2' },
+    { id: 'OT-2026-008', title: 'Chequeo general', description: 'Chequeo general de limpieza interna en Centro de Control MCC.', machineId: '5', status: 'open', priority: 'low', createdAt: '2026-05-18T07:00:00Z', createdBy: 'Tecnico 2' },
+    { id: 'OT-2026-009', title: 'Caída de presión', description: 'Caída de presión en Línea de Aire Instrumental.', machineId: '9', status: 'closed', priority: 'high', createdAt: '2026-05-14T02:00:00Z', closedAt: '2026-05-14T06:15:00Z', createdBy: 'Tecnico 3' },
+    { id: 'OT-2026-010', title: 'Punto caliente térmico', description: 'Punto caliente térmico detectado en Tablero General de Fuerza.', machineId: '10', status: 'closed', priority: 'medium', createdAt: '2026-05-16T09:00:00Z', closedAt: '2026-05-16T10:15:00Z', createdBy: 'Tecnico 2' }
   ]
 }
 
@@ -31,7 +33,7 @@ export function computeMTTR(tickets: WorkOrder[]): number {
 
   if (durations.length === 0) return 0
   const sum = durations.reduce((a, b) => a + b, 0)
-  return Math.round((sum / durations.length) * 10) / 10 // minutes, one decimal
+  return Math.round((sum / durations.length) * 10) / 10
 }
 
 export function filterTickets(tickets: WorkOrder[], q: { status?: string; machineId?: string; search?: string }) {
@@ -49,11 +51,10 @@ export function filterTickets(tickets: WorkOrder[], q: { status?: string; machin
 export function getMachineHistory(machineId: string) {
   const tickets = seedDemoTickets().filter(t => t.machineId === machineId && (t.closedAt || t.status === 'done' || t.status === 'closed'))
   const reports = [
-    { reportId: 'R-2026-01', machineId, title: 'Oil Change', summary: 'Changed oil and filters', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(), createdBy: 'carlos.tech' },
-    { reportId: 'R-2026-02', machineId, title: 'Emergency Stop Report', summary: 'Emergency stop due to overheat', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString(), createdBy: 'ana.eng' },
+    { reportId: `R-2026-${machineId}-01`, machineId, title: 'Inspección Rutinaria', summary: 'Chequeo visual sin novedades', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(), createdBy: 'Tecnico 1' },
   ]
   const sessions = [
-    { sessionId: 'SES-111', machineId, startedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), endedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5 + 1000 * 60 * 30).toISOString(), technician: 'luis.tech', notes: 'Checked sensors' },
+    { sessionId: `SES-${machineId}-111`, machineId, startedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), endedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5 + 1000 * 60 * 30).toISOString(), technician: 'Tecnico 1', notes: 'Revisión de parámetros' },
   ]
 
   const events: Array<import('../types').HistoryEvent> = []
@@ -61,7 +62,6 @@ export function getMachineHistory(machineId: string) {
   reports.forEach(r => events.push({ id: r.reportId, type: 'report', date: r.createdAt, title: r.title, actor: r.createdBy, summary: r.summary }))
   sessions.forEach(s => events.push({ id: s.sessionId, type: 'debug', date: s.startedAt, title: 'Debug session', actor: s.technician, summary: s.notes }))
 
-  // sort desc
   events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   return events
 }

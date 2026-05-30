@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppContext } from '../context/AppContext'
 import createApiService from '../services/api'
 import ChatBubble, { Thinking } from '../components/ChatBubble'
@@ -9,12 +9,18 @@ import { useNavigate } from 'react-router-dom'
 import MACHINES from '../data/machines'
 import { showToast } from '../components/Toast'
 
-const Debug: React.FC = () => {
-  const { apiBase, lmBase, selectedMachine, docMessages, debugMessages, pushDebugMessage, setLoading, loading } = useAppContext()
+interface DebugProps {
+  machineId?: string | null
+}
+
+const Debug: React.FC<DebugProps> = ({ machineId }) => {
+  const { apiBase, lmBase, selectedMachine, getDebugMessages, pushDebugMessage, setLoading, loading } = useAppContext()
   const [input, setInput] = useState('')
   const areaRef = useRef<HTMLDivElement | null>(null)
   const api = createApiService(apiBase, lmBase)
   const navigate = useNavigate()
+
+  const activeMachineId = machineId ?? selectedMachine
 
   // Auto-ajustar altura del textarea
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -23,24 +29,29 @@ const Debug: React.FC = () => {
     e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px'
   }
 
-  useEffect(() => { if (areaRef.current) areaRef.current.scrollTop = areaRef.current.scrollHeight }, [debugMessages.length])
+  const machineMessages = useMemo(() => getDebugMessages(activeMachineId), [activeMachineId, getDebugMessages])
+
+  useEffect(() => {
+    if (areaRef.current) areaRef.current.scrollTop = areaRef.current.scrollHeight
+  }, [machineMessages.length])
 
   const send = async () => {
     const query = input.trim()
-    if (!query || loading) return
+    if (!query || loading || !activeMachineId) return
     setLoading(true)
     setInput('')
     const userMsg: Message = { role: 'user', content: query, timestamp: Date.now() }
-    pushDebugMessage(userMsg)
-    
+    pushDebugMessage(activeMachineId, userMsg)
+
     // Reset height of textarea
-    const el = document.getElementById('debug-input'); if (el) el.style.height = 'auto';
+    const el = document.getElementById('debug-input')
+    if (el) el.style.height = 'auto'
 
     // Try FastAPI debug endpoint
     try {
-      const resp = await api.chat.debug({ sessionId: null, machineId: selectedMachine, message: query, attachments: [], sensorData: null }) as DebugApiResponse
+      const resp = await api.chat.debug({ sessionId: null, machineId: activeMachineId, message: query, attachments: [], sensorData: null }) as DebugApiResponse
       if (resp && resp.response) {
-        pushDebugMessage({ role: 'assistant', content: resp.response, timestamp: Date.now() })
+        pushDebugMessage(activeMachineId, { role: 'assistant', content: resp.response, timestamp: Date.now() })
         setLoading(false)
         return
       }
@@ -49,13 +60,13 @@ const Debug: React.FC = () => {
     // LM Studio fallback (centralized helper)
     try {
       const chunks = retrieveContext(query)
-      const ctx = chunks.length ? chunks.map((c,i)=>`[FRAGMENTO ${i+1} — p.${c.page}]\n${c.text}`).join('\n\n') : '[Sin manual disponible]'
-      const system = `Eres BARB, experto en diagnóstico de maquinaria industrial. Máquina: ${selectedMachine || 'desconocida'}.\nResponde en español con: diagnóstico preciso, causas posibles, acciones paso a paso. Usa ⚠️ para advertencias de seguridad.\n\nCONTEXTO:\n${ctx}`
-      const resp = await callLMStudio([{ role: 'system', content: system }, ...debugMessages.slice(-4).map(m=>({role:m.role,content:m.content})), { role: 'user', content: query }], lmBase, 'local-model')
+      const ctx = chunks.length ? chunks.map((c, i) => `[FRAGMENTO ${i + 1} — p.${c.page}]\n${c.text}`).join('\n\n') : '[Sin manual disponible]'
+      const system = `Eres BARB, experto en diagnóstico de maquinaria industrial. Máquina: ${activeMachineId || 'desconocida'}.\nResponde en español con: diagnóstico preciso, causas posibles, acciones paso a paso. Usa ⚠️ para advertencias de seguridad.\n\nCONTEXTO:\n${ctx}`
+      const resp = await callLMStudio([{ role: 'system', content: system }, ...machineMessages.slice(-4).map(m => ({ role: m.role, content: m.content })), { role: 'user', content: query }], lmBase, 'local-model')
       if (resp && resp.ok) {
         const data = await resp.json()
         const answer = data.choices?.[0]?.message?.content || data.result || ''
-        pushDebugMessage({ role: 'assistant', content: answer, timestamp: Date.now() })
+        pushDebugMessage(activeMachineId, { role: 'assistant', content: answer, timestamp: Date.now() })
         setLoading(false)
         return
       }
@@ -64,7 +75,7 @@ const Debug: React.FC = () => {
     // Demo fallback
     const chunks = retrieveContext(query)
     const demoAns = chunks.length ? `**[DEMO — Machine Debug]**\n\n${chunks[0].text}` : `**[DEMO]** Inicia LM Studio o el backend FastAPI.`
-    pushDebugMessage({ role: 'assistant', content: demoAns, timestamp: Date.now() })
+    pushDebugMessage(activeMachineId, { role: 'assistant', content: demoAns, timestamp: Date.now() })
     setLoading(false)
   }
 
@@ -75,12 +86,12 @@ const Debug: React.FC = () => {
     }
   }
 
-  const machine = selectedMachine ? MACHINES[selectedMachine] : null
+  const machine = activeMachineId ? MACHINES[activeMachineId] : null
 
   return (
     <div className="two-panel">
       <div className="debug-panel-left">
-        <h3 style={{fontSize:'15px',fontWeight:600,color:'var(--ink)',marginBottom:'12px'}}>Machine Information</h3>
+        <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--ink)', marginBottom: '12px' }}>Machine Information</h3>
         <div className="debug-machine-img">
           <div className="big-icon">{machine?.icon || '⚙️'}</div>
           <div className="dm-name">{machine?.name || '—'}</div>
@@ -88,17 +99,17 @@ const Debug: React.FC = () => {
         </div>
         <div className="debug-specs">
           <h4>Specifications</h4>
-          <div className="spec-row"><span className="spec-label">Status</span><span className="spec-val" style={{textTransform:'capitalize'}}>{machine?.status || '—'}</span></div>
+          <div className="spec-row"><span className="spec-label">Status</span><span className="spec-val" style={{ textTransform: 'capitalize' }}>{machine?.status || '—'}</span></div>
           <div className="spec-row"><span className="spec-label">Category</span><span className="spec-val">{machine?.cat || '—'}</span></div>
-          <div className="spec-row"><span className="spec-label">Session ID</span><span className="spec-val font-mono text-secondary">ACT-{(Date.now()%100000)}</span></div>
+          <div className="spec-row"><span className="spec-label">Session ID</span><span className="spec-val font-mono text-secondary">ACT-{(Date.now() % 100000)}</span></div>
         </div>
       </div>
       <div className="debug-panel-right">
         <div className="debug-chat" ref={areaRef}>
-          {debugMessages.length === 0 ? (
+          {machineMessages.length === 0 ? (
             <div className="chat-empty"><h3>Start debugging session</h3></div>
           ) : (
-            debugMessages.map((m, i) => (<ChatBubble key={i} msg={m} side={m.role === 'user' ? 'user' : 'bot'} />))
+            machineMessages.map((m, i) => (<ChatBubble key={i} msg={m} side={m.role === 'user' ? 'user' : 'bot'} />))
           )}
           {loading && <div className="mt-md"><Thinking /></div>}
         </div>

@@ -1,59 +1,76 @@
 import React from 'react'
 import { WorkOrder } from '../types'
-import { WO_STATUS_LABEL } from '../services/workOrders'
+import { useAppContext } from '../context/AppContext'
+import { getTranslations } from '../utils/i18n'
 
-const durClass = (min?: number | null) => {
-  if (min == null) return '';
-  if (min <= 35) return 'fast';
-  if (min <= 60) return 'medium';
-  return 'slow';
+interface TicketTableProps {
+  tickets: WorkOrder[]
+  onSelect: (id: string) => void
 }
 
-const formatDuration = (createdAt?: string, closedAt?: string) => {
-  if (!createdAt) return '—'
-  const end = closedAt ? new Date(closedAt).getTime() : Date.now()
-  const mins = Math.round((end - new Date(createdAt).getTime()) / 60000)
-  if (mins < 60) return `${mins}m`
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`
+const STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-slate-800 text-slate-300 border-slate-700',
+  assigned: 'bg-blue-900/50 text-blue-300 border-blue-800',
+  in_progress: 'bg-amber-900/50 text-amber-300 border-amber-800',
+  completed: 'bg-emerald-900/50 text-emerald-300 border-emerald-800',
+  cancelled: 'bg-red-900/50 text-red-300 border-red-800',
+  overdue: 'bg-rose-900/50 text-rose-300 border-rose-800'
 }
 
-const TicketTable: React.FC<{ tickets: WorkOrder[]; onSelect?: (id: string) => void }> = ({ tickets, onSelect }) => {
+const TicketTable: React.FC<TicketTableProps> = ({ tickets, onSelect }) => {
+  const { lang } = useAppContext()
+  const t = getTranslations(lang)
+
+  if (!tickets.length) {
+    return <div className="p-8 text-center text-slate-500 text-sm">{t.dashboard.noData}</div>
+  }
+
   return (
-    <div className="ot-table-wrap">
-      <table className="ot-table">
+    // FIX MOBILE: Contenedor con overflowX permite scroll horizontal interno
+    <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse', fontSize: '13px' }}>
         <thead>
-          <tr>
-            <th>N° OT</th>
-            <th>Máquina</th>
-            <th>Problema</th>
-            <th>Técnico</th>
-            <th>Inicio</th>
-            <th>Cierre</th>
-            <th>Duración</th>
-            <th>Estado</th>
-            <th>Acciones</th>
+          <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left', color: 'var(--ink3)' }}>
+            <th style={{ padding: '12px 16px', fontWeight: 700, whiteSpace: 'nowrap' }}>ID OT</th>
+            <th style={{ padding: '12px 16px', fontWeight: 700, whiteSpace: 'nowrap' }}>{t.common.title.toUpperCase()} / {t.common.machine.toUpperCase()}</th>
+            <th style={{ padding: '12px 16px', fontWeight: 700, whiteSpace: 'nowrap' }}>{lang === 'en' ? 'TECH' : 'TÉCNICO'}</th>
+            <th style={{ padding: '12px 16px', fontWeight: 700, whiteSpace: 'nowrap' }}>{lang === 'en' ? 'DURATION' : 'DURACIÓN'}</th>
+            <th style={{ padding: '12px 16px', fontWeight: 700, whiteSpace: 'nowrap' }}>{t.common.status.toUpperCase()}</th>
+            <th style={{ padding: '12px 16px', fontWeight: 700, whiteSpace: 'nowrap' }}>{lang === 'en' ? 'ACTION' : 'ACCIONES'}</th>
           </tr>
         </thead>
         <tbody>
-          {tickets.map(t => (
-            <tr key={t.id} onClick={() => onSelect && onSelect(t.id)} style={{ cursor: 'pointer' }}>
-              <td><span className="ot-num">{t.id}</span></td>
-              <td><span className="ot-machine">{t.title}</span><br/><span style={{ fontSize: '10px', color: 'var(--ink3)', fontFamily: 'var(--mono)' }}>{t.machineId || '—'}</span></td>
-              <td>{t.description?.slice(0, 30) || '—'}</td>
-              <td><span className="ot-tech">{t.createdBy || 'operator'}</span></td>
-              <td><span className="ot-ts">{t.createdAt ? new Date(t.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—'}</span></td>
-              <td><span className="ot-ts">{t.closedAt ? new Date(t.closedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—'}</span></td>
-              <td>
-                <span className={`ot-dur ${durClass(t.closedAt ? Math.round((new Date(t.closedAt).getTime() - new Date(t.createdAt).getTime()) / 60000) : null)}`}>
-                  {formatDuration(t.createdAt, t.closedAt)}
-                </span>
-              </td>
-              <td><span className={`ot-badge ${t.status}`}>{t.status === 'in_progress' && <span className="ot-live-dot" />}{WO_STATUS_LABEL[t.status]}</span></td>
-              <td>
-                <button onClick={(e) => { e.stopPropagation(); onSelect && onSelect(t.id); }} className="btn btn-sm btn-outline" style={{ fontSize: '10px', padding: '4px 8px' }}>Ver</button>
-              </td>
-            </tr>
-          ))}
+          {tickets.map(ticket => {
+            const statusKey = ticket.status?.toLowerCase() || 'pending'
+            const badgeClass = STATUS_COLORS[statusKey] || STATUS_COLORS.pending
+            const label = t.statuses[statusKey as keyof typeof t.statuses] || statusKey
+
+            return (
+              <tr key={ticket.id} style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer' }} className="hover:bg-slate-800/20 transition-colors" onClick={() => onSelect(ticket.id)}>
+                <td style={{ padding: '16px', color: 'var(--accent)', fontWeight: 700, whiteSpace: 'nowrap' }}>{ticket.id}</td>
+                <td style={{ padding: '16px', minWidth: '220px' }}>
+                  <div style={{ color: 'var(--ink1)', fontWeight: 600 }}>{ticket.title}</div>
+                  <div style={{ color: 'var(--ink3)', fontSize: '11px', marginTop: '4px' }}>{(ticket as any).machineName || `Máquina ${(ticket as any).machineId}`}</div>
+                </td>
+                <td style={{ padding: '16px', color: 'var(--ink2)', whiteSpace: 'nowrap' }}>{ticket.createdBy}</td>
+                <td style={{ padding: '16px', color: 'var(--ink2)', whiteSpace: 'nowrap' }}>
+                  <span className={(ticket as any).durationReal > 45 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>
+                    {(ticket as any).durationReal}m
+                  </span>
+                </td>
+                <td style={{ padding: '16px', whiteSpace: 'nowrap' }}>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold border ${badgeClass}`}>
+                    {label}
+                  </span>
+                </td>
+                <td style={{ padding: '16px', whiteSpace: 'nowrap' }}>
+                  <button className="btn btn-outline" style={{ padding: '4px 12px', fontSize: '11px' }} onClick={(e) => { e.stopPropagation(); onSelect(ticket.id); }}>
+                    {lang === 'en' ? 'View' : 'Ver'}
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

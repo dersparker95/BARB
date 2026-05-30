@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'technician' | 'guest' | 'engineer' | 'supervisor'
+export type Role = 'gerente' | 'admin' | 'tecnico'
 
 export interface User {
   id: string
@@ -27,10 +27,12 @@ export interface WorkOrder {
 }
 
 export interface Message {
-  role: 'user' | 'assistant' | string
+  role: 'user' | 'assistant' | 'system' | string
   content: string
   timestamp?: number
 }
+
+export type DebugMessagesByMachine = Record<string, Message[]>
 
 export interface AppState {
   currentScreen: string
@@ -43,7 +45,7 @@ export interface AppState {
   sessionId: string | null
   sessionStart: number | null
   docMessages: Message[]
-  debugMessages: Message[]
+  debugMessagesByMachine: DebugMessagesByMachine
   user: User | null
   apiBase: string
   lmBase: string
@@ -61,7 +63,8 @@ export interface AppContextValue extends AppState {
   setSessionId: (id: string | null) => void
   setSessionStart: (t: number | null) => void
   pushDocMessage: (m: Message) => void
-  pushDebugMessage: (m: Message) => void
+  getDebugMessages: (machineId: string | null | undefined) => Message[]
+  pushDebugMessage: (machineId: string, m: Message) => void
   setUser: (u: User | null) => void
   setApiBase: (u: string) => void
   setLmBase: (u: string) => void
@@ -83,8 +86,8 @@ export interface DocApiResponse {
 
 export interface DebugApiResponse {
   response: string
-  diagnostics?: any
-  suggestedActions?: any[]
+  diagnostics?: unknown
+  suggestedActions?: unknown[]
 }
 
 export interface Report {

@@ -2,7 +2,7 @@ export type AppLang = 'es' | 'en'
 
 type TranslationValue = string | ((...args: Array<string | number>) => string)
 
-type TranslationTree = {
+export type TranslationTree = {
   common: {
     language: string
     refresh: string
@@ -31,6 +31,42 @@ type TranslationTree = {
     role: string
     settings: string
   }
+  statuses: {
+    pending: string
+    assigned: string
+    in_progress: string
+    completed: string
+    cancelled: string
+    overdue: string
+  }
+  maintenanceTypes: {
+    corrective: string
+    preventive: string
+    predictive: string
+    inspection: string
+  }
+  financial: {
+    roiTitle: string
+    roiSubtitle: string
+    withoutBarb: string
+    withBarb: string
+    savingsGenerated: string
+    mttrGlobal: string
+    mttrOptimal: string
+    mttrOver: (mins: number) => string
+    efficiency: string
+    efficiencySub: string
+    directCost: string
+    directCostSub: string
+    mtbf: string
+    mtbfSub: string
+    mtbfNeedData: string
+    healthTitle: string
+    healthSub: string
+    performanceTitle: string
+    measured: string
+    estimated: string
+  }
   dashboard: {
     title: string
     totalWorkOrders: string
@@ -40,12 +76,19 @@ type TranslationTree = {
     filters: string
     allStatuses: string
     allMachines: string
+    allTypes: string
     createWorkOrder: string
     updatedAt: (time: string) => string
     chartStatus: string
     chartMachines: string
     chartResolution: string
     noData: string
+    strategyTitle: string
+    strategySubtitle: string
+    costDeviationTitle: string
+    costDeviationSubtitle: string
+    topAssetsTitle: string
+    topAssetsSubtitle: string
   }
   report: {
     title: string
@@ -79,7 +122,6 @@ type TranslationTree = {
     zoomOut: string
     resetView: string
     goToDebug: string
-    openDocs: string
     history: string
     close: string
     statusOperational: string
@@ -131,6 +173,7 @@ type TranslationTree = {
     usernamePlaceholder: string
     passwordPlaceholder: string
     loginButton: string
+    incorrectCredentials: string
     chooseRole: string
     technician: string
     engineer: string
@@ -198,6 +241,42 @@ const translations: Record<AppLang, TranslationTree> = {
       role: 'Rol',
       settings: 'Configuración',
     },
+    statuses: {
+      pending: 'Pendiente',
+      assigned: 'Asignada',
+      in_progress: 'En Progreso',
+      completed: 'Completada',
+      cancelled: 'Cancelada',
+      overdue: 'Atrasada',
+    },
+    maintenanceTypes: {
+      corrective: 'Correctivo',
+      preventive: 'Preventivo',
+      predictive: 'Predictivo',
+      inspection: 'Inspección',
+    },
+    financial: {
+      roiTitle: 'Impacto Anual Proyectado (Modelo BARB v1.0)',
+      roiSubtitle: 'Basado en US$2.000/min de inactividad operativa.',
+      withoutBarb: 'Escenario Sin BARB',
+      withBarb: 'Escenario Con BARB',
+      savingsGenerated: 'Ahorro Generado a la fecha',
+      mttrGlobal: 'MTTR Global',
+      mttrOptimal: '✓ Dentro de SLA',
+      mttrOver: (mins: number) => `⚠ ${mins}m sobre SLA`,
+      efficiency: 'Eficiencia Resolución',
+      efficiencySub: 'Optimización hacia el SLA (45m)',
+      directCost: 'Costo Directo',
+      directCostSub: 'Repuestos y servicios facturados',
+      mtbf: 'MTBF Global',
+      mtbfSub: 'Tiempo Medio Entre Fallas (Horas)',
+      mtbfNeedData: 'Requiere historial min. 2 fallas',
+      healthTitle: 'Salud Operacional: Backlog',
+      healthSub: 'Tendencia diaria de OTs Abiertas vs Cerradas (14 d).',
+      performanceTitle: 'Rendimiento por Máquina',
+      measured: 'Medido',
+      estimated: 'Estimado'
+    },
     dashboard: {
       title: 'Órdenes de Trabajo',
       totalWorkOrders: 'Total OTs',
@@ -207,12 +286,19 @@ const translations: Record<AppLang, TranslationTree> = {
       filters: 'Filtros',
       allStatuses: 'Todos los estados',
       allMachines: 'Todas las máquinas',
+      allTypes: 'Todos los tipos',
       createWorkOrder: 'Crear OT',
       updatedAt: (time: string) => `Actualizado: ${time}`,
       chartStatus: 'Distribución por estado',
       chartMachines: 'Máquinas con más OTs',
       chartResolution: 'Tiempo de resolución',
       noData: 'Sin datos',
+      strategyTitle: 'Estrategia de Mantenimiento',
+      strategySubtitle: 'Preventivo vs Correctivo',
+      costDeviationTitle: 'Desviación de Costos',
+      costDeviationSubtitle: 'Costo Estimado vs Real (USD)',
+      topAssetsTitle: 'Top 5 Activos Críticos',
+      topAssetsSubtitle: 'Máquinas con mayor volumen de OTs',
     },
     report: {
       title: 'Reporte de Sesión',
@@ -246,7 +332,6 @@ const translations: Record<AppLang, TranslationTree> = {
       zoomOut: 'Alejar',
       resetView: 'Reiniciar vista',
       goToDebug: 'Ir a Debug',
-      openDocs: 'Abrir documentación',
       history: 'Historial',
       close: 'Cerrar',
       statusOperational: 'Operativa',
@@ -298,6 +383,7 @@ const translations: Record<AppLang, TranslationTree> = {
       usernamePlaceholder: 'Usuario',
       passwordPlaceholder: 'Contraseña',
       loginButton: 'Ingresar',
+      incorrectCredentials: 'Usuario o contraseña incorrecta, vuelve a intentarlo.',
       chooseRole: 'Seleccionar rol',
       technician: 'Técnico',
       engineer: 'Ingeniero',
@@ -363,6 +449,42 @@ const translations: Record<AppLang, TranslationTree> = {
       role: 'Role',
       settings: 'Settings',
     },
+    statuses: {
+      pending: 'Pending',
+      assigned: 'Assigned',
+      in_progress: 'In Progress',
+      completed: 'Completed',
+      cancelled: 'Cancelled',
+      overdue: 'Overdue',
+    },
+    maintenanceTypes: {
+      corrective: 'Corrective',
+      preventive: 'Preventive',
+      predictive: 'Predictive',
+      inspection: 'Inspection',
+    },
+    financial: {
+      roiTitle: 'Projected Annual Impact (BARB v1.0 Model)',
+      roiSubtitle: 'Based on US$2,000/min of operational downtime.',
+      withoutBarb: 'Without BARB Scenario',
+      withBarb: 'With BARB Scenario',
+      savingsGenerated: 'Savings Generated to Date',
+      mttrGlobal: 'Global MTTR',
+      mttrOptimal: '✓ Within SLA',
+      mttrOver: (mins: number) => `⚠ ${mins}m over SLA`,
+      efficiency: 'Resolution Efficiency',
+      efficiencySub: 'Optimization towards SLA (45m)',
+      directCost: 'Direct Cost',
+      directCostSub: 'Billed parts and services',
+      mtbf: 'Global MTBF',
+      mtbfSub: 'Mean Time Between Failures (Hours)',
+      mtbfNeedData: 'Requires min. 2 failures history',
+      healthTitle: 'Operational Health: Backlog',
+      healthSub: 'Daily trend of Open vs Closed WOs (14 d).',
+      performanceTitle: 'Machine Performance',
+      measured: 'Measured',
+      estimated: 'Estimated'
+    },
     dashboard: {
       title: 'Work Orders',
       totalWorkOrders: 'Total WOs',
@@ -372,12 +494,19 @@ const translations: Record<AppLang, TranslationTree> = {
       filters: 'Filters',
       allStatuses: 'All statuses',
       allMachines: 'All machines',
+      allTypes: 'All types',
       createWorkOrder: 'Create WO',
       updatedAt: (time: string) => `Updated: ${time}`,
       chartStatus: 'Status breakdown',
       chartMachines: 'Top machines',
       chartResolution: 'Resolution time',
       noData: 'No data',
+      strategyTitle: 'Maintenance Strategy',
+      strategySubtitle: 'Preventive vs Corrective',
+      costDeviationTitle: 'Cost Deviation',
+      costDeviationSubtitle: 'Estimated vs Real Cost (USD)',
+      topAssetsTitle: 'Top 5 Critical Assets',
+      topAssetsSubtitle: 'Machines with highest WO volume',
     },
     report: {
       title: 'Session Report',
@@ -411,7 +540,6 @@ const translations: Record<AppLang, TranslationTree> = {
       zoomOut: 'Zoom out',
       resetView: 'Reset view',
       goToDebug: 'Go to Debug',
-      openDocs: 'Open documentation',
       history: 'History',
       close: 'Close',
       statusOperational: 'Operational',
@@ -463,6 +591,7 @@ const translations: Record<AppLang, TranslationTree> = {
       usernamePlaceholder: 'Username',
       passwordPlaceholder: 'Password',
       loginButton: 'Login',
+      incorrectCredentials: 'Incorrect username or password, please try again.',
       chooseRole: 'Choose role',
       technician: 'Technician',
       engineer: 'Engineer',
