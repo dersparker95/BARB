@@ -1,136 +1,104 @@
-import React, { useMemo } from 'react'
-import { AlertTriangle, Banknote, RefreshCcw, TimerReset } from 'lucide-react'
-import useFinancialStats from '../hooks/useFinancialStats'
+import React, { useState, useMemo } from 'react'
+import { Banknote, CheckCircle, TimerReset, Clock } from 'lucide-react'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell, ReferenceLine } from 'recharts'
+import useFinancialStats, { BARB_BUSINESS } from '../hooks/useFinancialStats'
+import { useAppContext } from '../context/AppContext'
+import { getTranslations } from '../utils/i18n'
 
-const usdFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 0,
-})
+const fmtUSD = (v) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v)
+const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4']
 
-const numberFormatter = new Intl.NumberFormat('es-CL', {
-  maximumFractionDigits: 0,
-})
+function Badge({ text, type }) {
+  const colors = type === 'est' ? { bg: 'rgba(59,130,246,0.1)', text: '#3b82f6', border: '#bfdbfe' } : { bg: 'rgba(16,185,129,0.1)', text: '#10b981', border: '#a7f3d0' }
+  return <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, marginLeft: 8 }}>{text}</span>
+}
 
-function StatCard({ icon: Icon, label, value, subtitle, accent = 'text-slate-100', border = 'border-slate-700' }) {
+function StatCard({ icon: Icon, label, value, subtitle, highlightColor, badgeType, badgeText }) {
   return (
-    <div className={`rounded-2xl border ${border} bg-slate-900/90 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.25)]`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{label}</p>
-          <div className={`mt-3 text-3xl font-black ${accent} sm:text-4xl`}>{value}</div>
-          <p className="mt-2 text-sm leading-5 text-slate-400">{subtitle}</p>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 16, display: 'flex', gap: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--ink3)' }}>{label}</p>
+          <Badge text={badgeText} type={badgeType} />
         </div>
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-100">
-          <Icon className="h-5 w-5" />
-        </div>
+        <div style={{ marginTop: 8, fontSize: 26, fontWeight: 900, color: highlightColor }}>{value}</div>
+        <p style={{ marginTop: 4, fontSize: 11, color: 'var(--ink2)' }}>{subtitle}</p>
+      </div>
+      <div style={{ color: highlightColor, background: 'var(--bg-body)', padding: 10, borderRadius: 12, height: 'fit-content' }}>
+        <Icon size={20} />
       </div>
     </div>
   )
 }
 
-function SkeletonCard() {
-  return (
-    <div className="rounded-2xl border border-slate-700 bg-slate-900/90 p-5 shadow-[0_18px_40px_rgba(0,0,0,0.25)]">
-      <div className="h-3 w-28 animate-pulse rounded bg-slate-700" />
-      <div className="mt-4 h-10 w-40 animate-pulse rounded bg-slate-700" />
-      <div className="mt-3 h-4 w-full animate-pulse rounded bg-slate-800" />
-      <div className="mt-2 h-4 w-3/4 animate-pulse rounded bg-slate-800" />
-    </div>
-  )
-}
+export default function FinancialDashboard({ timeRange }) {
+  const { lang } = useAppContext()
+  const t = useMemo(() => getTranslations(lang), [lang])
+  
+  const { financials, trend14Days, machines, isLoading } = useFinancialStats(timeRange)
+  const [machineView, setMachineView] = useState('ots')
 
-export default function FinancialDashboard() {
-  const { stats, isLoading, error, refetch } = useFinancialStats()
+  if (isLoading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink3)' }}>{t.common.loading}</div>
 
-  const cards = useMemo(
-    () => [
-      {
-        label: 'MTTR',
-        value: `${numberFormatter.format(stats.mttr)} min`,
-        subtitle: 'Tiempo medio de reparación para órdenes completadas.',
-        icon: TimerReset,
-        accent: 'text-cyan-300',
-        border: 'border-cyan-900/60',
-      },
-      {
-        label: 'Costo total acumulado',
-        value: usdFormatter.format(stats.costo_total_acumulado),
-        subtitle: 'Suma total de costo real en órdenes finalizadas.',
-        icon: Banknote,
-        accent: 'text-emerald-300',
-        border: 'border-emerald-900/60',
-      },
-      {
-        label: 'Ahorro estimado',
-        value: usdFormatter.format(stats.ahorro_estimado),
-        subtitle: 'Impacto potencial por downtime evitado en producción.',
-        icon: RefreshCcw,
-        accent: 'text-amber-300',
-        border: 'border-amber-900/60',
-      },
-    ],
-    [stats],
-  )
+  const topMachines = [...machines].sort((a, b) => b[machineView === 'ots' ? 'total' : machineView === 'ahorro' ? 'ahorroGenerado' : machineView === 'mttr' ? 'mttr' : 'slaCompliance'] - a[machineView === 'ots' ? 'total' : machineView === 'ahorro' ? 'ahorroGenerado' : machineView === 'mttr' ? 'mttr' : 'slaCompliance']).slice(0, 8)
 
   return (
-    <section className="w-full rounded-3xl border border-slate-700 bg-slate-950 p-4 text-slate-100 shadow-[0_24px_60px_rgba(0,0,0,0.35)] sm:p-6">
-      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">BARB Financial Impact</p>
-          <h2 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">Impacto financiero industrial</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-            KPIs calculados desde la tabla <span className="font-semibold text-slate-200">orden_trabajo</span> para
-            monitorear reparación, costo real y ahorro estimado.
-          </p>
+    <section style={{ marginBottom: 24 }}>
+      <div style={{ background: 'linear-gradient(135deg, var(--surface) 0%, var(--bg-body) 100%)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, marginBottom: 16 }}>
+        <div style={{ marginBottom: 16 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: 'var(--ink1)' }}>{t.financial.roiTitle}</h2>
+          <p style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 4 }}>{t.financial.roiSubtitle}</p>
         </div>
-
-        <button
-          type="button"
-          onClick={() => refetch()}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
-        >
-          <RefreshCcw className="h-4 w-4" />
-          Refrescar
-        </button>
-      </div>
-
-      {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-3">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
-      ) : error ? (
-        <div className="rounded-2xl border border-red-700 bg-red-950/80 p-5 text-red-100 shadow-[0_18px_40px_rgba(0,0,0,0.25)]">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-900/80 text-red-200">
-              <AlertTriangle className="h-5 w-5" />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'stretch' }}>
+          <div style={{ flex: '1 1 200px', background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 12, color: '#b91c1c', fontWeight: 700, textTransform: 'uppercase' }}>{t.financial.withoutBarb}</div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: '#ef4444', margin: '4px 0' }}>{fmtUSD(BARB_BUSINESS.ANNUAL_WITHOUT_BARB)}</div>
+          </div>
+          <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 24, color: 'var(--ink3)' }}>vs</div>
+          <div style={{ flex: '1 1 200px', background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 12, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 12, color: '#047857', fontWeight: 700, textTransform: 'uppercase' }}>{t.financial.withBarb}</div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: '#10b981', margin: '4px 0' }}>{fmtUSD(BARB_BUSINESS.ANNUAL_WITH_BARB)}</div>
+          </div>
+          <div style={{ flex: '1 1 100%', background: 'var(--surface)', border: '2px solid var(--accent)', borderRadius: 12, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 800, textTransform: 'uppercase' }}>{t.financial.savingsGenerated}</div>
             </div>
-            <div className="min-w-0">
-              <h3 className="text-lg font-bold">No se pudo cargar el panel financiero</h3>
-              <p className="mt-1 text-sm leading-6 text-red-200">{error}</p>
-              <p className="mt-3 text-xs uppercase tracking-[0.24em] text-red-300">
-                La app sigue funcionando; este módulo quedó aislado.
-              </p>
-            </div>
+            <div style={{ fontSize: 32, fontWeight: 900, color: 'var(--accent)' }}>{fmtUSD(financials.ahorro_generado)}</div>
           </div>
         </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-3">
-          {cards.map(card => (
-            <StatCard
-              key={card.label}
-              icon={card.icon}
-              label={card.label}
-              value={card.value}
-              subtitle={card.subtitle}
-              accent={card.accent}
-              border={card.border}
-            />
-          ))}
-        </div>
-      )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
+        <StatCard icon={TimerReset} label={t.financial.mttrGlobal} value={`${Math.round(financials.mttr)}m`} subtitle={financials.mttr > BARB_BUSINESS.SLA_TARGET ? t.financial.mttrOver(Math.round(financials.mttr - BARB_BUSINESS.SLA_TARGET)) : t.financial.mttrOptimal} highlightColor="#06b6d4" badgeType="real" badgeText={t.financial.measured} />
+        <StatCard icon={CheckCircle} label={t.financial.efficiency} value={`${Math.min(100, Math.round(financials.efficiency))}%`} subtitle={t.financial.efficiencySub} highlightColor="#10b981" badgeType="est" badgeText={t.financial.estimated} />
+        <StatCard icon={Banknote} label={t.financial.directCost} value={fmtUSD(financials.costo_total_acumulado)} subtitle={t.financial.directCostSub} highlightColor="#ef4444" badgeType="real" badgeText={t.financial.measured} />
+        <StatCard icon={Clock} label={t.financial.mtbf} value={financials.mtbfHours !== null ? `${financials.mtbfHours} h` : '—'} subtitle={financials.mtbfHours !== null ? t.financial.mtbfSub : t.financial.mtbfNeedData} highlightColor="#8b5cf6" badgeType="real" badgeText={t.financial.measured} />
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+        {trend14Days.length > 0 && (
+          <div style={{ flex: '1 1 400px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink1)', marginBottom: 4 }}>{t.financial.healthTitle}</h3>
+            <p style={{ fontSize: 11, color: 'var(--ink3)', marginBottom: 16 }}>{t.financial.healthSub}</p>
+            <div style={{ height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trend14Days} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorAbiertas" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/><stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="colorCerradas" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--ink3)' }} tickFormatter={v => v.slice(5)} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--ink3)' }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                  <Area type="monotone" dataKey="abiertas" stroke="#f59e0b" fill="url(#colorAbiertas)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="cerradas" stroke="#10b981" fill="url(#colorCerradas)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   )
 }

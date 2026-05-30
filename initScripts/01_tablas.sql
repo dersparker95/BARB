@@ -431,3 +431,155 @@ INSERT INTO ORDEN_TRABAJO (
  'medium', 'medium',
  '2026-05-16 09:00:00', '2026-05-16 09:30:00', '2026-05-16 10:15:00',
  '2026-05-17 18:00:00', 45, 0, 80.00, 45.00, 'completed');
+-- ==========================================
+-- 9.6 EXPANSIÓN DE MÁQUINAS (Aumentar el parque de activos)
+-- ==========================================
+INSERT INTO MAQUINA (planta_id, disciplina_id, nombre, codigo) VALUES
+(1, 4, 'Compresor Neumático N2', 'COMP-N2'),
+(1, 5, 'Brazo Robótico KUKA 1',  'ROB-K1'),
+(1, 5, 'PLC Siemens S7 Principal', 'PLC-S7'),
+(1, 1, 'Cinta Transportadora C1', 'CINT-C1'),
+(1, 2, 'Generador de Respaldo G1', 'GEN-G1'),
+(1, 3, 'Válvula de Presión V8',   'VALV-V8');
+
+-- ==========================================
+-- 9.7 REPUESTOS E INVENTARIO
+-- ==========================================
+INSERT INTO REPUESTO (codigo, part_number, nombre, descripcion, tipo, categoria, unidad, stock_actual, stock_minimo, costo_unitario, estado) VALUES
+('REP-001', 'FIL-1029', 'Filtro de Aceite Hidráulico', 'Filtro de 10 micrones', 'Consumible', 'Hidráulica', 'Unidad', 15, 5, 45.00, 'active'),
+('REP-002', 'VAL-9921', 'Válvula Proporcional', 'Válvula 24V DC', 'Componente', 'Automatización', 'Unidad', 2, 1, 350.00, 'active'),
+('REP-003', 'SENS-011', 'Sensor de Vibración', 'Sensor piezoeléctrico 4-20mA', 'Sensor', 'Instrumentación', 'Unidad', 8, 3, 120.00, 'active'),
+('REP-004', 'BELT-44', 'Correa de Transmisión V', 'Correa de caucho reforzado', 'Consumible', 'Mecánica', 'Unidad', 20, 10, 25.00, 'active'),
+('REP-005', 'PLC-MOD', 'Módulo de E/S PLC', 'Módulo de 16 entradas digitales', 'Electrónica', 'Automatización', 'Unidad', 4, 2, 450.00, 'active');
+
+-- ==========================================
+-- 9.8 SENSORES Y TELEMETRÍA BÁSICA
+-- ==========================================
+-- Asignamos sensores a las máquinas 1 (Compressor) y 3 (Press)
+INSERT INTO SENSOR (maquina_id, nombre, codigo) VALUES
+(1, 'Sensor Temperatura Compresor', 'ST-COMP1'),
+(1, 'Sensor Presión Salida', 'SP-COMP1'),
+(3, 'Sensor Nivel Aceite Prensa', 'SL-PRESS3'),
+(3, 'Sensor Vibración Cilindro', 'SV-PRESS3');
+
+INSERT INTO LECTURA_SENSOR (sensor_id, valor, estado) VALUES
+(1, 85.5, 'normal'), (1, 86.1, 'normal'), (1, 95.0, 'warning'),
+(2, 120.4, 'normal'), (2, 118.9, 'normal'),
+(3, 45.2, 'warning'), (3, 40.1, 'critical'),
+(4, 2.3, 'normal'), (4, 4.8, 'critical');
+
+-- ==========================================
+-- 9.9 TOPOLOGÍA DE PLANTA
+-- ==========================================
+INSERT INTO TOPOLOGIA_ZONA (planta_id, nombre, color, descripcion) VALUES
+(1, 'Línea de Ensamblaje Principal', '#3b82f6', 'Zona de ensamblaje de componentes pesados'),
+(1, 'Cuarto de Máquinas', '#ef4444', 'Zona de compresores y generadores');
+
+-- Nodos de la topología (usaremos las máquinas insertadas)
+INSERT INTO TOPOLOGIA_NODO (planta_id, maquina_id, tipo, nombre, categoria, position_x, position_y, estado) VALUES
+(1, 1, 'machine', 'Compressor A1', 'Generación', 100, 100, 'operational'),
+(1, 2, 'machine', 'Motor Drive D1', 'Motriz', 300, 150, 'warning'),
+(1, 3, 'machine', 'Hydraulic Press B3', 'Prensado', 500, 200, 'error'),
+(1, 7, 'controller', 'PLC Siemens S7', 'Control', 300, 50, 'operational');
+
+INSERT INTO TOPOLOGIA_CONEXION (nodo_origen_id, nodo_destino_id, tipo, label, bidirectional, estado) VALUES
+(4, 1, 'data', 'Control de encendido', true, 'active'),
+(4, 2, 'data', 'Control de velocidad', true, 'active'),
+(4, 3, 'data', 'Control de prensado', true, 'active'),
+(1, 3, 'pneumatic', 'Suministro de aire', false, 'active');
+
+-- ==========================================
+-- 9.10 MÁS ÓRDENES DE TRABAJO (Para alimentar el Dashboard y el ROI)
+-- Fechas ajustadas a mayo 2026 para que se vean en las tendencias de 14 y 30 días
+-- ==========================================
+INSERT INTO ORDEN_TRABAJO (
+    numero_ot, maquina_id, tecnico_id, creado_por, tipo,
+    descripcion_problema, descripcion_reparacion, resolution,
+    priority, severity, fecha_creacion, fecha_inicio, fecha_cierre,
+    fecha_vencimiento, tiempo_reparacion_min, downtime_minutes,
+    costo_estimado, costo_real, estado
+) VALUES
+('OT-2026-011', 5, 4, 2, 'corrective',
+ 'Fuga de aire en manguera principal', 'Reemplazo de manguera e inspección de abrazaderas', 'Fuga eliminada',
+ 'high', 'high', '2026-05-19 14:00:00', '2026-05-19 14:15:00', '2026-05-19 15:30:00', '2026-05-20 18:00:00', 75, 75, 120.00, 95.00, 'completed'),
+
+('OT-2026-012', 6, 5, 2, 'predictive',
+ 'Anomalía en encoder del brazo robótico', 'Recalibración de origen', 'Precisión restaurada',
+ 'medium', 'medium', '2026-05-20 09:30:00', '2026-05-20 10:00:00', '2026-05-20 10:45:00', '2026-05-21 18:00:00', 45, 0, 0.00, 0.00, 'completed'),
+
+('OT-2026-013', 7, 3, 2, 'preventive',
+ 'Actualización de firmware PLC', 'Respaldo y flasheo de nueva versión', 'Firmware v2.4 instalado',
+ 'low', 'low', '2026-05-21 23:00:00', '2026-05-21 23:15:00', '2026-05-22 00:15:00', '2026-05-25 18:00:00', 60, 60, 0.00, 0.00, 'completed'),
+
+('OT-2026-014', 8, 4, 2, 'corrective',
+ 'Cinta atascada por sobrecarga', 'Liberación mecánica y ajuste de tensores', 'Operación normal',
+ 'urgent', 'critical', '2026-05-22 11:00:00', '2026-05-22 11:05:00', '2026-05-22 12:45:00', '2026-05-22 15:00:00', 100, 100, 200.00, 250.00, 'completed'),
+
+('OT-2026-015', 9, 5, 2, 'inspection',
+ 'Prueba de carga del generador', NULL, NULL,
+ 'medium', 'medium', '2026-05-23 08:00:00', NULL, NULL, '2026-05-24 18:00:00', NULL, 0, 50.00, NULL, 'assigned'),
+
+('OT-2026-016', 10, 3, 2, 'corrective',
+ 'Válvula no cierra completamente', 'Reemplazo de sellos', 'Cierre estanco verificado',
+ 'high', 'high', '2026-05-24 15:30:00', '2026-05-24 16:00:00', '2026-05-24 17:15:00', '2026-05-25 18:00:00', 75, 75, 80.00, 90.00, 'completed'),
+
+('OT-2026-017', 3, 4, 2, 'corrective',
+ 'Ruido extremo al prensar', 'Cambio de guías de bronce', 'Deslizamiento suave',
+ 'urgent', 'critical', '2026-05-25 10:00:00', '2026-05-25 10:15:00', '2026-05-25 13:30:00', '2026-05-25 16:00:00', 195, 195, 450.00, 500.00, 'completed'),
+
+('OT-2026-018', 1, 5, 2, 'predictive',
+ 'Análisis termográfico revela punto caliente', NULL, NULL,
+ 'medium', 'medium', '2026-05-26 09:00:00', '2026-05-26 09:30:00', NULL, '2026-05-27 18:00:00', NULL, 0, 150.00, NULL, 'in_progress'),
+
+('OT-2026-019', 2, 3, 2, 'preventive',
+ 'Lubricación general', 'Engrase de puntos clave', 'Lubricación completada',
+ 'low', 'low', '2026-05-26 14:00:00', '2026-05-26 14:30:00', '2026-05-26 15:00:00', '2026-05-28 18:00:00', 30, 0, 25.00, 20.00, 'completed'),
+
+('OT-2026-020', 4, 4, 2, 'corrective',
+ 'Falla en rodamientos de la bomba', NULL, NULL,
+ 'high', 'critical', '2026-05-27 08:00:00', NULL, NULL, '2026-05-27 12:00:00', NULL, 0, 600.00, NULL, 'pending');
+
+-- ==========================================
+-- 9.11 SESIONES DE DEBUG, DIAGNÓSTICOS Y REPORTES (BARB AI Flow)
+-- Simulando que la plataforma de IA de Barb ayudó a resolver la OT 2 y la OT 17
+-- ==========================================
+INSERT INTO SESION_DEBUG (maquina_id, tecnico_id) VALUES
+(3, 3), -- Prensa Hidráulica B3 (Carlos)
+(3, 4); -- Prensa Hidráulica B3 (Ana)
+
+INSERT INTO DIAGNOSTICO (sesion_id, descripcion, severidad) VALUES
+(1, 'El sistema experto identificó una caída de presión por manguera fisurada basándose en el historial del 2025.', 'critical'),
+(2, 'Diagnóstico asistido: Vibración armónica detectada en el chasis. Probable desgaste en las guías de bronce.', 'critical');
+
+INSERT INTO REPORTE (report_number, sesion_id, diagnostico_id, maquina_id, tecnico_id, summary, issue_description, severity, estado) VALUES
+('RPT-2026-001', 1, 1, 3, 3, 'Reemplazo manguera alta presión', 'Pérdida súbita de presión operativa.', 'critical', 'approved'),
+('RPT-2026-002', 2, 2, 3, 4, 'Cambio de guías de bronce', 'Ruido extremo y desalineación al prensar.', 'critical', 'approved');
+
+-- Actualizamos las OTs para ligarlas a estos reportes
+UPDATE ORDEN_TRABAJO SET reporte_id = 1 WHERE numero_ot = 'OT-2026-002';
+UPDATE ORDEN_TRABAJO SET reporte_id = 2 WHERE numero_ot = 'OT-2026-017';
+
+-- ==========================================
+-- 9.12 PROGRAMAS DE MANTENIMIENTO PREVENTIVO
+-- ==========================================
+INSERT INTO PROGRAMA_MANTENIMIENTO (maquina_id, creado_por, nombre, frecuencia, intervalo_dias, priority, duracion_estimada_min, fecha_inicio, estado) VALUES
+(1, 2, 'Revisión Filtros Compresor', 'monthly', 30, 'medium', 45, '2026-01-01', 'active'),
+(3, 2, 'Cambio Aceite Hidráulico', 'yearly', 365, 'high', 240, '2026-01-15', 'active'),
+(6, 2, 'Calibración Brazo Robótico', 'quarterly', 90, 'high', 120, '2026-02-01', 'active');
+
+-- ==========================================
+-- 9.13 OT REPUESTO (Asociando costos a OTs)
+-- ==========================================
+INSERT INTO OT_REPUESTO (ot_id, repuesto_id, cantidad, costo_unitario) VALUES
+(2, 1, 2, 45.00), -- OT-002 usó 2 filtros
+(9, 4, 1, 25.00), -- OT-009 usó 1 correa
+(17, 2, 1, 350.00); -- OT-017 usó válvula (como simulacro de costo)
+
+-- ==========================================
+-- 9.14 OT AUDIT LOG (Trazabilidad)
+-- ==========================================
+INSERT INTO OT_AUDIT_LOG (ot_id, usuario_id, estado_anterior, estado_nuevo, comentario) VALUES
+(1, 2, NULL, 'pending', 'OT creada por el sistema de preventivo'),
+(1, 2, 'pending', 'assigned', 'Asignada a Carlos'),
+(1, 3, 'assigned', 'in_progress', 'Inicio de revisión trimestral'),
+(1, 3, 'in_progress', 'completed', 'Finalizado sin contratiempos');

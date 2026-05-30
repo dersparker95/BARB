@@ -13,7 +13,6 @@ const TopBar: React.FC = () => {
 
   const translations = useMemo(() => getTranslations(lang), [lang])
 
-  // Sincronizar el estado oscuro de React con el DOM (para Tailwind y CSS nativo)
   useEffect(() => {
     if (dark) {
       document.documentElement.classList.add('dark')
@@ -32,12 +31,9 @@ const TopBar: React.FC = () => {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
       })
-
-      if (!response.ok) {
-        throw new Error(await response.text().catch(() => response.statusText))
-      }
+      if (!response.ok) throw new Error()
     } catch (_) {
-      // Logout local incluso si el backend no está disponible
+      // Fallback local
     } finally {
       setUser(null)
       setLoading(false)
@@ -48,8 +44,7 @@ const TopBar: React.FC = () => {
   const toggleTheme = () => setDark(!dark)
 
   const handleLanguageChange = (value: string) => {
-    const nextLang = normalizeLang(value)
-    setLang(nextLang)
+    setLang(normalizeLang(value))
     showToast(translations.settings.languageUpdated)
   }
 
@@ -57,21 +52,12 @@ const TopBar: React.FC = () => {
   let title = translations.topbar.maintenance
   let showBack = true
   let backPath: string | number = '/menu'
-  let badge = null
-  let showStatus = false
 
   if (path.includes('/menu')) {
     showBack = false
     title = translations.topbar.mainMenu
-    showStatus = true
   } else if (path.includes('/dashboard')) {
     title = translations.menu.dashboardTitle
-    showStatus = true
-    badge = (
-      <span style={{ fontSize: '10px', background: 'var(--purple-bg)', color: 'var(--purple)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--mono)', fontWeight: 600, marginLeft: '8px' }}>
-        {translations.topbar.admin}
-      </span>
-    )
   } else if (path.includes('/docchat')) {
     title = translations.topbar.documentChat
   } else if (path.includes('/debug')) {
@@ -99,20 +85,10 @@ const TopBar: React.FC = () => {
           <span className="logo-mark">BARB</span>
         </div>
         <span className="topbar-title">{title}</span>
-        {badge}
       </div>
 
       <div className="topbar-right">
-        {showStatus && (
-          <div className="status-badge" title={translations.topbar.apiOnline}>
-            <div className="status-dot online"></div>
-            <span>{translations.topbar.apiOnline}</span>
-          </div>
-        )}
-
-        <label className="sr-only" htmlFor="language-select">
-          {translations.common.language}
-        </label>
+        <label className="sr-only" htmlFor="language-select">{translations.common.language}</label>
         <select
           id="language-select"
           className="topbar-select"
