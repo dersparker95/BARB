@@ -26,7 +26,7 @@ except ImportError:  # pragma: no cover - import guard for local/dev parity
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://barb_admin:barb_password123@db:5432/barb_database",
+    "postgresql://barb_db_user:I50BKrmPxZXOVyH38Sv2ExCLxJ11IkAD@dpg-d8dkl23bc2fs73enmu90-a.ohio-postgres.render.com/barb_db?sslmode=require",
 )
 LM_STUDIO_URL = os.getenv("LM_STUDIO_URL", "http://host.docker.internal:1234/v1")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -435,9 +435,16 @@ def delete_ot_files(ot_id: int) -> None:
 
 app = FastAPI(title="BARB Plant Memory API", version="1.5.0")
 
+origins = [
+    "http://localhost",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://barb-7jfguz636-tvasquezms-projects.vercel.app"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
