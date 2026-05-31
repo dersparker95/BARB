@@ -438,18 +438,21 @@ app = FastAPI(title="BARB Plant Memory API", version="1.5.0")
 origins = [
     "http://localhost",
     "http://localhost:5173",
+    "http://localhost:3000",
     "https://barb-2ih8.onrender.com",
-    "https://barb-git-integracion-final-tvasquezms-projects.vercel.app" 
+    # Puedes dejar tus URLs principales estáticas aquí
+    "https://barb-git-integracion-final-tvasquezms-projects.vercel.app"
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    # ¡Esta es la magia! Permite cualquier subdominio dinámico que Vercel genere para tu proyecto
+    allow_origin_regex=r"https://barb-.*.vercel.app", 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 class LoginRequest(BaseModel):
     email: str
