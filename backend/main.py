@@ -438,8 +438,8 @@ app = FastAPI(title="BARB Plant Memory API", version="1.5.0")
 origins = [
     "http://localhost",
     "http://localhost:5173",
-    "http://localhost:3000",
-    "https://barb-7jfguz636-tvasquezms-projects.vercel.app"
+    "https://barb-2ih8.onrender.com",
+    "https://barb-git-integracion-final-tvasquezms-projects.vercel.app" 
 ]
 
 app.add_middleware(
