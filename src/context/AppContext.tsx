@@ -117,6 +117,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const pushDocMessage = useCallback((m: Message) => setDocMessages(prev => [...prev, m]), [])
   const clearDocMessages = useCallback(() => setDocMessages([]), [])
   
+  const pushDocMessage = useCallback((msg: Message) => {
+    setDocMessages((prev) => [...prev, msg])
+  }, [])
+
+  // NUEVO: Agrega texto al último mensaje en vivo
+  const appendToLastDocMessage = useCallback((chunk: string, sources?: string[]) => {
+    setDocMessages((prev) => {
+      if (prev.length === 0) return prev;
+      const lastMsg = prev[prev.length - 1];
+      if (lastMsg.role !== 'bot') return prev; // Solo afectamos a los mensajes de BARB
+
+      const updatedMsg = { ...lastMsg, content: lastMsg.content + chunk };
+      
+      // Si llegan fuentes, las convertimos al formato visual (SourceHit)
+      if (sources && sources.length > 0) {
+        updatedMsg.sources = sources.map(s => ({ documentName: s, pageNumber: '' }));
+      }
+      
+      return [...prev.slice(0, -1), updatedMsg];
+    });
+  }, []);
+
+  const clearDocMessages = useCallback(() => {
+    setDocMessages([])
+  }, [])
   // Funciones adaptadas para soportar el formato de Benja
   const getDebugMessages = useCallback((machineId: string | null | undefined) => {
     if (!machineId) return []

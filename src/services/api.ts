@@ -8,6 +8,7 @@ export type AuthLoginResponse = {
     role: Role
   }
 }
+
 async function callAPI<T>(base: string, path: string, opts?: RequestInit): Promise<T> {
   const url = base + path
   const headers = { 'Content-Type': 'application/json', ...(opts?.headers as any) }
@@ -24,7 +25,10 @@ async function callAPI<T>(base: string, path: string, opts?: RequestInit): Promi
   }
 }
 
-export const createApiService = (apiBase = 'http://localhost:9000/api', lmBase = '/lm') => {
+// 🌐 Única fuente de la verdad para las URLs
+export const createApiService = (
+  apiBase = import.meta.env.VITE_API_URL || 'http://localhost:9000/api'
+) => {
   return {
     auth: {
       login: async (email: string, password: string) =>
@@ -43,27 +47,79 @@ export const createApiService = (apiBase = 'http://localhost:9000/api', lmBase =
     machines: async () => callAPI<any>(apiBase, '/machines', { method: 'GET' }),
     technicians: async () => callAPI<any>(apiBase, '/technicians', { method: 'GET' }),
     
-    // AGREGA ESTE BLOQUE DE CHAT:
     chat: {
-      documents: async (payload: any) => callAPI<any>(apiBase, '/chat/documents', { method: 'POST', body: JSON.stringify(payload) }),
-      debug: async (payload: any) => callAPI<any>(apiBase, '/chat/debug', { method: 'POST', body: JSON.stringify(payload) }),
+      askRAG: async (message: string, machineId?: string, history: any[] = []) => 
+        callAPI<any>(apiBase, '/chat', { 
+          method: 'POST', 
+          body: JSON.stringify({ message, machine: machineId, language: "es", history }) 
+        }),
+        
+      // NUEVO: Función para leer texto en tiempo real
+      askRAGStream: async (
+        message: string, 
+        machineId: string | undefined, 
+        history: any[], 
+        onChunk: (text: string) => void,
+        onSources: (sources: string[]) => void
+      ) => {
+        const res = await fetch(`${apiBase}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, machine: machineId, language: "es", history })
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+        if (!res.body) throw new Error("Stream no disponible");
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Guardar línea incompleta en buffer
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.substring(6).trim();
+              if (dataStr === '[DONE]') continue;
+              try {
+                const data = JSON.parse(dataStr);
+                if (data.type === 'chunk') onChunk(data.content);
+                if (data.type === 'sources') onSources(data.content);
+              } catch (e) {
+                // Ignorar fragmentos JSON rotos
+              }
+            }
+          }
+        }
+      },
+      documents: async (payload: any) => callAPI<any>(apiBase, '/documents/upload', { method: 'POST', body: JSON.stringify(payload) }),
     },
-    // HASTA AQUÍ
     
-    debug: {
-      startSession: async (payload: any) => callAPI<any>(apiBase, '/debug/sessions', { method: 'POST', body: JSON.stringify(payload) }),
+    // 📋 BLOQUE DE ÓRDENES DE TRABAJO (Conexión real al backend)
+    workOrders: {
+      getAll: async () => callAPI<any>(apiBase, '/work-orders', { method: 'GET' }),
+      create: async (formData: FormData) => {
+        // Para FormData no enviamos 'Content-Type: application/json', el navegador lo auto-asigna
+        const res = await fetch(`${apiBase}/work-orders`, { method: 'POST', body: formData });
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+      }
     },
+
     reports: {
       send: async (payload: any) => callAPI<any>(apiBase, '/reports/debug', { method: 'POST', body: JSON.stringify(payload) }),
-      upload: async (payload: any) => callAPI<any>(apiBase, '/reports/upload', { method: 'POST', body: JSON.stringify(payload) }),
     },
     user: {
       savePreferences: async (payload: any) => callAPI<any>(apiBase, '/user/preferences', { method: 'PUT', body: JSON.stringify(payload) }),
-    },
-    lmBase,
+    }
   }
 }
 
 export type ApiService = ReturnType<typeof createApiService>
-
 export default createApiService
