@@ -12,6 +12,9 @@ from typing import Any, Optional
 import bcrypt
 import httpx
 import psycopg2
+import chromadb
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -19,10 +22,6 @@ from psycopg2.extras import RealDictCursor
 from psycopg2.pool import ThreadedConnectionPool
 from sqlalchemy import create_engine, text
 
-try:
-    from redis import Redis
-except ImportError:  # pragma: no cover - import guard for local/dev parity
-    Redis = None  # type: ignore[assignment]
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -33,6 +32,28 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+CHROMA_DIR = Path(os.getenv("CHROMA_DIR", str(UPLOAD_DIR / "chroma")))
+CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "electrical")
+vector_collection: Any | None = None
+
+
+def get_vector_collection() -> Any | None:
+    global vector_collection
+
+    if vector_collection is not None:
+        return vector_collection
+
+    try:
+        CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+        chroma_client = chromadb.PersistentClient(path=str(CHROMA_DIR))
+        vector_collection = chroma_client.get_or_create_collection(name=CHROMA_COLLECTION_NAME)
+    except Exception as exc:
+        print(f"[RAG] No se pudo inicializar ChromaDB: {exc}")
+        vector_collection = None
+
+    return vector_collection
+
+
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
@@ -41,7 +62,7 @@ engine = create_engine(
 )
 
 db_pool: ThreadedConnectionPool | None = None
-redis_client: Redis | None = None
+redis_client: Any | None = None
 redis_ready = False
 
 
@@ -75,15 +96,14 @@ def _query_one(sql: str, params: Optional[dict] = None):
     return rows[0] if rows else None
 
 
-def get_redis_client() -> Redis | None:
+def get_redis_client() -> Any | None:
     global redis_client, redis_ready
-    if Redis is None:
-        return None
     if redis_client is not None and redis_ready:
         return redis_client
 
     try:
-        redis_client = Redis.from_url(REDIS_URL, decode_responses=True)
+        redis_module = __import__("redis")
+        redis_client = redis_module.Redis.from_url(REDIS_URL, decode_responses=True)
         redis_client.ping()
         redis_ready = True
         return redis_client
@@ -443,6 +463,7 @@ class LoginRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     language: str = Field(default="es")
+    machine: Optional[str] = None
 
 
 class UserCreateRequest(BaseModel):
@@ -989,23 +1010,71 @@ async def create_work_order(request: Request):
 
 @app.post("/api/documents/upload")
 @app.post("/documents/upload")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(
+    file: UploadFile = File(...),
+    title: str = Form(""),
+    discipline: str = Form(""),
+    machine: str = Form(...),
+    notes: str = Form(""),
+):
     content_type = (file.content_type or "").strip().lower()
     if content_type != "application/pdf":
-        raise HTTPException(status_code=415, detail="Solo se permiten archivos PDF (application/pdf).")
+        raise HTTPException(status_code=415, detail="Solo se permiten archivos PDF.")
 
+    # 1. Guardar archivo físico
     doc_dir = UPLOAD_DIR / "documents"
     doc_dir.mkdir(parents=True, exist_ok=True)
-
     stored = store_upload_file(file, doc_dir, "doc")
+    file_path = str(stored["stored_path"])
+
+    print(f"[RAG] Archivo guardado. Iniciando procesamiento de: {stored['original_name']}")
+    print(f"[RAG] Documento asociado a disciplina='{discipline}' machine='{machine}' title='{title}' notes='{notes}'")
+
+    try:
+        # 2. Leer el PDF
+        loader = PyPDFLoader(file_path)
+        documentos = loader.load()
+
+        # 3. Fragmentar el texto (Trituradora a 1500 caracteres)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1500,
+            chunk_overlap=150
+        )
+        chunks = text_splitter.split_documents(documentos)
+
+        # 4. Guardar en ChromaDB
+        collection = get_vector_collection()
+        if collection is None:
+            raise HTTPException(status_code=503, detail="ChromaDB no está disponible.")
+
+        for i, chunk in enumerate(chunks):
+            collection.add(
+                documents=[chunk.page_content],
+                metadatas=[{
+                    "source": stored["original_name"],
+                    "page": chunk.metadata.get("page", 0),
+                    "discipline": discipline,
+                    "machine": machine,
+                    "notes": notes,
+                    "title": title,
+                }],
+                ids=[f"{stored['file_id']}_chunk_{i}"]
+            )
+        print(f"[RAG] ¡Éxito! {len(chunks)} fragmentos guardados en ChromaDB.")
+        print(f"[RAG] Máquina registrada en metadatos: {machine}")
+
+    except Exception as e:
+        print(f"[RAG] Error en la fragmentación: {e}")
+        raise HTTPException(status_code=500, detail=f"Error procesando PDF: {str(e)}")
+
     return {
         "id": stored["file_id"],
         "filename": stored["stored_name"],
         "original_name": stored["original_name"],
         "content_type": "application/pdf",
-        "path": str(stored["stored_path"]),
+        "path": file_path,
+        "message": f"Manual fragmentado en {len(chunks)} partes."
     }
-
 
 @app.get("/api/machines")
 def get_machines():
@@ -1083,39 +1152,101 @@ def get_technicians():
 @app.post("/api/chat")
 @app.post("/chat")
 async def chat(payload: ChatRequest):
-    cache_key = hashlib.sha256(
-        f"chat:{payload.language}:{payload.message.strip()}".encode("utf-8")
-    ).hexdigest()
-    cached = cache_get(cache_key)
-    if cached:
-        return cached
+    
+# 1. Buscar contexto en ChromaDB
+    collection = get_vector_collection()
+    resultados = None
+    if collection is not None:
+        
+        # ⚡ MAPEO DE IDS A STRINGS TÉCNICOS DE CHROMADB ⚡
+        # Agregá acá los IDs correspondientes de tu tabla de máquinas
+        mapeo_maquinas = {
+            "1": "pump_e4",          # Ejemplo, ajustalo si el ID 1 corresponde a otra
+            "2": "motor_drive_d1",   # El ID '2' que viene de tu frontend
+            "3": "mcc_01"            # Agrega las que te hagan falta
+        }
 
+        # Capturamos lo que viene del frontend
+        id_maquina = str(payload.machine).strip() if payload.machine else ""
+        
+        # Si el ID está en nuestro diccionario, usamos el string técnico. 
+        # Si no, aplicamos la normalización básica por las dudas.
+        if id_maquina in mapeo_maquinas:
+            machine_filter = mapeo_maquinas[id_maquina]
+        else:
+            machine_filter = id_maquina.lower().replace(" ", "_") if id_maquina else None
+            
+        filtros = {"machine": machine_filter} if machine_filter else None
+        
+        print(f"⚙️ [DEBUG RAG] ID Frontend: '{payload.machine}' -> Traducido para ChromaDB: {filtros}")
+        
+        resultados = collection.query(
+            query_texts=[payload.message],
+            n_results=6,
+            where=filtros
+        )
+    # 2. Armar el contexto extraído del manual
+    contexto = ""
+    fuentes = []
+    if resultados and resultados["documents"] and resultados["documents"][0]:
+        contexto = "\n\n".join(resultados["documents"][0])
+        fuentes = [meta.get("source", "Manual") for meta in resultados["metadatas"][0]]
+
+    # 🚀 =====================================================================
+    # 🔥 ENYECTAMOS EL DEBUG ACÁ PARA VER LOS CHUNKS EN "docker compose logs"
+    # =====================================================================
+    print("\n" + "═"*60)
+    print(f"🔍 CHROMADB ANALIZANDO: '{payload.message}'")
+    print("═"*60)
+    if resultados and resultados["documents"] and resultados["documents"][0]:
+        for idx, doc in enumerate(resultados["documents"][0]):
+            fuente_actual = fuentes[idx] if idx < len(fuentes) else "Desconocida"
+            print(f"📄 CHUNK #{idx+1} | Fuente: {fuente_actual}")
+            # Mostramos las primeras líneas de cada fragmento para inspeccionar
+            print(doc.strip()[:400] + ("..." if len(doc) > 400 else ""))
+            print("-" * 50)
+    else:
+        print("❌ ChromaDB no devolvió ningún fragmento para esta consulta.")
+    print("═"*60 + "\n")
+    # =====================================================================
+
+   
+  # 3. Armar el Prompt para Llama (Combinando IA + Manual)
+    system_prompt = (
+        "Eres BARB, un asistente técnico experto en mantenimiento industrial de la planta.\n"
+        "Tu única fuente de información son los fragmentos del manual provistos abajo. "
+        "Analiza con cuidado la información, ya que algunas fórmulas o ecuaciones pueden contener caracteres extraños o texto mal formateado debido a la extracción del PDF.\n"
+        "Si los fragmentos contienen la información pero está mal formateada, intenta reconstruir la respuesta de forma lógica explicando los términos (por ejemplo, si ves componentes de caída de tensión con senos o cosenos).\n"
+        "Si los fragmentos no contienen absolutamente nada relacionado a lo que el usuario pregunta, debes responder exactamente: 'No encontré fragmentos específicos en el manual técnico que contengan esa información.'\n"
+        "Tienes prohibido usar conocimiento externo que no esté sugerido de alguna forma en los fragmentos.\n\n"
+        f"INFORMACIÓN DEL MANUAL:\n{contexto}"
+    )
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=None) as client:
             response = await client.post(
                 f"{LM_STUDIO_URL}/chat/completions",
                 json={
                     "model": "local-model",
                     "messages": [
-                        {"role": "system", "content": "Asistente experto en mantenimiento de la planta BARB."},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": payload.message},
                     ],
-                    "temperature": 0.4,
-                },
-                timeout=30.0,
+                    "temperature": 0.3,
+                }
             )
+
             if response.status_code != 200:
                 raise HTTPException(status_code=502, detail="LM Studio devolvió un error.")
 
             data = response.json()
             reply = data["choices"][0]["message"]["content"]
-            result = {"reply": reply, "sources": ["Manual_Local.pdf"], "language": payload.language}
-            cache_set(cache_key, result, ttl_seconds=300)
-            return result
-    except httpx.RequestError:
-        raise HTTPException(status_code=503, detail="LM Studio local inalcanzable desde el contenedor backend.")
-    except HTTPException:
-        raise
+
+            return {
+                "reply": reply,
+                "sources": list(set(fuentes)) if fuentes else [],
+                "language": payload.language
+            }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

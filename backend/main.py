@@ -2,6 +2,7 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, text
 from typing import Optional
+from rag_backend import chat as ejecutar_rag_ia
 
 # -----------------------------------------------------------------------------
 # Configuración de aplicación Unificada
@@ -87,9 +88,33 @@ def get_disciplines():
     return [{"id": 1, "name": "General"}]
 
 # --- 5. RAG Endpoint Básico ---
+# --- 5. RAG Endpoint REAL ---
+# --- 5. RAG Endpoint REAL ---
 @app.post("/api/chat")
 async def chat(payload: dict):
-    return {"reply": "Motor IA conectado.", "sources": [], "language": "es"}
+    try:
+        # Importamos la clase de validación que tiene tu rag_backend
+        from rag_backend import ChatRequest
+        
+        # Extraemos el mensaje que mandó el usuario desde la web
+        mensaje_texto = payload.get("message") or payload.get("content") or ""
+        
+        # Armamos el objeto con la estructura exacta que espera tu función del RAG
+        solicitud_validada = ChatRequest(message=mensaje_texto)
+        
+        # Ejecutamos tu RAG real (que busca en ChromaDB y llama a LM Studio)
+        respuesta_ia = await ejecutar_rag_ia(solicitud_validada)
+        
+        # Le devolvemos la respuesta real de la IA al frontend de React
+        return respuesta_ia
+        
+    except Exception as e:
+        print(f"❌ Error crítico en el puente del chat: {e}")
+        return {
+            "reply": "Lo siento, hubo un error interno al conectar con el cerebro de la IA.",
+            "sources": [],
+            "language": "es"
+        }
 
 # --- 6. Endpoint para CREAR OT (El único que necesitas) ---
 @app.post("/api/work-orders")

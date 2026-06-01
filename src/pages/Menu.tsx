@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations, normalizeLang } from '../utils/i18n'
@@ -9,6 +9,7 @@ type UploadCategory = 'all' | 'electrical' | 'mechanical' | 'hydraulic' | 'pneum
 interface UploadFormState {
   title: string
   discipline: UploadCategory
+  machine: string
   notes: string
   file: File | null
 }
@@ -18,6 +19,7 @@ interface UploadCopy {
   uploadDescription: string
   uploadName: string
   uploadDiscipline: string
+  uploadMachine: string
   uploadNotes: string
   uploadFile: string
   uploadSubmit: string
@@ -35,11 +37,44 @@ interface UploadCopy {
 const EMPTY_UPLOAD: UploadFormState = {
   title: '',
   discipline: 'all',
+  machine: '',
   notes: '',
   file: null,
 }
 
 const ACCEPTED_FILE_TYPES = '.pdf,.doc,.docx,.txt,.md,.xls,.xlsx,.png,.jpg,.jpeg'
+
+type MachineOption = { value: string; label: string }
+
+const MACHINE_OPTIONS_BY_DISCIPLINE: Record<Exclude<UploadCategory, 'all'>, MachineOption[]> = {
+  electrical: [
+    { value: 'motor_drive_d1', label: 'Motor Drive D1' },
+    { value: 'mcc_01', label: 'MCC-01' },
+    { value: 'tablero_fuerza_a', label: 'Tablero de Fuerza A' },
+  ],
+  mechanical: [
+    { value: 'pump_e4', label: 'Pump E4' },
+    { value: 'chancador_primario', label: 'Chancador Primario' },
+    { value: 'harnero_vibratorio', label: 'Harnero Vibratorio' },
+  ],
+  hydraulic: [
+    { value: 'pump_e4', label: 'Pump E4' },
+    { value: 'unidad_hidraulica_h1', label: 'Unidad Hidráulica H1' },
+  ],
+  pneumatic: [
+    { value: 'compresor_p1', label: 'Compresor Principal P1' },
+    { value: 'linea_aire_a1', label: 'Línea de Aire A1' },
+  ],
+  automation: [
+    { value: 'plc_linea_1', label: 'PLC Línea 1' },
+    { value: 'hmi_central', label: 'HMI Central' },
+  ],
+}
+
+const getMachineOptions = (discipline: UploadCategory): MachineOption[] => {
+  if (discipline === 'all') return []
+  return MACHINE_OPTIONS_BY_DISCIPLINE[discipline]
+}
 
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`
@@ -54,6 +89,7 @@ const getUploadCopy = (lang: string): UploadCopy =>
         uploadDescription: 'Carga manuales, fichas técnicas o procedimientos para el asistente documental.',
         uploadName: 'Nombre del documento',
         uploadDiscipline: 'Disciplina',
+        uploadMachine: 'Máquina',
         uploadNotes: 'Notas internas',
         uploadFile: 'Archivo',
         uploadSubmit: 'Subir documento',
@@ -72,6 +108,7 @@ const getUploadCopy = (lang: string): UploadCopy =>
         uploadDescription: 'Upload manuals, technical sheets or procedures for the document assistant.',
         uploadName: 'Document name',
         uploadDiscipline: 'Discipline',
+        uploadMachine: 'Machine',
         uploadNotes: 'Internal notes',
         uploadFile: 'File',
         uploadSubmit: 'Upload document',
@@ -118,6 +155,23 @@ const Menu: React.FC = () => {
 
   const canSubmit = uploadForm.title.trim().length > 0 && uploadForm.file !== null && !isUploading
 
+  const machineOptions = useMemo(() => getMachineOptions(uploadForm.discipline), [uploadForm.discipline])
+
+  useEffect(() => {
+    if (uploadForm.discipline === 'all') {
+      if (uploadForm.machine) {
+        setUploadForm(prev => ({ ...prev, machine: '' }))
+      }
+      return
+    }
+
+    if (!uploadForm.machine) return
+    const machineStillValid = machineOptions.some(option => option.value === uploadForm.machine)
+    if (!machineStillValid) {
+      setUploadForm(prev => ({ ...prev, machine: '' }))
+    }
+  }, [machineOptions, uploadForm.discipline, uploadForm.machine])
+
   const setSelectedFile = (file: File | null) => {
     setUploadError(null)
     setUploadForm(prev => ({ ...prev, file }))
@@ -131,7 +185,6 @@ const Menu: React.FC = () => {
 
   const handleUploadSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    console.log("¡El botón funciona y la función se está ejecutando!") // Agrega esto
 
     const title = uploadForm.title.trim()
     if (!title) {
@@ -144,6 +197,11 @@ const Menu: React.FC = () => {
       return
     }
 
+    if (uploadForm.discipline !== 'all' && !uploadForm.machine) {
+      showToast(lang === 'es' ? '⚠️ Selecciona una máquina' : '⚠️ Select a machine')
+      return
+    }
+
     setIsUploading(true)
     setUploadError(null)
 
@@ -152,6 +210,7 @@ const Menu: React.FC = () => {
       formData.append('file', uploadForm.file, uploadForm.file.name)
       formData.append('title', title)
       formData.append('discipline', uploadForm.discipline)
+      formData.append('machine', uploadForm.machine)
       formData.append('notes', uploadForm.notes.trim())
 
       const response = await fetch(`${apiBase.replace(/\/$/, '')}/documents/upload`, {
@@ -311,7 +370,11 @@ const Menu: React.FC = () => {
                   className="form-select"
                   value={uploadForm.discipline}
                   onChange={event =>
-                    setUploadForm(prev => ({ ...prev, discipline: event.target.value as UploadCategory }))
+                    setUploadForm(prev => ({
+                      ...prev,
+                      discipline: event.target.value as UploadCategory,
+                      machine: '',
+                    }))
                   }
                   aria-label={copy.uploadDiscipline}
                   disabled={isUploading}
@@ -322,6 +385,27 @@ const Menu: React.FC = () => {
                   <option value="hydraulic">Hydraulic</option>
                   <option value="pneumatic">Pneumatic</option>
                   <option value="automation">Automation</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label className="sr-only" htmlFor="upload-machine">
+                  {copy.uploadMachine}
+                </label>
+                <select
+                  id="upload-machine"
+                  className="form-select"
+                  value={uploadForm.machine}
+                  onChange={event => setUploadForm(prev => ({ ...prev, machine: event.target.value }))}
+                  aria-label={copy.uploadMachine}
+                  disabled={isUploading || uploadForm.discipline === 'all'}
+                >
+                  <option value="">{uploadForm.discipline === 'all' ? (lang === 'es' ? 'Selecciona primero una disciplina' : 'Select a discipline first') : `${lang === 'es' ? 'Seleccionar' : 'Select'} ${copy.uploadMachine.toLowerCase()}...`}</option>
+                  {machineOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -523,7 +607,7 @@ const Menu: React.FC = () => {
               </div>
 
               <div className="modal-footer" style={{ padding: 0, borderTop: 'none', marginTop: 4 }}>
-                <button className="btn btn-primary" type="submit" disabled={isUploading}>
+                <button className="btn btn-primary" type="submit" disabled={isUploading || !canSubmit}>
                   {isUploading ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                       <span className="animate-spin" aria-hidden="true">

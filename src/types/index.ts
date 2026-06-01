@@ -63,6 +63,7 @@ export interface AppContextValue extends AppState {
   setSessionId: (id: string | null) => void
   setSessionStart: (t: number | null) => void
   pushDocMessage: (m: Message) => void
+  clearDocMessages: () => void
   getDebugMessages: (machineId: string | null | undefined) => Message[]
   pushDebugMessage: (machineId: string, m: Message) => void
   setUser: (u: User | null) => void
