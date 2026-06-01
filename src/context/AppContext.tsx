@@ -115,6 +115,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [loading, setLoading] = useState<boolean>(defaultState.loading)
 
   const pushDocMessage = useCallback((m: Message) => setDocMessages(prev => [...prev, m]), [])
+  const clearDocMessages = useCallback(() => setDocMessages([]), [])
   
   // Funciones adaptadas para soportar el formato de Benja
   const getDebugMessages = useCallback((machineId: string | null | undefined) => {
@@ -245,6 +246,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSessionId,
     setSessionStart,
     pushDocMessage,
+    clearDocMessages,
     pushDebugMessage,
     setUser,
     setApiBase,

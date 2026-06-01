@@ -182,6 +182,7 @@ const DocChat: React.FC = () => {
     docMachine,
     docMessages,
     pushDocMessage,
+    clearDocMessages,
     loading,
     setLoading,
     setDiscipline,
@@ -208,6 +209,8 @@ const DocChat: React.FC = () => {
 
   const areaRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const prevDisciplineRef = useRef<string | null>(discipline)
+  const prevDocMachineRef = useRef<string>(docMachine)
   const location = useLocation()
   const t = useMemo(() => getTranslations(lang), [lang])
   const isEs = normalizeLang(lang) === 'es'
@@ -260,6 +263,22 @@ const DocChat: React.FC = () => {
       if (s.plant) setPlant(s.plant)
     }
   }, [location.state, setDiscipline, setPlant])
+
+  useEffect(() => {
+    const disciplineChanged = prevDisciplineRef.current !== discipline
+    const machineChanged = prevDocMachineRef.current !== docMachine
+
+    if (prevDisciplineRef.current !== discipline) {
+      prevDisciplineRef.current = discipline
+    }
+    if (prevDocMachineRef.current !== docMachine) {
+      prevDocMachineRef.current = docMachine
+    }
+
+    if (disciplineChanged || machineChanged) {
+      clearDocMessages()
+    }
+  }, [clearDocMessages, discipline, docMachine])
 
   useEffect(() => {
     if (areaRef.current) areaRef.current.scrollTop = areaRef.current.scrollHeight
@@ -392,7 +411,6 @@ const DocChat: React.FC = () => {
       const response = await fetch(`${apiRoot}/documents/upload`, {
         method: 'POST',
         body: fd,
-        signal: AbortSignal.timeout(30_000),
       })
 
       if (response.ok) {
@@ -485,7 +503,7 @@ const DocChat: React.FC = () => {
     setLoading(true)
     setInput('')
 
-    const contextMachine = selectedMachineRecord ? Number(selectedMachineRecord.id) : null
+    const chatMachine = selectedMachine ?? docMachine
     const el = document.getElementById('doc-input')
     if (el) (el as HTMLTextAreaElement).style.height = 'auto'
 
@@ -497,10 +515,9 @@ const DocChat: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: query,
-          context_machine: contextMachine,
           language: normalizeLang(lang),
+          machine: chatMachine,
         }),
-        signal: AbortSignal.timeout(30_000),
       })
 
       if (response.ok) {
@@ -531,27 +548,19 @@ const DocChat: React.FC = () => {
     const system = `Eres BARB, asistente experto en mantenimiento industrial. Disciplina: ${discipline}. ${machineName ? `Equipo seleccionado: ${machineName}.` : ''} ${manualNote}\nResponde en ${isEs ? 'español' : 'inglés'}, paso a paso, citando página del manual cuando disponible. Usa ⚠️ para advertencias de seguridad.\n\nCONTEXTO MANUAL:\n${ctx}`
 
     try {
-      const response = await fetch(`${lmRoot}/chat/completions`, {
+      const response = await fetch(`/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'local-model',
-          temperature: 0.1,
-          max_tokens: 1500,
-          stream: false,
-          messages: [
-            { role: 'system', content: system },
-            ...docMessages.slice(-4).map(message => ({ role: message.role, content: message.content })),
-            { role: 'user', content: query },
-          ],
+          message: query,
+          language: normalizeLang(lang),
+          machine: chatMachine,
         }),
-        signal: AbortSignal.timeout(90_000),
       })
 
       if (response.ok) {
-        const data = await response.json() as { choices?: Array<{ message: { content: string } }> }
-        const answer = data.choices?.[0]?.message?.content ?? ''
-        pushDocMessage({ role: 'assistant', content: answer, timestamp: Date.now() })
+        const data = await response.json() as ChatApiResponse
+        pushDocMessage({ role: 'assistant', content: data.reply, timestamp: Date.now() })
         setLoading(false)
         return
       }
@@ -650,6 +659,7 @@ const DocChat: React.FC = () => {
               setDiscipline(nextName || null)
               setDocMachine('all')
               setSelectedMachine(null)
+              clearDocMessages()
             }}
             disabled={loading || catalogsLoading}
           >
@@ -675,6 +685,7 @@ const DocChat: React.FC = () => {
               const nextMachineId = e.target.value
               setDocMachine(nextMachineId || 'all')
               setSelectedMachine(nextMachineId || null)
+              clearDocMessages()
             }}
             disabled={loading || catalogsLoading || !selectedDisciplineRecord}
           >
@@ -729,36 +740,17 @@ const DocChat: React.FC = () => {
         </div>
 
         <div className="chat-messages" ref={areaRef}>
-          {docMessages.length === 0 ? (
-            <div className="chat-empty">
-              <div style={{ fontSize: 44, marginBottom: 12, opacity: 0.4 }}>💬</div>
-              <h3 style={{ fontSize: 16, color: 'var(--ink2)', marginBottom: 8, fontWeight: 500 }}>
-                {!activeManualId
-                  ? (isEs ? 'Selecciona un manual de la biblioteca' : 'Select a manual from the library')
-                  : !discipline
-                    ? (isEs ? 'Selecciona una disciplina para empezar' : 'Select a discipline to start')
-                    : (isEs ? 'Haz tu primera pregunta' : 'Ask your first question')}
-              </h3>
-              <p style={{ fontSize: 13, maxWidth: 320, lineHeight: 1.6 }}>
-                {isEs
-                  ? 'Puedes cambiar planta, disciplina y máquina desde el panel lateral. Carga un manual PDF para activar el RAG.'
-                  : 'Change plant, discipline and machine from the side panel. Upload a PDF manual to activate RAG.'}
-              </p>
-              <button
-                className="btn btn-outline btn-sm"
-                style={{ marginTop: 16, width: 200 }}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                📄 {isEs ? 'Cargar manual ahora' : 'Upload manual now'}
-              </button>
-            </div>
-          ) : (
-            docMessages.map((message, index) => (
-              <ChatBubble key={index} msg={message} side={message.role === 'user' ? 'user' : 'bot'} />
-            ))
-          )}
-          {loading && <div className="mt-md"><Thinking /></div>}
-        </div>
+  {docMessages.length === 0 ? (
+    // Reemplazamos todo el cartel anterior por un contenedor vacío.
+    // Esto mantiene la estructura de tu diseño CSS pero no muestra absolutamente nada en pantalla.
+    <div className="chat-empty" style={{ background: 'transparent' }} />
+  ) : (
+    docMessages.map((message, index) => (
+      <ChatBubble key={index} msg={message} side={message.role === 'user' ? 'user' : 'bot'} />
+    ))
+  )}
+  {loading && <div className="mt-md"><Thinking /></div>}
+</div>
 
         <div className="input-zone" style={{ flexShrink: 0 }}>
           <div
