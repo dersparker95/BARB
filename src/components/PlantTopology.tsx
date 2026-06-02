@@ -1,84 +1,139 @@
-import React, { useRef, useState, useMemo } from 'react'
+import React, { useRef, useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
-import MACHINES from '../data/machines'
 
-type MachineNode = {
-  id: string
-  name: string
-  x: number
-  y: number
-  w: number
-  h: number
-  icon: string
-  cat: string
-  status: 'operational' | 'warning' | 'maintenance' | 'offline'
-  stroke: string
+// --- Tipos estrictos basados en el backend ---
+type BackendNode = {
+  nodo_id: number
+  nombre: string
+  tipo: string
+  estado: 'operational' | 'warning' | 'error' | 'offline'
+  position_x: number
+  position_y: number
+  maquina_id: number
+  planta_id: number
+  w?: number
+  h?: number
+  icon?: string
 }
 
-const NODES: MachineNode[] = [
-  { id: 'motor-d1', name: 'Motor Drive D1', x: 140, y: 100, w: 120, h: 80, icon: '⚡', cat: 'Electrical', status: 'maintenance', stroke: '#a06a00' },
-  { id: 'cnc-c2', name: 'CNC Mill C2', x: 338, y: 58, w: 120, h: 80, icon: '⚙️', cat: 'Mechanical', status: 'operational', stroke: '#1a5fa8' },
-  { id: 'comp-a1', name: 'Compressor A1', x: 558, y: 90, w: 124, h: 80, icon: '💨', cat: 'Pneumatic', status: 'operational', stroke: '#5e3db3' },
-  { id: 'plc', name: 'PLC Controller', x: 320, y: 265, w: 120, h: 80, icon: '🤖', cat: 'Automation', status: 'operational', stroke: '#1a7a50' },
-  { id: 'press-b3', name: 'Hydraulic Press B3', x: 618, y: 270, w: 132, h: 80, icon: '💧', cat: 'Hydraulic', status: 'warning', stroke: '#0e7490' },
-]
+type BackendConnection = {
+  conexion_id: number
+  nodo_origen_id: number
+  nodo_destino_id: number
+  tipo: string
+}
 
+// --- Configuración inicial y utilidades ---
 const INITIAL_VB = { x: 0, y: 0, w: 900, h: 480 }
 
-const statusColor = (status: MachineNode['status']) => {
-  if (status === 'operational') return '#3ecf8e'
-  if (status === 'warning') return '#d97706'
-  if (status === 'maintenance') return '#3b82f6'
-  return '#6b7280'
+const getStatusColor = (estado: BackendNode['estado']) => {
+  switch (estado) {
+    case 'operational': return '#10b981' // Verde
+    case 'warning': return '#f59e0b'     // Ámbar
+    case 'error': return '#ef4444'       // Rojo
+    default: return '#64748b'            // Gris (offline/desconocido)
+  }
+}
+
+const getNodeIcon = (tipo: string) => {
+  switch (tipo) {
+    case 'hub': return '💻'
+    case 'controller': return '🤖'
+    case 'machine': return '⚙️'
+    case 'sensor': return '🔌'
+    default: return '📦'
+  }
 }
 
 const PlantTopology: React.FC = () => {
   const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const { lang, selectedMachine, setSelectedMachine } = useAppContext()
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  
+  // Contexto global
+  const { lang, selectedMachine, setSelectedMachine, apiBase } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
 
+  // Estado de datos dinámicos
+  const [nodos, setNodos] = useState<BackendNode[]>([])
+  const [conexiones, setConexiones] = useState<BackendConnection[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Estado de la vista interactiva
   const [viewBox, setViewBox] = useState(INITIAL_VB)
-  const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; node?: MachineNode }>({
+  const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; node?: BackendNode }>({
     visible: false,
     x: 0,
     y: 0,
   })
 
+  // Estado para el sistema de arrastre (Pan & Drag)
+  const [isDragging, setIsDragging] = useState(false)
+  const [startX, setStartX] = useState(0)
+  const [startY, setStartY] = useState(0)
+  const [scrollLeft, setScrollLeft] = useState(0)
+  const [scrollTop, setScrollTop] = useState(0)
+
+  // --- Fetch de datos desde la API ---
+  useEffect(() => {
+    const controller = new AbortController() // Previene fugas de memoria si el componente se desmonta
+    
+    setCargando(true)
+    setError(null)
+    
+    fetch(`${apiBase.replace(/\/$/, '')}/topologia`, { signal: controller.signal })
+      .then(response => {
+        if (!response.ok) throw new Error('Error al obtener la topología del servidor')
+        return response.json()
+      })
+      .then(data => {
+        const nodosProcesados = (data.nodos || []).map((n: any) => ({
+          ...n,
+          w: n.w || 140,
+          h: n.h || 80,
+          icon: getNodeIcon(n.tipo)
+        }))
+        setNodos(nodosProcesados)
+        setConexiones(data.conexiones || [])
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          console.error("Error en topología:", err)
+          setError('No se pudo cargar la topología de la planta.')
+        }
+      })
+      .finally(() => {
+        setCargando(false)
+      })
+
+    return () => controller.abort()
+  }, [apiBase])
+
+  // --- Lógica de Interfaz ---
   const selectedNode = useMemo(
-    () => NODES.find(node => node.id === selectedMachine) ?? null,
-    [selectedMachine],
+    () => nodos.find(node => String(node.nodo_id) === String(selectedMachine)) ?? null,
+    [selectedMachine, nodos],
   )
 
-  const getNode = (node: MachineNode) => {
-    const machine = MACHINES[node.id as keyof typeof MACHINES]
-    if (!machine) return node
-    return {
-      ...node,
-      name: machine.name,
-      icon: machine.icon,
-      cat: machine.cat,
-      status: machine.status as MachineNode['status'],
-    }
-  }
+  const handleNodeClick = (node: BackendNode, e: React.MouseEvent) => {
+    if (isDragging) return // Evita seleccionar si el usuario solo estaba arrastrando la pantalla
 
-  const handleNodeClick = (node: MachineNode, e: React.MouseEvent) => {
     const rect = containerRef.current?.getBoundingClientRect()
     const cx = e.clientX - (rect?.left || 0)
     const cy = e.clientY - (rect?.top || 0)
 
-    setSelectedMachine(node.id)
+    setSelectedMachine(String(node.nodo_id))
     setTooltip({ visible: true, x: cx, y: cy, node })
   }
 
-  const goToDebug = (nodeId?: string) => {
-    const machineId = nodeId ?? tooltip.node?.id ?? selectedMachine
+  const goToDebug = (nodeId?: number) => {
+    const machineId = nodeId ? String(nodeId) : selectedMachine
     if (machineId) setSelectedMachine(machineId)
     navigate('/debug')
   }
-
 
   const zoom = (factor: number) => {
     const cx = viewBox.x + viewBox.w / 2
@@ -88,125 +143,215 @@ const PlantTopology: React.FC = () => {
     setViewBox({ x: cx - nw / 2, y: cy - nh / 2, w: nw, h: nh })
   }
 
-  const reset = () => setViewBox(INITIAL_VB)
+  const reset = () => {
+    setViewBox(INITIAL_VB)
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollLeft = 0
+      scrollContainerRef.current.scrollTop = 0
+    }
+  }
 
+  // --- Lógica de Arrastre del Mouse ---
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const targetElement = e.target as HTMLElement
+    if (
+      targetElement.tagName === 'svg' || 
+      targetElement.id === 'topo-lines' || 
+      targetElement.tagName === 'line' ||
+      targetElement.getAttribute('data-canvas') === 'true'
+    ) {
+      setIsDragging(true)
+      setStartX(e.pageX - (scrollContainerRef.current?.offsetLeft || 0))
+      setStartY(e.pageY - (scrollContainerRef.current?.offsetTop || 0))
+      setScrollLeft(scrollContainerRef.current?.scrollLeft || 0)
+      setScrollTop(scrollContainerRef.current?.scrollTop || 0)
+    }
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !scrollContainerRef.current) return
+    e.preventDefault()
+    
+    const x = e.pageX - scrollContainerRef.current.offsetLeft
+    const y = e.pageY - scrollContainerRef.current.offsetTop
+    const walkX = (x - startX) * 1.5 
+    const walkY = (y - startY) * 1.5 
+    
+    scrollContainerRef.current.scrollLeft = scrollLeft - walkX
+    scrollContainerRef.current.scrollTop = scrollTop - walkY
+  }
+
+  const handleMouseUp = () => setIsDragging(false)
   const closeTooltip = () => setTooltip({ visible: false, x: 0, y: 0 })
 
+  // --- Renderizados Condicionales ---
+  if (cargando) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-[var(--ink3)] gap-4">
+        <div className="w-10 h-10 rounded-full border-4 border-[var(--border)] border-t-[var(--blue)] animate-spin"></div>
+        <div className="font-medium text-sm">{t.common.loading || 'Cargando topología...'}</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-[var(--ink3)] gap-4">
+        <div className="text-4xl">⚠️</div>
+        <div className="text-[#ef4444] font-medium">{error}</div>
+        <button className="btn btn-outline mt-2" onClick={() => window.location.reload()}>
+          {t.common.refresh || 'Reintentar'}
+        </button>
+      </div>
+    )
+  }
+
   return (
-    <div className="topology-body h-full" ref={containerRef}>
-      <div className="topology-toolbar">
+    <div className="topology-body h-full flex flex-col" ref={containerRef}>
+      {/* Barra de herramientas superior */}
+      <div className="topology-toolbar flex justify-between items-center p-4 shrink-0">
         <div>
-          <div className="topo-title">{t.topology.title}</div>
+          <div className="topo-title font-bold text-xl">{t.topology.title}</div>
           <div style={{ marginTop: 4, fontSize: 12, color: 'var(--ink3)' }}>
-            {selectedNode ? `${t.topology.selectedMachine}: ${selectedNode.name}` : t.topology.noMachineSelected}
+            {selectedNode ? `${t.topology.selectedMachine}: ${selectedNode.nombre}` : t.topology.noMachineSelected}
           </div>
         </div>
-        <div className="topo-btns">
-          <button className="btn btn-outline btn-sm" onClick={() => zoom(1.2)} aria-label={t.topology.zoomIn}>
+        <div className="topo-btns flex gap-2">
+          <button className="btn btn-outline btn-sm" onClick={() => zoom(1.2)}>
             ＋ {t.topology.zoomIn}
           </button>
-          <button className="btn btn-outline btn-sm" onClick={() => zoom(0.8)} aria-label={t.topology.zoomOut}>
+          <button className="btn btn-outline btn-sm" onClick={() => zoom(0.8)}>
             － {t.topology.zoomOut}
           </button>
-          <button className="btn btn-outline btn-sm" onClick={reset} aria-label={t.topology.resetView}>
+          <button className="btn btn-outline btn-sm" onClick={reset}>
             {t.topology.resetView}
           </button>
         </div>
       </div>
 
-      <div className="topo-canvas shadow-soft" style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-        <svg
-          id="topo-svg"
-          viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
-          preserveAspectRatio="xMidYMid meet"
-          style={{ width: '100%', height: '100%' }}
-        >
-          <g id="topo-lines" stroke="#cfcfcf" strokeWidth={2} fill="none">
-            <line x1="200" y1="160" x2="400" y2="120" strokeDasharray="6,3" opacity="0.7" />
-            <line x1="400" y1="120" x2="620" y2="150" opacity="0.7" />
-            <line x1="400" y1="120" x2="390" y2="320" opacity="0.7" />
-            <line x1="200" y1="160" x2="390" y2="320" strokeDasharray="6,3" opacity="0.5" />
-            <line x1="620" y1="150" x2="680" y2="330" opacity="0.5" />
-          </g>
-
-          {NODES.map(baseNode => {
-            const node = getNode(baseNode)
-            const isSelected = selectedMachine === node.id
-
-            return (
-              <g
-                key={node.id}
-                transform={`translate(${node.x},${node.y})`}
-                style={{ cursor: 'pointer' }}
-                onClick={e => handleNodeClick(node, e)}
-              >
-                <rect
-                  x={0}
-                  y={0}
-                  width={node.w}
-                  height={node.h}
-                  rx={12}
-                  fill="var(--surface)"
-                  stroke={isSelected ? 'var(--accent)' : node.stroke}
-                  strokeWidth={isSelected ? 4 : 2}
-                />
-                <text x={node.w / 2} y={28} textAnchor="middle" fontSize={22}>
-                  {node.icon}
-                </text>
-                <text x={node.w / 2} y={50} textAnchor="middle" fontSize={11} fill="var(--ink)" fontWeight={600}>
-                  {node.name}
-                </text>
-                <text x={node.w / 2} y={65} textAnchor="middle" fontSize={10} fill="var(--ink3)">
-                  {node.cat}
-                </text>
-                <circle cx={node.w - 14} cy={14} r={7} fill={statusColor(node.status)} />
-              </g>
-            )
-          })}
-        </svg>
-
-        {tooltip.visible && tooltip.node && (
-          <div
-            style={{
-              position: 'absolute',
-              left: Math.min(tooltip.x + 12, 640),
-              top: Math.min(tooltip.y + 12, 360),
-              zIndex: 60,
-              minWidth: 240,
-              maxWidth: 320,
-              background: 'var(--surface)',
-              color: 'var(--ink)',
-              border: '1px solid var(--border)',
-              borderRadius: 14,
-              boxShadow: 'var(--shadow-lg)',
-              padding: 14,
-              backdropFilter: 'blur(10px)',
-            }}
+      {/* Contenedor del lienzo con scroll oculto y funcionalidad de arrastre */}
+      <div 
+        ref={scrollContainerRef}
+        className="topo-canvas shadow-soft flex-1 relative m-4 mt-0 rounded-xl bg-[var(--surface)] border border-[var(--border)]" 
+        style={{ 
+          minHeight: 0, 
+          overflow: 'auto',
+          cursor: isDragging ? 'grabbing' : 'grab' 
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        <div data-canvas="true" style={{ width: '1600px', height: '1200px', position: 'relative' }}>
+          <svg
+            id="topo-svg"
+            viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
+            preserveAspectRatio="xMidYMid meet"
+            className="w-full h-full select-none"
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <div style={{ fontSize: 20 }}>{tooltip.node.icon}</div>
-              <div style={{ fontWeight: 700 }}>{tooltip.node.name}</div>
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--ink3)' }}>
-              {tooltip.node.cat} · {tooltip.node.status}
-            </div>
+            {/* 1. Renderizado de Conexiones (Líneas) */}
+            <g id="topo-lines" stroke="var(--ink3)" strokeWidth={2} fill="none" opacity={0.6}>
+              {conexiones.map(conn => {
+                const origen = nodos.find(n => n.nodo_id === conn.nodo_origen_id)
+                const destino = nodos.find(n => n.nodo_id === conn.nodo_destino_id)
+                
+                if (!origen || !destino) return null
+
+                const x1 = origen.position_x + (origen.w || 140) / 2
+                const y1 = origen.position_y + (origen.h || 80) / 2
+                const x2 = destino.position_x + (destino.w || 140) / 2
+                const y2 = destino.position_y + (destino.h || 80) / 2
+
+                return (
+                  <line 
+                    key={conn.conexion_id} 
+                    x1={x1} 
+                    y1={y1} 
+                    x2={x2} 
+                    y2={y2} 
+                    strokeDasharray={conn.tipo === 'data' ? '6,3' : undefined}
+                    className="transition-all duration-300"
+                  />
+                )
+              })}
+            </g>
+
+            {/* 2. Renderizado de Nodos (Máquinas/Sensores) */}
+            {nodos.map(node => {
+              const isSelected = selectedMachine === String(node.nodo_id)
+              const width = node.w || 140
+              const height = node.h || 80
+
+              return (
+                <g
+                  key={node.nodo_id}
+                  transform={`translate(${node.position_x},${node.position_y})`}
+                  style={{ cursor: 'pointer' }}
+                  onClick={e => handleNodeClick(node, e)}
+                >
+                  {/* Caja del nodo */}
+                  <rect
+                    x={0}
+                    y={0}
+                    width={width}
+                    height={height}
+                    rx={12}
+                    fill="var(--surface2)"
+                    stroke={isSelected ? 'var(--blue)' : 'var(--border2)'}
+                    strokeWidth={isSelected ? 3 : 1.5}
+                    className="transition-colors duration-200"
+                  />
+                  {/* Icono central */}
+                  <text x={width / 2} y={26} textAnchor="middle" fontSize={20}>
+                    {node.icon}
+                  </text>
+                  {/* Nombre del equipo */}
+                  <text x={width / 2} y={48} textAnchor="middle" fontSize={11} fill="var(--ink)" fontWeight={600}>
+                    {node.nombre}
+                  </text>
+                  {/* Tipo (Categoría) */}
+                  <text x={width / 2} y={64} textAnchor="middle" fontSize={9} fill="var(--ink3)">
+                    {node.tipo.toUpperCase()}
+                  </text>
+                  {/* Indicador de estado */}
+                  <circle cx={width - 14} cy={14} r={6} fill={getStatusColor(node.estado)} />
+                </g>
+              )
+            })}
+          </svg>
+
+          {/* 3. Renderizado del Tooltip de Información */}
+          {tooltip.visible && tooltip.node && (
             <div
+              className="absolute p-4 rounded-xl border bg-[var(--surface)] text-[var(--ink)] shadow-[var(--shadow-lg)]"
               style={{
-                marginTop: 12,
-                display: 'grid',
-                gap: 8,
-                gridTemplateColumns: '1fr',
+                // Evita que el tooltip se salga de la pantalla (Bounding Box constraints)
+                left: Math.min(tooltip.x + 12, (containerRef.current?.clientWidth || 800) - 260),
+                top: Math.min(tooltip.y + 12, (containerRef.current?.clientHeight || 600) - 150),
+                zIndex: 60,
+                minWidth: 240,
+                borderColor: 'var(--border2)',
               }}
             >
-              <button className="btn btn-sm btn-primary" onClick={() => goToDebug(tooltip.node?.id)}>
-                {t.topology.goToDebug}
-              </button>
-              <button className="btn btn-sm btn-outline" onClick={closeTooltip}>
-                {t.topology.close}
-              </button>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="text-xl">{tooltip.node.icon}</div>
+                <div className="font-bold text-sm">{tooltip.node.nombre}</div>
+              </div>
+              <div className="text-xs text-[var(--ink3)] mb-4">
+                Categoría: {tooltip.node.tipo.toUpperCase()} · Estado: {tooltip.node.estado}
+              </div>
+              <div className="grid gap-2 grid-cols-1">
+                <button className="btn btn-sm btn-primary" onClick={() => goToDebug(tooltip.node?.nodo_id)}>
+                  {t.topology.goToDebug}
+                </button>
+                <button className="btn btn-sm btn-outline" onClick={closeTooltip}>
+                  {t.topology.close}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
