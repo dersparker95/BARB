@@ -116,7 +116,9 @@ app = FastAPI(title="BARB Core API", version="3.1.0")
 origins = [
     "http://localhost",
     "http://localhost:5173",
-    "https://barb-bn999tb7q-tvasquezms-projects.vercel.app"
+    "https://barb-rose.vercel.app",
+    "https://barb-tvasquezms-projects.vercel.app",
+    "https://barb-git-integracion-final-tvasquezms-projects.vercel.app"
 ]
 app.add_middleware(
     CORSMiddleware,
