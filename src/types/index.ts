@@ -1,35 +1,58 @@
-export type Role = 'gerente' | 'admin' | 'tecnico'
+// 🔥 BLINDAJE: Agregados los roles de Login y el truco de autocompletado
+export type Role = 'gerente' | 'admin' | 'tecnico' | 'operador' | 'engineer' | 'supervisor' | (string & {})
 
 export interface User {
-  id: string
+  id: string | number // 🛠️ SQL envía números (1, 2), React a veces usa strings ('1')
   name: string
   role: Role
   token?: string
 }
 
 export interface Machine {
-  id: string
+  id: string | number
   name: string
-  status: 'ok' | 'warning' | 'alarm'
+  // 🔥 FIX: Mantenemos el autocompletado de los estados conocidos
+  status: 'ok' | 'warning' | 'alarm' | 'operativo' | 'mantenimiento' | 'falla' | (string & {})
   location?: string
 }
 
 export interface WorkOrder {
-  id: string
+  id: string | number
   title: string
   description?: string
-  machineId?: string
-  status: 'open' | 'in_progress' | 'done' | 'closed'
-  priority?: 'low' | 'medium' | 'high'
+  machineId?: string | number
+  machine?: string 
+  machineName?: string // 🛠️ Integrado desde el mapeo del Dashboard
+  
+  // 🔥 NORMALIZACIÓN: Dejamos solo los estados en minúsculas. Si el backend envía mayúsculas, el UI lo normaliza.
+  status: 'open' | 'in_progress' | 'done' | 'closed' | (string & {})
+  priority?: 'low' | 'medium' | 'high' | (string & {})
+  
   createdAt: string
   closedAt?: string | null
   createdBy?: string
+  technician?: string 
+  
+  // 🛠️ Integrado desde el mapeo del Dashboard para evitar "any" en la tabla
+  durationReal?: number 
+  discipline?: string 
+  maintenanceType?: string 
+  costoEstimado?: number 
+  costoReal?: number 
+  hasBarbAi?: boolean 
+}
+
+export interface SourceHit {
+  documentName?: string
+  pageNumber?: number | string
+  excerpt?: string
 }
 
 export interface Message {
-  role: 'user' | 'assistant' | 'system' | string
+  role: 'user' | 'assistant' | 'system' | 'bot' | (string & {})
   content: string
   timestamp?: number
+  sources?: SourceHit[] 
 }
 
 export type DebugMessagesByMachine = Record<string, Message[]>
@@ -70,12 +93,10 @@ export interface AppContextValue extends AppState {
   setApiBase: (u: string) => void
   setLmBase: (u: string) => void
   setLoading: (l: boolean) => void
-}
-
-export interface SourceHit {
-  documentName?: string
-  pageNumber?: number
-  excerpt?: string
+  // 🔥 FIX: Actualizado a SourceHit[] para hacer match perfecto con la lógica RAG
+  appendToLastDocMessage?: (chunk: string, sources?: SourceHit[]) => void 
+  login?: (params: { email: string; password: string }) => Promise<User>
+  logout?: () => Promise<void>
 }
 
 export interface DocApiResponse {
@@ -93,7 +114,7 @@ export interface DebugApiResponse {
 
 export interface Report {
   reportId: string
-  machineId?: string
+  machineId?: string | number
   title: string
   summary: string
   createdAt: string
@@ -102,7 +123,7 @@ export interface Report {
 
 export interface DebugSession {
   sessionId: string
-  machineId?: string
+  machineId?: string | number
   startedAt: string
   endedAt?: string
   technician?: string
@@ -111,7 +132,7 @@ export interface DebugSession {
 
 export type HistoryEvent = {
   id: string
-  type: 'workorder' | 'report' | 'debug'
+  type: 'workorder' | 'report' | 'debug' | (string & {})
   date: string
   title: string
   actor?: string

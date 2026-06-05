@@ -1,50 +1,94 @@
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '../context/AppContext'
-import MACHINES from '../data/machines'
 import { useNavigate } from 'react-router-dom'
-import { seedDemoTickets } from '../services/workOrders'
+import { createApiService } from '../services/api'
+import { getTranslations } from '../utils/i18n'
 
-type MachineNode = {
-  id: string
-  name: string
-  x: number
-  y: number
-  w: number
-  h: number
-  icon: string
-  cat: string
-  status: 'operational' | 'warning' | 'maintenance' | 'offline'
-  stroke: string
+type TopologyNode = {
+  nodo_id: number
+  maquina_id: number
+  nombre_visual: string
+  pos_x: number
+  pos_y: number
+  icono: string
+  tipo: string
+  estado_actual: string
 }
 
-const NODES: MachineNode[] = [
-  { id: 'motor-d1', name: 'Motor Drive D1', x: 140, y: 100, w: 120, h: 80, icon: '⚡', cat: 'Electrical', status: 'maintenance', stroke: '#a06a00' },
-  { id: 'cnc-c2', name: 'CNC Mill C2',    x: 338, y: 58,  w: 120, h: 80, icon: '⚙️', cat: 'Mechanical', status: 'operational', stroke: '#1a5fa8' },
-  { id: 'comp-a1', name: 'Compressor A1',  x: 558, y: 90,  w: 124, h: 80, icon: '💨', cat: 'Pneumatic', status: 'operational', stroke: '#5e3db3' },
-  { id: 'plc',     name: 'PLC Controller', x: 320, y: 265, w: 120, h: 80, icon: '🤖', cat: 'Automation', status: 'operational', stroke: '#1a7a50' },
-  { id: 'press-b3',name: 'Hydraulic Press B3', x: 618, y: 270, w: 132, h: 80, icon: '💧', cat: 'Hydraulic', status: 'warning', stroke: '#0e7490' },
-]
+type TopologyEdge = {
+  conexion_id: number
+  origen_nodo_id: number
+  destino_nodo_id: number
+  tipo_relacion: string
+}
 
 const INITIAL_VB = { x: 0, y: 0, w: 900, h: 480 }
+const NODE_W = 130
+const NODE_H = 85
 
 const PlantTopology: React.FC = () => {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const { setSelectedMachine } = useAppContext()
+  const { setSelectedMachine, lang } = useAppContext()
   const navigate = useNavigate()
+  
+  // 🔥 BLINDAJE: Traducciones unificadas
+  const t = useMemo(() => getTranslations(lang), [lang])
+  
   const [viewBox, setViewBox] = useState(INITIAL_VB)
-  const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; node?: MachineNode }>({ visible: false, x: 0, y: 0 })
+  const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; node?: TopologyNode }>({ visible: false, x: 0, y: 0 })
+  
+  const [nodes, setNodes] = useState<TopologyNode[]>([])
+  const [edges, setEdges] = useState<TopologyEdge[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const handleNodeClick = (node: MachineNode, e: React.MouseEvent) => {
-    // position tooltip relative to container
+  useEffect(() => {
+    // 🛡️ AbortController para evitar fugas de memoria
+    const controller = new AbortController()
+    
+    async function fetchTopology() {
+      try {
+        const api = createApiService()
+        // NOTA: Asegúrate de que tu servicio API soporte pasar el signal: controller.signal
+        const data = await api.topologia() 
+        if (!controller.signal.aborted && data) {
+          setNodes(Array.isArray(data.nodos) ? data.nodos : [])
+          setEdges(Array.isArray(data.conexiones) ? data.conexiones : [])
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError') console.error("Error cargando topología:", error)
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }
+    
+    void fetchTopology()
+    return () => controller.abort()
+  }, [])
+
+  // 🔥 OPTIMIZACIÓN EXTREMA: Diccionario para coordenadas O(1). 
+  // Evita que el navegador se congele calculando posiciones.
+  const nodesDict = useMemo(() => {
+    const dict = new Map<number, {x: number, y: number}>()
+    nodes.forEach(n => {
+      dict.set(n.nodo_id, {
+        x: (n.pos_x || 0) + NODE_W / 2,
+        y: (n.pos_y || 0) + NODE_H / 2
+      })
+    })
+    return dict
+  }, [nodes])
+
+  const handleNodeClick = (node: TopologyNode, e: React.MouseEvent) => {
     const rect = containerRef.current?.getBoundingClientRect()
+    // Ajuste seguro de coordenadas
     const cx = e.clientX - (rect?.left || 0)
     const cy = e.clientY - (rect?.top || 0)
     setTooltip({ visible: true, x: cx, y: cy, node })
   }
 
-  const goToDebug = (nodeId?: string) => {
-    if (nodeId) setSelectedMachine(nodeId)
+  const goToDebug = (machineId?: number) => {
+    if (machineId) setSelectedMachine(String(machineId))
     navigate('/debug')
   }
 
@@ -58,62 +102,91 @@ const PlantTopology: React.FC = () => {
 
   const reset = () => setViewBox(INITIAL_VB)
 
-  // Simula lectura de OTs para sincronizar el estado visual de la máquina
-  const tickets = seedDemoTickets()
-  const getMachineStatus = (machineId: string, defaultStatus: string) => {
-    const active = tickets.filter(t => t.machineId === machineId && ['open', 'in_progress'].includes(t.status as string))
-    if (active.length === 0) return 'operational'
-    if (active.some(t => t.priority === 'high')) return 'error'
-    if (active.some(t => t.status === 'in_progress')) return 'maintenance'
-    return 'warning'
+  // Función segura para el color basada en minúsculas y coincidencias
+  const getStatusColor = (status: string) => {
+    const s = String(status || '').toLowerCase()
+    if (s.includes('operativo') || s.includes('ok') || s === 'open') return '#10B981'
+    if (s.includes('alerta') || s.includes('warning') || s.includes('mantenimiento')) return '#F59E0B'
+    if (s.includes('falla') || s.includes('error') || s.includes('closed')) return '#ef4444'
+    return '#64748B'
   }
-  
-  const statusColors: Record<string, string> = { operational: '#10B981', warning: '#F59E0B', maintenance: '#3B82F6', error: '#ef4444' }
+
+  if (loading) {
+    return <div className="p-4 text-center">{t.common?.loading || 'Cargando Topología...'}</div>
+  }
 
   return (
-    <div className="w-full" ref={containerRef}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-lg font-semibold">Plant Topology</div>
+    <div className="w-full relative h-full flex flex-col" ref={containerRef}>
+      <div className="flex items-center justify-between mb-3 shrink-0">
+        <div className="text-lg font-semibold">{t.topology?.title || 'Topología de Planta (En Vivo)'}</div>
         <div className="flex gap-2">
-          <button className="btn btn-outline btn-sm" onClick={() => zoom(1.2)}>＋ Zoom In</button>
-          <button className="btn btn-outline btn-sm" onClick={() => zoom(0.8)}>－ Zoom Out</button>
-          <button className="btn btn-outline btn-sm" onClick={reset}>Reset View</button>
+          <button className="btn btn-outline btn-sm" onClick={() => zoom(1.2)}>＋ {t.topology?.zoomIn || 'Zoom In'}</button>
+          <button className="btn btn-outline btn-sm" onClick={() => zoom(0.8)}>－ {t.topology?.zoomOut || 'Zoom Out'}</button>
+          <button className="btn btn-outline btn-sm" onClick={reset}>{t.topology?.resetView || 'Reset View'}</button>
         </div>
       </div>
 
-      <div style={{ height: '60vh', borderRadius: 12, overflow: 'hidden' }} className="topo-canvas bg-neutral dark:bg-primary border border-secondary shadow-soft">
+      <div style={{ minHeight: 0, borderRadius: 12, overflow: 'hidden' }} className="topo-canvas flex-1 bg-[var(--surface)] border border-[var(--border)] shadow-soft relative">
         <svg ref={svgRef} id="topo-svg" viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: '100%' }}>
-          {/* connection lines (kept static as in original) */}
-          <g id="topo-lines" stroke="currentColor" className="text-secondary opacity-30" strokeWidth={2} fill="none">
-            <line x1="200" y1="160" x2="400" y2="120" strokeDasharray="6,3" opacity="0.7" />
-            <line x1="400" y1="120" x2="620" y2="150" opacity="0.7" />
-            <line x1="400" y1="120" x2="390" y2="320" opacity="0.7" />
-            <line x1="200" y1="160" x2="390" y2="320" strokeDasharray="6,3" opacity="0.5" />
-            <line x1="620" y1="150" x2="680" y2="330" opacity="0.5" />
+          
+          <g id="topo-lines" stroke="currentColor" className="text-[var(--ink3)] opacity-40" strokeWidth={2} fill="none">
+            {edges.map(edge => {
+              // 🔥 Extracción O(1) instantánea
+              const start = nodesDict.get(edge.origen_nodo_id)
+              const end = nodesDict.get(edge.destino_nodo_id)
+              
+              if (!start || !end) return null
+
+              const strokeDash = edge.tipo_relacion === 'energia' ? "6,3" : ""
+              return (
+                <line 
+                  key={edge.conexion_id} 
+                  x1={start.x} y1={start.y} 
+                  x2={end.x} y2={end.y} 
+                  strokeDasharray={strokeDash} 
+                  className="transition-all duration-300"
+                />
+              )
+            })}
           </g>
 
-          {NODES.map(n => {
-            const m = MACHINES[n.id]
-            const dynamicStatus = getMachineStatus(n.id, n.status)
-            const nodeColor = statusColors[dynamicStatus] || '#64748B'
-            const node = m ? { ...n, name: m.name, icon: m.icon, cat: m.cat, status: dynamicStatus } : { ...n, status: dynamicStatus }
+          {nodes.map(n => {
+            const nodeColor = getStatusColor(n.estado_actual)
             return (
-            <g key={n.id} transform={`translate(${n.x},${n.y})`} className="topo-node" style={{ cursor: 'pointer' }} onClick={(e) => handleNodeClick(n, e)}>
-              <rect x={0} y={0} width={n.w} height={n.h} rx={12} className="fill-neutral dark:fill-primary" stroke={nodeColor} strokeWidth={2} />
-              <text x={n.w / 2} y={28} textAnchor="middle" fontSize={22}>{node.icon}</text>
-              <text x={n.w / 2} y={50} textAnchor="middle" fontSize={11} className="fill-primary dark:fill-neutral" fontWeight={600}>{node.name}</text>
-              <text x={n.w / 2} y={65} textAnchor="middle" fontSize={10} className="fill-secondary">{node.cat}</text>
-              <circle cx={n.w - 14} cy={14} r={7} fill={nodeColor} />
-            </g>
-          )})}
+              <g key={n.nodo_id} transform={`translate(${n.pos_x || 0},${n.pos_y || 0})`} className="topo-node transition-transform" style={{ cursor: 'pointer' }} onClick={(e) => handleNodeClick(n, e)}>
+                <rect x={0} y={0} width={NODE_W} height={NODE_H} rx={12} fill="var(--surface2)" stroke={nodeColor} strokeWidth={2} />
+                <text x={NODE_W / 2} y={28} textAnchor="middle" fontSize={22}>{n.icono}</text>
+                <text x={NODE_W / 2} y={50} textAnchor="middle" fontSize={11} fill="var(--ink1)" fontWeight={600}>{n.nombre_visual || 'Sin nombre'}</text>
+                <text x={NODE_W / 2} y={65} textAnchor="middle" fontSize={10} fill="var(--ink3)">{n.tipo || 'Desconocido'}</text>
+                <circle cx={NODE_W - 14} cy={14} r={7} fill={nodeColor} />
+              </g>
+            )
+          })}
         </svg>
+
         {tooltip.visible && tooltip.node && (
-          <div style={{ position: 'absolute', left: tooltip.x + 12, top: tooltip.y + 12, zIndex: 60 }} className="bg-white dark:bg-gray-800 p-3 rounded shadow">
-            <div className="font-semibold">{tooltip.node.name}</div>
-            <div className="text-sm text-gray-500">{tooltip.node.cat} · {tooltip.node.status}</div>
-            <div className="mt-2 flex gap-2">
-              <button className="px-2 py-1 bg-blue-600 text-white rounded text-sm" onClick={() => goToDebug(tooltip.node?.id)}>Go to Debug</button>
-              <button className="px-2 py-1 bg-transparent text-sm" onClick={() => setTooltip({ visible: false, x: 0, y: 0 })}>Close</button>
+          <div 
+            style={{ 
+              position: 'absolute', 
+              // Bloqueamos el tooltip para que no se salga de la pantalla por la derecha/abajo
+              left: Math.min(tooltip.x + 12, (containerRef.current?.clientWidth || 800) - 220), 
+              top: Math.min(tooltip.y + 12, (containerRef.current?.clientHeight || 600) - 100), 
+              zIndex: 60,
+              minWidth: 200 
+            }} 
+            className="bg-[var(--surface)] border border-[var(--border)] p-3 rounded-xl shadow-lg"
+          >
+            <div className="font-semibold text-[var(--ink1)]">{tooltip.node.nombre_visual}</div>
+            <div className="text-xs text-[var(--ink3)] mt-1 mb-3">
+              {tooltip.node.tipo} · {t.statuses?.[tooltip.node.estado_actual?.toLowerCase()] || tooltip.node.estado_actual}
+            </div>
+            <div className="flex gap-2">
+              <button className="btn btn-sm btn-primary py-1 px-3" onClick={() => goToDebug(tooltip.node?.maquina_id)}>
+                {t.topology?.goToDebug || 'Diagnóstico IA'}
+              </button>
+              <button className="btn btn-sm btn-outline py-1 px-3" onClick={() => setTooltip({ visible: false, x: 0, y: 0 })}>
+                {t.topology?.close || 'Cerrar'}
+              </button>
             </div>
           </div>
         )}

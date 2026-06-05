@@ -28,4 +28,20 @@ export default defineConfig({
       },
     },
   },
+  // 🔥 Mantenemos solo el Chunk Splitting (que es lo que realmente importa para que cargue rápido)
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('recharts')) return 'vendor-charts';
+            if (id.includes('xlsx')) return 'vendor-excel';
+            if (id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('react/') || id.includes('react-dom/')) return 'vendor-react';
+            return 'vendor-core'; 
+          }
+        }
+      }
+    }
+  }
 })

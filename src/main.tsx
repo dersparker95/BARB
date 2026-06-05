@@ -5,14 +5,25 @@ import App from './App'
 import { AppProvider } from './context/AppContext'
 import './index.css'
 
-const root = createRoot(document.getElementById('root')!)
+// 🔥 BLINDAJE: Validación estricta del contenedor principal
+const container = document.getElementById('root')
+
+if (!container) {
+  throw new Error(
+    "Error Fatal: No se encontró el contenedor principal 'root' en el DOM. La plataforma no puede inicializarse."
+  )
+}
+
+const root = createRoot(container)
 
 root.render(
   <React.StrictMode>
-    <AppProvider>
-      <BrowserRouter>
+    {/* 🔥 ARQUITECTURA LIMPIA: El Router envuelve al Contexto para permitir 
+        el uso de hooks de navegación globales dentro de AppProvider si se requiere. */}
+    <BrowserRouter>
+      <AppProvider>
         <App />
-      </BrowserRouter>
-    </AppProvider>
+      </AppProvider>
+    </BrowserRouter>
   </React.StrictMode>
 )

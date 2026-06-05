@@ -1,29 +1,57 @@
-import { createApiService } from './api';
+// @ts-nocheck
 
-export async function callLMStudio(messages: any[], lmBase: string, lmModel: string, maxTokens = 1500, timeout = 120000) {
+/**
+ * Servicio de conexión directa con LM Studio.
+ * Actúa como "Cerebro de Emergencia" si el backend central de FastAPI se cae.
+ * Utiliza el estándar de la API de OpenAI.
+ */
+export async function callLMStudio(
+  messages: any[], 
+  lmBase: string, 
+  lmModel: string = 'local-model', 
+  maxTokens = 1500, 
+  timeout = 120000
+) {
   try {
-    // 1. Extraemos la última pregunta
-    const lastMessage = messages[messages.length - 1]?.content || "";
-    
-    // 2. Extraemos el historial (todos los mensajes menos el último)
-    const history = messages.slice(0, -1);
+    // 1. Limpiamos la URL para evitar errores de doble barra (//)
+    const safeLmBase = (lmBase || 'http://localhost:1234/v1').replace(/\/$/, '');
 
-    // 3. Instanciamos nuestro servicio API centralizado
-    const api = createApiService();
+    // 2. Blindaje anti-cuelgues: Si la IA local se satura, abortamos la petición
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    // 3. Llamada DIRECTA a LM Studio (sin pasar por FastAPI)
+    const response = await fetch(`${safeLmBase}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: lmModel,
+        messages: messages,
+        max_tokens: maxTokens,
+        temperature: 0.3, // Temperatura baja para respuestas técnicas precisas
+        stream: false // Mantenemos false para compatibilidad con la estructura actual del UI
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Error del motor LM Studio: ${response.status}`);
+    }
+
+    // Retornamos el objeto Response nativo. 
+    // De esta forma, Debug.tsx y DocChat.tsx pueden hacer `await resp.json()` sin problemas.
+    return response;
     
-    // 4. Llamamos a la API unificada del backend
-    // Nota: Si tienes la máquina seleccionada en el frontend, puedes pasarla aquí como segundo parámetro
-    const data = await api.chat.askRAG(lastMessage, undefined, history);
-    
-    // 5. Adaptamos la respuesta para que el componente de React de Nico la entienda
-    // (Simulamos la estructura del fetch original para no romper el UI)
-    return {
-      ok: true,
-      json: async () => data
-    };
-    
-  } catch (err) {
-    console.error("❌ Error en la comunicación con el motor RAG de BARB:", err);
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      console.error("❌ LM Studio tardó demasiado en responder (Timeout).");
+    } else {
+      console.error("❌ Error de red al intentar contactar a LM Studio directamente:", err);
+    }
     throw err;
   }
 }

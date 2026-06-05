@@ -25,7 +25,7 @@ services:
     ports:
       - "9000:9000"
     environment:
-      - DATABASE_URL=postgresql://barb_admin:barb_password123@db:5432/barb_database
+      - DATABASE_URL=postgresql+psycopg2://barb_db_user:I50BKrmPxZXOVyH38Sv2ExCLxJ11IkAD@dpg-d8dkl23bc2fs73enmu90-a.ohio-postgres.render.com/barb_db
       - REDIS_URL=redis://redis:6379/0
       - UPLOAD_DIR=/app/uploads
     volumes:

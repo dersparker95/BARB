@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Spinner from '../components/Spinner'
 import { useAppContext } from '../context/AppContext'
-import createApiService from '../services/api'
+import { createApiService } from '../services/api'
 import { Role } from '../types'
 import { getTranslations } from '../utils/i18n'
 
@@ -15,7 +15,8 @@ const Login: React.FC = () => {
   const { setUser, apiBase, setLoading, loading, dark, setDark, lang } = useAppContext()
   const navigate = useNavigate()
 
-  const api = createApiService(apiBase)
+  // 🔥 OPTIMIZACIÓN: Memorizamos la instancia de la API para que no se recree al teclear
+  const api = useMemo(() => createApiService((apiBase || 'http://localhost:9000/api').replace(/\/$/, '')), [apiBase])
   const t = useMemo(() => getTranslations(lang), [lang])
 
   useEffect(() => {
@@ -55,7 +56,9 @@ const Login: React.FC = () => {
         token: resp.token,
       })
 
-      navigate(destByRole[resp.user.role] || '/menu', { replace: true })
+      // 🔥 BLINDAJE: Fallback seguro si el rol no existe en el diccionario
+      const destination = destByRole[String(resp.user.role).toLowerCase()] || '/menu'
+      navigate(destination, { replace: true })
     } catch {
       setUser(null)
       setError(true)
@@ -65,15 +68,21 @@ const Login: React.FC = () => {
   }
 
   const isSubmitDisabled = loading || !email || !password
+  
+  // Variables seguras para internacionalización
+  const connectingText = t.common?.connecting || 'Conectando...'
+  const hidePassText = t.login?.hidePassword || 'Ocultar contraseña'
+  const showPassText = t.login?.showPassword || 'Mostrar contraseña'
 
   return (
-    <div className="login-screen">
-      <div className="login-theme-toggle">
+    // 🔥 FIX MÓVIL: Aseguramos el comportamiento del viewport dinámico
+    <div className="login-screen min-h-[100dvh] flex flex-col items-center justify-center">
+      <div className="login-theme-toggle absolute top-4 right-4">
         <button
           className="icon-btn"
           onClick={() => setDark(!dark)}
-          title={t.login.themeToggle}
-          aria-label={t.login.themeToggle}
+          title={t.login?.themeToggle || 'Cambiar tema'}
+          aria-label={t.login?.themeToggle || 'Cambiar tema'}
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
           type="button"
         >
@@ -83,28 +92,33 @@ const Login: React.FC = () => {
         </button>
       </div>
 
-      <div className="login-card">
-        <div className="login-icon">🏭</div>
-        <div className="login-title">{t.login.title}</div>
-        <div className="login-sub">{t.login.subtitle}</div>
+      <main className="login-card">
+        <div className="login-icon" aria-hidden="true">🏭</div>
+        <h1 className="login-title">{t.login?.title || 'BARB Platform'}</h1>
+        <div className="login-sub">{t.login?.subtitle || 'Inicia sesión para continuar'}</div>
 
         <form onSubmit={submit}>
           <div className="form-field">
+            <label htmlFor="emailInput" className="sr-only">{t.login?.usernamePlaceholder || 'Usuario'}</label>
             <input
+              id="emailInput"
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value)
                 if (error) setError(false)
               }}
               className="form-input"
-              placeholder={t.login.usernamePlaceholder}
+              placeholder={t.login?.usernamePlaceholder || 'Usuario o correo electrónico'}
               autoComplete="username"
+              required
             />
           </div>
 
           <div className="form-field">
             <div className="login-password-wrap">
+              <label htmlFor="passwordInput" className="sr-only">{t.login?.passwordPlaceholder || 'Contraseña'}</label>
               <input
+                id="passwordInput"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value)
@@ -112,14 +126,16 @@ const Login: React.FC = () => {
                 }}
                 type={showPassword ? 'text' : 'password'}
                 className="form-input login-password-input"
-                placeholder={t.login.passwordPlaceholder}
+                placeholder={t.login?.passwordPlaceholder || 'Contraseña'}
                 autoComplete="current-password"
+                required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="login-password-toggle"
-                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                title={showPassword ? hidePassText : showPassText}
+                aria-label={showPassword ? hidePassText : showPassText}
               >
                 {showPassword ? (
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -139,19 +155,19 @@ const Login: React.FC = () => {
           </div>
 
           {error && (
-            <div className="login-error">
-              {t.login.incorrectCredentials}
+            <div className="login-error" role="alert">
+              {t.login?.incorrectCredentials || 'Credenciales incorrectas. Verifica tu usuario y contraseña.'}
             </div>
           )}
 
           <button type="submit" className="btn btn-primary btn-lg" disabled={isSubmitDisabled}>
             <span className="login-button-content">
-              {loading ? <Spinner label="Conectando..." /> : null}
-              <span>{loading ? 'Conectando...' : t.login.loginButton}</span>
+              {loading ? <Spinner label={connectingText} /> : null}
+              <span>{loading ? connectingText : (t.login?.loginButton || 'Ingresar')}</span>
             </span>
           </button>
         </form>
-      </div>
+      </main>
     </div>
   )
 }

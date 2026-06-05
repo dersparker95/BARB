@@ -1,32 +1,28 @@
-import React from 'react'
+import React, { Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+
+// ⚡ CARGA INMEDIATA (Solo lo esencial)
 import Layout from './layout/Layout'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Menu from './pages/Menu'
-import DocChat from './pages/DocChat'
-import Debug from './pages/Debug'
-import Topology from './pages/Topology'
-import MachineMemory from './pages/MachineMemory'
-import Report from './pages/Report'
 import Forbidden from './pages/Forbidden'
 import { useAppContext } from './context/AppContext'
 import type { Role } from './types'
-// Rescatado de la rama de Benja:
-import Toast from './components/Toast'
+
+// 🦥 CARGA PEREZOSA (Lazy Loading para optimizar la RAM y la red)
+const Dashboard = React.lazy(() => import('./pages/Dashboard'))
+const Menu = React.lazy(() => import('./pages/Menu'))
+const DocChat = React.lazy(() => import('./pages/DocChat'))
+const Debug = React.lazy(() => import('./pages/Debug'))
+const Topology = React.lazy(() => import('./pages/Topology'))
+const MachineMemory = React.lazy(() => import('./pages/MachineMemory'))
+const Report = React.lazy(() => import('./pages/Report'))
 
 type GuardProps = {
   allowedRoles: Role[]
   children: React.ReactElement
 }
 
-function hasRolePermission(userRole: Role | null, allowedRoles: Role[]): boolean {
-  if (!userRole) return false
-  return allowedRoles.includes(userRole)
-}
-
-// Guard genérico por rol. Si no hay sesión -> /login
-// Si hay sesión pero no corresponde -> /403
+// 🛡️ GUARDIA ÚNICO DE SEGURIDAD: Simplificado y centralizado
 const RoleGuard: React.FC<GuardProps> = ({ allowedRoles, children }) => {
   const { user } = useAppContext()
   const location = useLocation()
@@ -35,58 +31,49 @@ const RoleGuard: React.FC<GuardProps> = ({ allowedRoles, children }) => {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
-  if (!hasRolePermission(user.role, allowedRoles)) {
+  if (!allowedRoles.includes(user.role)) {
     return <Navigate to="/403" replace />
   }
 
   return children
 }
 
+// 🔥 MAPEO COMPLETO DE ROLES: Incluyendo engineer y supervisor
 const routeRoles = (path: string): Role[] => {
-  if (path.startsWith('/dashboard')) return ['gerente', 'admin']
-  if (path.startsWith('/menu')) return ['tecnico', 'gerente', 'admin']
-  if (path.startsWith('/docchat')) return ['tecnico', 'gerente', 'admin']
-  if (path.startsWith('/topology')) return ['tecnico', 'gerente', 'admin']
-  if (path.startsWith('/memory/')) return ['tecnico', 'gerente', 'admin']
-  if (path.startsWith('/debug')) return ['tecnico', 'gerente', 'admin']
-  if (path.startsWith('/report')) return ['gerente', 'admin']
-  return ['tecnico', 'gerente', 'admin']
-}
+  const managementRoles: Role[] = ['gerente', 'admin', 'engineer', 'supervisor']
+  const allRoles: Role[] = ['tecnico', 'operador', 'gerente', 'admin', 'engineer', 'supervisor']
 
-const ProtectedLayout: React.FC<{ children: React.ReactElement }> = ({ children }) => {
-  const { user } = useAppContext()
-  const location = useLocation()
-
-  if (!user) return <Navigate to="/login" replace />
-
-  const isTecnico = user.role === 'tecnico'
-  const pathname = location.pathname
-
-  if (isTecnico) {
-    const blockedPath =
-      pathname.startsWith('/dashboard') ||
-      pathname.startsWith('/upload') ||
-      pathname.startsWith('/reports/upload')
-
-    if (blockedPath) {
-      return <Navigate to="/403" replace />
-    }
-  }
-
-  return children
+  if (path.startsWith('/dashboard')) return managementRoles
+  if (path.startsWith('/report')) return managementRoles
+  
+  // El resto de módulos operativos son accesibles por toda la planta
+  return allRoles
 }
 
 const RootRedirect: React.FC = () => <Navigate to="/login" replace />
 
+// Spinner bilingüe e independiente
+const LoadingFallback = () => (
+  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100dvh', width: '100%', color: 'var(--ink3)', background: 'var(--bg-body)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+      <span className="animate-spin" style={{ fontSize: '24px' }}>⚙️</span>
+      <span style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>
+        Loading / Cargando...
+      </span>
+    </div>
+  </div>
+)
+
 export default function App() {
   return (
-    <>
+    <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<Login />} />
         <Route path="/403" element={<Forbidden />} />
 
-        <Route element={<ProtectedLayout children={<Layout />} />}>
+        {/* 🔥 ARQUITECTURA LIMPIA V6: El Layout envuelve nativamente las rutas hijas */}
+        <Route element={<Layout />}>
           <Route
             path="/dashboard"
             element={
@@ -147,9 +134,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-      
-      {/* Componente Toast global de notificaciones rescatado */}
-      <Toast />
-    </>
+    </Suspense>
+    // 🗑️ ELIMINADO: <Toast /> (Ya está renderizado dentro de <Layout />)
   )
 }

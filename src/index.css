@@ -2,61 +2,68 @@
 @import "tailwindcss";
 
 :root {
-  /* DESIGN.md Tokens */
-  --color-primary: #0F172A;
-  --color-secondary: #64748B;
-  --color-tertiary: #3B82F6;
-  --color-accent: #10B981;
-  --color-warning: #F59E0B;
-  --color-neutral: #F8FAFC;
+  /* 🎨 PALETA AJUSTADA PARA CONFORT VISUAL */
+  /* Fondo más cálido y menos "blanco papel" */
+  --bg:         #e9e7e2; 
+  --bg2:        #dfdbd4;
+  /* Superficie suave, evitando el blanco puro (#ffffff) */
+  --surface:    #fdfcf9; 
+  --surface2:   #f5f3ef;
+  
+  --border:     #d6d0c7;
+  --border2:    #c5beb3;
+  
+  --color-primary: #1e293b;
+  --color-secondary: #64748b;
+  --color-tertiary: #2563eb; /* Azul más equilibrado */
+  --color-accent: #059669;   /* Verde más natural */
+  --color-warning: #d97706;  /* Ámbar menos agresivo */
+  
+  --ink:        #1f2937;
+  --ink2:       #4b5563;
+  --ink3:       #8a8174;
+  
+  --accent:     var(--color-warning);
+  --accent-bg:  #fff7ed;
+  --blue:       var(--color-tertiary);
+  --blue-bg:    #eff6ff;
+  --green:      var(--color-accent);
+  --green-bg:   #f0fdf4;
+  --amber:      var(--color-warning);
+  --amber-bg:   #fffbeb;
+  --purple:     #6d28d9;
+  --purple-bg:  #f5f3ff;
+  --red-bg:     #fef2f2;
 
-  /* barb_v3.html palette fusion */
-  --bg:        #f4f2ee;
-  --bg2:       #eae7e1;
-  --surface:   #ffffff;
-  --surface2:  #f9f8f5;
-  --border:    #e2ddd7;
-  --border2:   #ccc5bb;
-  --ink:       var(--color-primary);
-  --ink2:      var(--color-secondary);
-  --ink3:      #9e9589;
-  --accent:    var(--color-warning);
-  --accent-bg: #fff3ee;
-  --blue:      var(--color-tertiary);
-  --blue-bg:   #eef4fd;
-  --green:     var(--color-accent);
-  --green-bg:  #edf7f2;
-  --amber:     var(--color-warning);
-  --amber-bg:  #fef8ee;
-  --purple:    #5e3db3;
-  --purple-bg: #f2effe;
-  --red-bg:    #fdf0ef;
-
-  --mono:      'DM Mono', monospace;
-  --sans:      'DM Sans', sans-serif;
-  --serif:     'Fraunces', serif;
-  --radius:    12px;
-  --radius-sm: 8px;
-  --shadow:    0 2px 12px rgba(0,0,0,0.07);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  --mono:       'DM Mono', monospace;
+  --sans:       'DM Sans', sans-serif;
+  --serif:      'Fraunces', serif;
+  --radius:     12px;
+  --radius-sm:  8px;
+  --shadow:     0 2px 8px rgba(0,0,0,0.04);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.08);
 }
 
 .dark {
-  --bg:        #111318;
-  --bg2:       #181c24;
-  --surface:   #1e2230;
-  --surface2:  #252a38;
-  --border:    #2e3450;
-  --border2:   #3d4460;
-  --ink:       #e4e8f0;
-  --ink2:      #ffffff;
-  --ink3:      #ffffff;
-  --accent-bg: rgba(245,158,11,0.15);
-  --blue-bg:   rgba(59,130,246,0.15);
-  --green-bg:  rgba(16,185,129,0.15);
-  --amber-bg:  rgba(245,158,11,0.15);
-  --shadow:    0 2px 12px rgba(0,0,0,0.3);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+  /* Fondo oscuro profundo pero no negro puro */
+  --bg:         #0a0b0d;
+  --bg2:        #111318;
+  --surface:    #161921;
+  --surface2:   #1d212b;
+  
+  --border:     #2a2f3d;
+  --border2:    #374151;
+  
+  --ink:        #f3f4f6;
+  --ink2:       #d1d5db;
+  --ink3:       #9ca3af;
+  
+  --accent-bg:  rgba(217, 119, 6, 0.1);
+  --blue-bg:    rgba(37, 99, 235, 0.1);
+  --green-bg:   rgba(5, 150, 105, 0.1);
+  --amber-bg:   rgba(217, 119, 6, 0.1);
+  --shadow:     0 2px 12px rgba(0,0,0,0.3);
+  --shadow-lg:  0 8px 32px rgba(0,0,0,0.5);
 }
 
 body {
@@ -65,9 +72,11 @@ body {
   color: var(--ink);
   font-size: 14px;
   line-height: 1.5;
-  transition: background 0.25s, color 0.25s;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
+/* Resto de tu CSS (Botones, Chat, Dashboard) se mantendrá igual pero 
+   ahora se adaptará automáticamente a estos nuevos tonos más amigables. */
 /* Componentes Generales y Utilidades (barb_v3) */
 .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:12px 20px; border-radius:var(--radius-sm); font-size:14px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:var(--sans); }
 .btn-outline { background:transparent; color:var(--ink2); border:1px solid var(--border); }
