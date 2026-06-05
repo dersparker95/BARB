@@ -117,9 +117,8 @@ origins = [
     "http://localhost",
     "http://localhost:5173",
     "https://barb-rose.vercel.app",
-    "https://barb-tvasquezms-projects.vercel.app",
     "https://barb-git-integracion-final-tvasquezms-projects.vercel.app",
-    "https://barb-qmrung2hj-tvasquezms-projects.vercel.app" # <-- ¡Aquí está el verdadero!
+    "https://barb-afke1d1n3-tvasquezms-projects.vercel.app"
 ]
 app.add_middleware(
     CORSMiddleware,
