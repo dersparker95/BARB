@@ -217,7 +217,7 @@ def list_work_orders():
         SELECT 
             ot.orden_id AS id, 
             ot.titulo AS title, 
-            ot.estado AS status, 
+            ot.estado::text AS status, 
             ot.prioridad AS priority, 
             m.nombre AS "machineName", 
             ot.maquina_id AS "machineId",
@@ -228,7 +228,8 @@ def list_work_orders():
             d.nombre AS "disciplineName"
         FROM orden_trabajo ot
         LEFT JOIN maquina m ON ot.maquina_id = m.maquina_id
-        LEFT JOIN usuario u ON ot.usuario_asignado_id = u.usuario_id
+        -- 🔥 Reemplaza 'tecnico_id' si en tu base de datos se llama 'usuario_id' u otra cosa
+        LEFT JOIN usuario u ON ot.tecnico_id = u.usuario_id
         LEFT JOIN disciplina d ON ot.disciplina_id = d.disciplina_id
         ORDER BY ot.orden_id DESC
     """
@@ -270,10 +271,12 @@ def update_work_order_status(order_id: int, payload: WorkOrderStatusUpdate):
 @lru_cache(maxsize=1)
 def get_financial_impact(days: int = 30):
     # 1. Cálculos de eficiencia general (Protegidos con try/except por si faltan columnas)
+    # 1. Cálculos de eficiencia general
     stats = _query_one("""
         SELECT 
             COUNT(*) as total_ots,
-            SUM(CASE WHEN estado IN ('Closed', 'Done') THEN 1 ELSE 0 END) as cerradas,
+            -- 🔥 Convertimos el ENUM a texto para evadir el error estricto
+            SUM(CASE WHEN lower(estado::text) IN ('closed', 'done', 'cerrada', 'realizada') THEN 1 ELSE 0 END) as cerradas,
             COALESCE(SUM(costo_real), 0) as costo_total
         FROM orden_trabajo
     """) or {"total_ots": 0, "cerradas": 0, "costo_total": 0}
@@ -283,10 +286,12 @@ def get_financial_impact(days: int = 30):
     efficiency = (cerradas / total * 100) if total > 0 else 0
 
     # 2. Tendencia de los últimos 14 días (Directo de BD)
+    # 2. Tendencia de los últimos 14 días
     trend_query = """
         SELECT TO_CHAR(fecha_creacion, 'YYYY-MM-DD') as date,
                COUNT(*) as abiertas,
-               SUM(CASE WHEN estado IN ('Closed', 'Done') THEN 1 ELSE 0 END) as cerradas
+               -- 🔥 Aplicamos la misma conversión de texto aquí
+               SUM(CASE WHEN lower(estado::text) IN ('closed', 'done', 'cerrada', 'realizada') THEN 1 ELSE 0 END) as cerradas
         FROM orden_trabajo
         WHERE fecha_creacion >= CURRENT_DATE - INTERVAL '14 days'
         GROUP BY TO_CHAR(fecha_creacion, 'YYYY-MM-DD')
