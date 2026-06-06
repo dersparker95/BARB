@@ -118,9 +118,10 @@ origins = [
     "http://localhost",
     "http://localhost:5173",
     "https://barb-rose.vercel.app",
+    "https://barb-tvasquezms-projects.vercel.app",  # 🔥 ¡ESTE ES EL QUE FALTABA!
     "https://barb-git-integracion-final-tvasquezms-projects.vercel.app",
     "https://barb-afke1d1n3-tvasquezms-projects.vercel.app",
-    "https://barb-qmrung2hj-tvasquezms-projects.vercel.app" # 🔥 El link que te estaba bloqueando
+    "https://barb-qmrung2hj-tvasquezms-projects.vercel.app"
 ]
 app.add_middleware(
     CORSMiddleware,
