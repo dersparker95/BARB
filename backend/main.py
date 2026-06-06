@@ -228,7 +228,6 @@ def list_work_orders():
             d.nombre AS "disciplineName"
         FROM orden_trabajo ot
         LEFT JOIN maquina m ON ot.maquina_id = m.maquina_id
-        -- 🔥 Reemplaza 'tecnico_id' si en tu base de datos se llama 'usuario_id' u otra cosa
         LEFT JOIN usuario u ON ot.tecnico_id = u.usuario_id
         LEFT JOIN disciplina d ON ot.disciplina_id = d.disciplina_id
         ORDER BY ot.orden_id DESC
