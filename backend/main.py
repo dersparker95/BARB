@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 from functools import lru_cache # 🔥 Importado para optimizar velocidad en RAM
+from fastapi.concurrency import run_in_threadpool
 
 import bcrypt
 import httpx
@@ -118,7 +119,8 @@ origins = [
     "http://localhost:5173",
     "https://barb-rose.vercel.app",
     "https://barb-git-integracion-final-tvasquezms-projects.vercel.app",
-    "https://barb-afke1d1n3-tvasquezms-projects.vercel.app"
+    "https://barb-afke1d1n3-tvasquezms-projects.vercel.app",
+    "https://barb-qmrung2hj-tvasquezms-projects.vercel.app" # 🔥 El link que te estaba bloqueando
 ]
 app.add_middleware(
     CORSMiddleware,
@@ -314,7 +316,9 @@ def get_financial_impact(days: int = 30):
 # 6. RAG (DOCUMENTOS Y CHAT)
 # =============================================================================
 @app.post("/api/documents/upload")
-async def upload_document(file: UploadFile = File(...), discipline: str = Form(""), machine: str = Form("")):
+def upload_document(file: UploadFile = File(...), discipline: str = Form(""), machine: str = Form("")):
+    # 🔥 Al quitar 'async def' y dejar solo 'def', FastAPI manda esta tarea pesada 
+    # a un hilo secundario, evitando que se congele el servidor.
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=415, detail="Solo PDFs permitidos.")
     
@@ -336,7 +340,6 @@ async def upload_document(file: UploadFile = File(...), discipline: str = Form("
             ids=[f"{stored['file_id']}_{i}"]
         )
     return {"message": "Documento indexado", "chunks": len(chunks)}
-
 @app.post("/api/chat")
 async def chat(payload: ChatRequest):
     collection = get_vector_collection()
@@ -347,15 +350,21 @@ async def chat(payload: ChatRequest):
         filtros = {"machine": machine_filter} if machine_filter else None
         
         try:
-            resultados = collection.query(query_texts=[payload.message], n_results=5, where=filtros)
+            # 🔥 Aquí está la magia: Enviamos la búsqueda síncrona de Chroma a un hilo secundario
+            resultados = await run_in_threadpool(
+                collection.query,
+                query_texts=[payload.message],
+                n_results=5,
+                where=filtros
+            )
             if resultados and resultados.get("documents") and resultados["documents"][0]:
                 contexto = "\n\n".join(resultados["documents"][0])
                 for meta in resultados["metadatas"][0]:
                     doc_name = meta.get("source", "Manual Técnico").replace(".pdf", "").replace("_", " ").title()
                     fuentes_precisas.append(f"{doc_name} (Pág. {meta.get('page', '?')})")
-        except Exception:
-            pass # Si el filtro falla por Chroma, seguimos sin contexto estricto
-
+        except Exception as exc:
+            print(f"Error en búsqueda ChromaDB: {exc}") # Agregué un print útil para debug
+            pass 
     system_prompt = (
         "Eres BARB, experto en mantenimiento industrial. "
         "REGLA: Basa tu respuesta SÓLO en este contexto. Si no está, di que no encontraste información en los manuales y usa conocimiento general.\n\n"
