@@ -38,8 +38,8 @@ async function callAPI<T>(base: string, path: string, opts?: RequestInit): Promi
 
 // 🌐 Única fuente de la verdad para las URLs
 export const createApiService = (
-  apiBase = import.meta.env.VITE_API_URL || 'http://localhost:9000/api',
-  lmBase = import.meta.env.VITE_LM_URL || 'http://localhost:1234/v1' // 🔥 Añadido para dar soporte completo
+ apiBase = 'https://barb-2ih8.onrender.com/api',
+  lmBase = import.meta.env.VITE_LM_URL || 'http://localhost:1234/v1'
 ) => {
   return {
     auth: {

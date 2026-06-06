@@ -53,7 +53,7 @@ const readStoredAuth = (): StoredAuth | null => {
 const AppContext = createContext<AppContextValue | undefined>(undefined)
 
 // === VARIABLES DE ENTORNO DINÁMICAS ===
-const defaultApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:9000/api'
+const defaultApiUrl = 'https://barb-2ih8.onrender.com/api'
 const defaultLmUrl = import.meta.env.VITE_LM_URL || 'http://localhost:1234/v1'
 
 // === ESTADO POR DEFECTO ===

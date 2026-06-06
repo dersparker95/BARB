@@ -26,7 +26,7 @@ interface ApiWorkOrder {
 
 interface ApiMachine { id: number; name: string; discipline_id: number }
 
-const API_URL = ((import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:9000/api').replace(/\/$/, '')
+const API_URL = 'https://barb-2ih8.onrender.com/api'
 const CHART_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#84cc16']
 
 const ensureUTC = (d?: string | null) => { if (!d) return undefined; return d.endsWith('Z') || d.includes('+') ? d : d + 'Z' }
