@@ -235,9 +235,9 @@ def list_work_orders():
     return _query_all(query)
 @app.post("/api/work-orders")
 def create_work_order(payload: WorkOrderCreate):
-    # 🔥 FIX: Inyectamos disciplina_id que antes se perdía
+    # 🔥 FIX: Cambiamos 'usuario_asignado_id' por la columna real 'tecnico_id'
     query = """
-        INSERT INTO orden_trabajo (titulo, maquina_id, usuario_asignado_id, disciplina_id, prioridad, estado, descripcion, fecha_creacion)
+        INSERT INTO orden_trabajo (titulo, maquina_id, tecnico_id, disciplina_id, prioridad, estado, descripcion, fecha_creacion)
         VALUES (:title, :machine, :tecnicoId, :disciplinaId, :priority, :status, :description, CURRENT_TIMESTAMP)
         RETURNING orden_id
     """
@@ -252,7 +252,7 @@ def create_work_order(payload: WorkOrderCreate):
     }
     _execute_write(query, params)
     
-    # Limpiamos las cachés porque hay datos nuevos que podrían alterar KPIs
+    # Limpiamos las cachés porque hay datos nuevos
     get_financial_impact.cache_clear()
     
     return {"status": "success"}
