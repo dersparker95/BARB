@@ -215,11 +215,17 @@ def get_topologia():
 def list_work_orders():
     query = """
         SELECT 
-            ot.orden_id AS id, ot.titulo AS title, ot.estado AS status, 
-            ot.prioridad AS priority, m.nombre AS machine_name, ot.maquina_id,
-            u.nombre AS tecnico_nombre, ot.descripcion AS description,
-            ot.fecha_creacion AS created_at, ot.fecha_cierre AS closed_at,
-            d.nombre AS discipline_name
+            ot.orden_id AS id, 
+            ot.titulo AS title, 
+            ot.estado AS status, 
+            ot.prioridad AS priority, 
+            m.nombre AS "machineName", 
+            ot.maquina_id AS "machineId",
+            u.nombre AS technician, 
+            ot.descripcion AS description,
+            ot.fecha_creacion AS "createdAt", 
+            ot.fecha_cierre AS "closedAt",
+            d.nombre AS "disciplineName"
         FROM orden_trabajo ot
         LEFT JOIN maquina m ON ot.maquina_id = m.maquina_id
         LEFT JOIN usuario u ON ot.usuario_asignado_id = u.usuario_id
@@ -227,7 +233,6 @@ def list_work_orders():
         ORDER BY ot.orden_id DESC
     """
     return _query_all(query)
-
 @app.post("/api/work-orders")
 def create_work_order(payload: WorkOrderCreate):
     # 🔥 FIX: Inyectamos disciplina_id que antes se perdía
@@ -294,21 +299,30 @@ def get_financial_impact(days: int = 30):
     for i in range(14):
         d_str = (datetime.now() - timedelta(days=13-i)).strftime('%Y-%m-%d')
         found = next((t for t in trends_raw if t["date"] == d_str), {"abiertas": 0, "cerradas": 0})
-        trend14Days.append({"date": d_str, "abiertas": found["abiertas"], "cerradas": found["cerradas"]})
+        
+        # 🔥 BLINDAJE: Enviamos inglés y español para que la gráfica jamás colapse
+        trend14Days.append({
+            "date": d_str, 
+            "abiertas": found["abiertas"], 
+            "cerradas": found["cerradas"],
+            "opened": found["abiertas"], 
+            "closed": found["cerradas"],
+            "open": found["abiertas"]
+        })
 
     # 3. Formato exacto que pide el Frontend de Nico
-    # 3. Formato exacto que pide el Frontend de Nico (camelCase)
     return {
         "financials": {
-            "ahorroGenerado": cerradas * 1500,           # 🔥 Cambiado a camelCase
+            "ahorroGenerado": cerradas * 1500, 
             "mttr": 45.5, 
             "efficiency": round(efficiency, 1),
-            "costoTotalAcumulado": stats["costo_total"], # 🔥 Cambiado a camelCase
+            "costoTotalAcumulado": stats["costo_total"], 
             "mtbfHours": 120
         },
         "trend14Days": trend14Days,
         "machines": [
-            {"name": "Sin datos", "value": 1} # 🔥 Previene que el gráfico explote si no hay máquinas con órdenes
+            # 🔥 BLINDAJE: Si la lista está vacía, el gráfico de torta de Nico dividirá por cero y dará Pantalla Blanca. Esto lo salva:
+            {"name": "Sin datos", "label": "Sin datos", "value": 1, "count": 1}
         ]
     }
 
