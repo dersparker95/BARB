@@ -215,45 +215,50 @@ def get_topologia():
 def list_work_orders():
     query = """
         SELECT 
-            ot.orden_id AS id, 
+            ot.ot_id AS id, 
+            ot.numero_ot AS "numeroOt",
             ot.titulo AS title, 
             ot.estado::text AS status, 
-            ot.prioridad AS priority, 
+            ot.priority AS priority, 
             m.nombre AS "machineName", 
             ot.maquina_id AS "machineId",
             u.nombre AS technician, 
-            ot.descripcion AS description,
+            ot.descripcion_problema AS description,
             ot.fecha_creacion AS "createdAt", 
             ot.fecha_cierre AS "closedAt",
             d.nombre AS "disciplineName"
-        FROM orden_trabajo ot
-        LEFT JOIN maquina m ON ot.maquina_id = m.maquina_id
-        LEFT JOIN usuario u ON ot.tecnico_id = u.usuario_id
-        -- 🔥 FIX: La disciplina pertenece a la máquina (m), no a la orden (ot)
-        LEFT JOIN disciplina d ON m.disciplina_id = d.disciplina_id
-        ORDER BY ot.orden_id DESC
+        FROM ORDEN_TRABAJO ot
+        LEFT JOIN MAQUINA m ON ot.maquina_id = m.maquina_id
+        LEFT JOIN USUARIO u ON ot.tecnico_id = u.usuario_id
+        LEFT JOIN DISCIPLINA d ON m.disciplina_id = d.disciplina_id
+        ORDER BY ot.ot_id DESC
     """
     return _query_all(query)
 @app.post("/api/work-orders")
 def create_work_order(payload: WorkOrderCreate):
-    # 🔥 FIX: Eliminamos 'disciplina_id' porque no va en esta tabla
+    # Usamos tus nombres de columna reales
     query = """
-        INSERT INTO orden_trabajo (titulo, maquina_id, tecnico_id, prioridad, estado, descripcion, fecha_creacion)
-        VALUES (:title, :machine, :tecnicoId, :priority, :status, :description, CURRENT_TIMESTAMP)
-        RETURNING orden_id
+        INSERT INTO ORDEN_TRABAJO (
+            numero_ot, maquina_id, tecnico_id, creado_por, 
+            tipo, priority, estado, descripcion_problema, fecha_creacion
+        )
+        VALUES (
+            :numero_ot, :machine, :tecnicoId, :creado_por, 
+            'corrective', :priority, :status, :description, CURRENT_TIMESTAMP
+        )
+        RETURNING ot_id
     """
     params = {
-        "title": payload.title,
+        "numero_ot": f"OT-{datetime.now().strftime('%Y%m%d%H%M%S')}",
         "machine": payload.maquina_id,
         "tecnicoId": payload.tecnico_id,
+        "creado_por": 1, # ID del admin por defecto
         "priority": payload.priority,
         "status": payload.status,
         "description": payload.description
     }
     _execute_write(query, params)
-    
     get_financial_impact.cache_clear()
-    
     return {"status": "success"}
 
 @app.put("/api/work-orders/{order_id}/status")
