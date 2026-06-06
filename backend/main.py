@@ -229,30 +229,29 @@ def list_work_orders():
         FROM orden_trabajo ot
         LEFT JOIN maquina m ON ot.maquina_id = m.maquina_id
         LEFT JOIN usuario u ON ot.tecnico_id = u.usuario_id
-        LEFT JOIN disciplina d ON ot.disciplina_id = d.disciplina_id
+        -- 🔥 FIX: La disciplina pertenece a la máquina (m), no a la orden (ot)
+        LEFT JOIN disciplina d ON m.disciplina_id = d.disciplina_id
         ORDER BY ot.orden_id DESC
     """
     return _query_all(query)
 @app.post("/api/work-orders")
 def create_work_order(payload: WorkOrderCreate):
-    # 🔥 FIX: Cambiamos 'usuario_asignado_id' por la columna real 'tecnico_id'
+    # 🔥 FIX: Eliminamos 'disciplina_id' porque no va en esta tabla
     query = """
-        INSERT INTO orden_trabajo (titulo, maquina_id, tecnico_id, disciplina_id, prioridad, estado, descripcion, fecha_creacion)
-        VALUES (:title, :machine, :tecnicoId, :disciplinaId, :priority, :status, :description, CURRENT_TIMESTAMP)
+        INSERT INTO orden_trabajo (titulo, maquina_id, tecnico_id, prioridad, estado, descripcion, fecha_creacion)
+        VALUES (:title, :machine, :tecnicoId, :priority, :status, :description, CURRENT_TIMESTAMP)
         RETURNING orden_id
     """
     params = {
         "title": payload.title,
         "machine": payload.maquina_id,
         "tecnicoId": payload.tecnico_id,
-        "disciplinaId": payload.disciplina_id,
         "priority": payload.priority,
         "status": payload.status,
         "description": payload.description
     }
     _execute_write(query, params)
     
-    # Limpiamos las cachés porque hay datos nuevos
     get_financial_impact.cache_clear()
     
     return {"status": "success"}
