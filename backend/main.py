@@ -114,23 +114,19 @@ def store_upload_file(file: UploadFile, destination_dir: Path, prefix: str) -> d
 # 4. FASTAPI Y CORS
 # =============================================================================
 app = FastAPI(title="BARB Core API", version="3.1.0")
-origins = [
-    "http://localhost",
-    "http://localhost:5173",
-    "https://barb-rose.vercel.app",
-    "https://barb-tvasquezms-projects.vercel.app",  # 🔥 ¡ESTE ES EL QUE FALTABA!
-    "https://barb-git-integracion-final-tvasquezms-projects.vercel.app",
-    "https://barb-afke1d1n3-tvasquezms-projects.vercel.app",
-    "https://barb-qmrung2hj-tvasquezms-projects.vercel.app"
-]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins, # Permitimos todo en dev, en prod lo ajustas a tus dominios reales
+    allow_origins=[
+        "http://localhost",
+        "http://localhost:5173",
+        "https://barb-rose.vercel.app",
+        "https://barb-tvasquezms-projects.vercel.app"
+    ],
+    allow_origin_regex=r"https://barb.*\.vercel\.app",  # 🔥 EL COMODÍN MÁGICO
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 class LoginRequest(BaseModel):
     email: str
     password: str
