@@ -297,16 +297,19 @@ def get_financial_impact(days: int = 30):
         trend14Days.append({"date": d_str, "abiertas": found["abiertas"], "cerradas": found["cerradas"]})
 
     # 3. Formato exacto que pide el Frontend de Nico
+    # 3. Formato exacto que pide el Frontend de Nico (camelCase)
     return {
         "financials": {
-            "ahorro_generado": cerradas * 1500, # KPI calculado como ejemplo de negocio
-            "mttr": 45.5, # Aquí puedes hacer AVG(fecha_cierre - fecha_creacion) luego
+            "ahorroGenerado": cerradas * 1500,           # 🔥 Cambiado a camelCase
+            "mttr": 45.5, 
             "efficiency": round(efficiency, 1),
-            "costo_total_acumulado": stats["costo_total"],
+            "costoTotalAcumulado": stats["costo_total"], # 🔥 Cambiado a camelCase
             "mtbfHours": 120
         },
         "trend14Days": trend14Days,
-        "machines": []
+        "machines": [
+            {"name": "Sin datos", "value": 1} # 🔥 Previene que el gráfico explote si no hay máquinas con órdenes
+        ]
     }
 
 # =============================================================================
