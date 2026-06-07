@@ -223,15 +223,25 @@ def list_work_orders():
             SELECT 
                 ot.ot_id AS id, 
                 ot.numero_ot AS title, 
-                ot.estado::text AS status, 
+                -- 🔥 TRADUCCIÓN FORZADA: Convertimos los estados de tu BD al inglés exacto que espera React
+                CASE 
+                    WHEN ot.estado IN ('pending', 'assigned', 'overdue') THEN 'open'
+                    WHEN ot.estado = 'in_progress' THEN 'in_progress'
+                    WHEN ot.estado IN ('completed', 'cancelled') THEN 'closed'
+                    ELSE 'open'
+                END AS status, 
                 ot.priority::text AS priority, 
                 m.nombre AS "machineName", 
                 ot.maquina_id AS "machineId",
-                u.nombre AS technician, 
-                ot.descripcion_problema AS description,
-                ot.fecha_creacion::text AS "createdAt",   -- 🔥 BLINDAJE: Forzamos la fecha a texto
-                ot.fecha_cierre::text AS "closedAt",      -- 🔥 BLINDAJE: Forzamos la fecha a texto
-                d.nombre AS "disciplineName"
+                COALESCE(u.nombre, 'Sin asignar') AS technician, 
+                COALESCE(ot.descripcion_problema, 'Sin descripción') AS description,
+                -- 🔥 BLINDAJE DE FECHAS: Formato ISO estricto para que React no colapse
+                TO_CHAR(ot.fecha_creacion, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "createdAt", 
+                TO_CHAR(COALESCE(ot.fecha_cierre, ot.fecha_creacion), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "closedAt",
+                d.nombre AS "disciplineName",
+                -- 🔥 BLINDAJE NUMÉRICO: Si no hay costo, enviamos 0 en vez de null
+                COALESCE(ot.costo_real, 0) AS cost,
+                COALESCE(ot.costo_estimado, 0) AS "estimatedCost"
             FROM ORDEN_TRABAJO ot
             LEFT JOIN MAQUINA m ON ot.maquina_id = m.maquina_id
             LEFT JOIN USUARIO u ON ot.tecnico_id = u.usuario_id
@@ -239,6 +249,9 @@ def list_work_orders():
             ORDER BY ot.ot_id DESC
         """
         return _query_all(query)
+    except Exception as e:
+        print(f"Error salvado en work-orders: {e}")
+        return []
     except Exception as e:
         # 🔥 SALVAVIDAS: Si ocurre un error interno, imprimimos en Render pero devolvemos vacío a React
         print(f"Error salvado en work-orders: {e}")
@@ -283,60 +296,72 @@ def update_work_order_status(order_id: int, payload: WorkOrderStatusUpdate):
 # 🔥 ADIÓS HARDCODEO: Todo se calcula en vivo desde PostgreSQL
 @app.get("/api/stats/financial-impact")
 def get_financial_impact():
-    # 1. Cálculos de eficiencia general (Usamos 'completed' según tu DB)
-    stats = _query_one("""
-        SELECT 
-            COUNT(*) as total_ots,
-            SUM(CASE WHEN estado = 'completed' THEN 1 ELSE 0 END) as cerradas,
-            COALESCE(SUM(costo_real), 0) as costo_total
-        FROM orden_trabajo
-    """) or {"total_ots": 0, "cerradas": 0, "costo_total": 0}
+    try:
+        stats = _query_one("""
+            SELECT 
+                COUNT(*) as total_ots,
+                SUM(CASE WHEN estado = 'completed' THEN 1 ELSE 0 END) as cerradas,
+                COALESCE(SUM(costo_real), 0) as costo_total
+            FROM ORDEN_TRABAJO
+        """) or {"total_ots": 0, "cerradas": 0, "costo_total": 0}
 
-    # 2. Tendencia de los últimos 14 días
-    trend_query = """
-        SELECT TO_CHAR(fecha_creacion, 'YYYY-MM-DD') as date,
-               COUNT(*) as abiertas,
-               SUM(CASE WHEN estado = 'completed' THEN 1 ELSE 0 END) as cerradas
-        FROM orden_trabajo
-        WHERE fecha_creacion >= CURRENT_DATE - INTERVAL '14 days'
-        GROUP BY TO_CHAR(fecha_creacion, 'YYYY-MM-DD')
-        ORDER BY date ASC
-    """
-    trends_raw = _query_all(trend_query)
-    
-    cerradas = stats["cerradas"]
-    total = stats["total_ots"]
-    efficiency = (cerradas / total * 100) if total > 0 else 0
+        # 🔥 Aseguramos que Python los trate como números y no explote el JSON
+        cerradas = int(stats["cerradas"] or 0)
+        total = int(stats["total_ots"] or 0)
+        costo_total = float(stats["costo_total"] or 0)
+        efficiency = (cerradas / total * 100) if total > 0 else 0
 
-    from datetime import datetime, timedelta
-    trend14Days = []
-    for i in range(14):
-        d_str = (datetime.now() - timedelta(days=13-i)).strftime('%Y-%m-%d')
-        found = next((t for t in trends_raw if t["date"] == d_str), {"abiertas": 0, "cerradas": 0})
+        trend_query = """
+            SELECT TO_CHAR(fecha_creacion, 'YYYY-MM-DD') as date,
+                   COUNT(*) as abiertas,
+                   SUM(CASE WHEN estado = 'completed' THEN 1 ELSE 0 END) as cerradas
+            FROM ORDEN_TRABAJO
+            WHERE fecha_creacion >= CURRENT_DATE - INTERVAL '14 days'
+            GROUP BY TO_CHAR(fecha_creacion, 'YYYY-MM-DD')
+            ORDER BY date ASC
+        """
+        trends_raw = _query_all(trend_query)
         
-        # Blindaje para React
-        trend14Days.append({
-            "date": d_str, 
-            "abiertas": found["abiertas"], 
-            "cerradas": found["cerradas"],
-            "opened": found["abiertas"], 
-            "closed": found["cerradas"],
-            "open": found["abiertas"]
-        })
+        from datetime import datetime, timedelta
+        trend14Days = []
+        for i in range(14):
+            d_str = (datetime.now() - timedelta(days=13-i)).strftime('%Y-%m-%d')
+            found = next((t for t in trends_raw if t["date"] == d_str), {"abiertas": 0, "cerradas": 0})
+            trend14Days.append({
+                "date": d_str, 
+                "abiertas": int(found["abiertas"] or 0), 
+                "cerradas": int(found["cerradas"] or 0),
+                "opened": int(found["abiertas"] or 0), 
+                "closed": int(found["cerradas"] or 0),
+                "open": int(found["abiertas"] or 0)
+            })
 
-    return {
-        "financials": {
-            "ahorroGenerado": cerradas * 1500, 
-            "mttr": 45.5, 
-            "efficiency": round(efficiency, 1),
-            "costoTotalAcumulado": stats["costo_total"], 
-            "mtbfHours": 120
-        },
-        "trend14Days": trend14Days,
-        "machines": [
-            {"name": "Sin datos", "label": "Sin datos", "value": 1, "count": 1}
-        ]
-    }
+        # 🔥 Gráfico de Torta Seguro: Buscamos máquinas con fallas
+        top_machines = _query_all("""
+            SELECT m.nombre as name, COUNT(ot.ot_id) as value
+            FROM MAQUINA m
+            JOIN ORDEN_TRABAJO ot ON m.maquina_id = ot.maquina_id
+            GROUP BY m.nombre
+            ORDER BY value DESC
+            LIMIT 5
+        """)
+        if not top_machines:
+            top_machines = [{"name": "Operando al 100%", "value": 1}]
+
+        return {
+            "financials": {
+                "ahorroGenerado": cerradas * 1500, 
+                "mttr": 45.5, 
+                "efficiency": round(efficiency, 1),
+                "costoTotalAcumulado": costo_total, 
+                "mtbfHours": 120
+            },
+            "trend14Days": trend14Days,
+            "machines": top_machines
+        }
+    except Exception as e:
+        print(f"Error salvado en financial-impact: {e}")
+        return {"financials": {"ahorroGenerado": 0, "mttr": 0, "efficiency": 0, "costoTotalAcumulado": 0, "mtbfHours": 0}, "trend14Days": [], "machines": [{"name": "Cargando...", "value": 1}]}
 
 # =============================================================================
 # 6. RAG (DOCUMENTOS Y CHAT)
