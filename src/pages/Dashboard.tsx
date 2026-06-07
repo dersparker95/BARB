@@ -189,7 +189,7 @@ export default function Dashboard() {
         <Block title={t.dashboard?.chartResolution || 'Resolución'} style={{ flex: '2 1 400px' }}>
           {resolutionData.length === 0 ? <div className="p-8 text-center text-slate-500">{t.dashboard?.noData || 'Sin datos'}</div> : (
             <div style={{ height: 260 }}>
-              {/* 🔥 FIX: minWidth y minHeight agregados */}
+              {/* 🔥 FIX APLICADO AQUÍ: minWidth y minHeight */}
               <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <BarChart data={resolutionData} margin={{ top: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
@@ -215,7 +215,7 @@ export default function Dashboard() {
         <Block title={t.dashboard?.strategyTitle || 'Estrategia'} style={{ flex: '1 1 300px' }}>
           {typeData.length === 0 ? <div className="p-8 text-center text-slate-500">{t.dashboard?.noData || 'Sin datos'}</div> : (
             <div style={{ height: 260 }}>
-              {/* 🔥 FIX: minWidth y minHeight agregados */}
+              {/* 🔥 FIX APLICADO AQUÍ TAMBIÉN: minWidth y minHeight */}
               <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <PieChart>
                   <Pie data={typeData} innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value" nameKey="name">
