@@ -142,9 +142,8 @@ class ChatRequest(BaseModel):
 
 class WorkOrderCreate(BaseModel):
     title: str
-    disciplina_id: int = Field(alias="disciplinaId") # Mapeo CamelCase a SnakeCase
-    maquina_id: int = Field(alias="maquina_id", default=0) # Soportamos ambas variantes
-    tecnico_id: int = Field(alias="tecnicoId")
+    maquina_id: int
+    tecnico_id: int
     priority: str
     status: str
     description: str
@@ -216,10 +215,9 @@ def list_work_orders():
     query = """
         SELECT 
             ot.ot_id AS id, 
-            ot.numero_ot AS "numeroOt",
-            ot.titulo AS title, 
+            ot.numero_ot AS title, 
             ot.estado::text AS status, 
-            ot.priority AS priority, 
+            ot.priority::text AS priority, 
             m.nombre AS "machineName", 
             ot.maquina_id AS "machineId",
             u.nombre AS technician, 
@@ -227,37 +225,39 @@ def list_work_orders():
             ot.fecha_creacion AS "createdAt", 
             ot.fecha_cierre AS "closedAt",
             d.nombre AS "disciplineName"
-        FROM ORDEN_TRABAJO ot
-        LEFT JOIN MAQUINA m ON ot.maquina_id = m.maquina_id
-        LEFT JOIN USUARIO u ON ot.tecnico_id = u.usuario_id
-        LEFT JOIN DISCIPLINA d ON m.disciplina_id = d.disciplina_id
+        FROM orden_trabajo ot
+        LEFT JOIN maquina m ON ot.maquina_id = m.maquina_id
+        LEFT JOIN usuario u ON ot.tecnico_id = u.usuario_id
+        LEFT JOIN disciplina d ON m.disciplina_id = d.disciplina_id
         ORDER BY ot.ot_id DESC
     """
     return _query_all(query)
 @app.post("/api/work-orders")
 def create_work_order(payload: WorkOrderCreate):
-    # Usamos tus nombres de columna reales
+    from datetime import datetime
+    numero_unico = f"OT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    
     query = """
-        INSERT INTO ORDEN_TRABAJO (
+        INSERT INTO orden_trabajo (
             numero_ot, maquina_id, tecnico_id, creado_por, 
             tipo, priority, estado, descripcion_problema, fecha_creacion
         )
         VALUES (
-            :numero_ot, :machine, :tecnicoId, :creado_por, 
-            'corrective', :priority, :status, :description, CURRENT_TIMESTAMP
+            :numero_ot, :machine, :tecnicoId, 1, 
+            'corrective', :priority::prioridad_ot, :status::estado_ot, :description, CURRENT_TIMESTAMP
         )
         RETURNING ot_id
     """
     params = {
-        "numero_ot": f"OT-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        "numero_ot": numero_unico,
         "machine": payload.maquina_id,
         "tecnicoId": payload.tecnico_id,
-        "creado_por": 1, # ID del admin por defecto
-        "priority": payload.priority,
-        "status": payload.status,
+        "priority": "high",  # 'low', 'medium', 'high', 'urgent'
+        "status": "pending", # 'pending', 'assigned', 'in_progress', 'completed'
         "description": payload.description
     }
     _execute_write(query, params)
+    
     get_financial_impact.cache_clear()
     return {"status": "success"}
 
@@ -271,30 +271,21 @@ def update_work_order_status(order_id: int, payload: WorkOrderStatusUpdate):
 
 # 🔥 ADIÓS HARDCODEO: Todo se calcula en vivo desde PostgreSQL
 @app.get("/api/stats/financial-impact")
-@lru_cache(maxsize=1)
-def get_financial_impact(days: int = 30):
-    # 1. Cálculos de eficiencia general (Protegidos con try/except por si faltan columnas)
-    # 1. Cálculos de eficiencia general
+def get_financial_impact():
+    # 1. Cálculos de eficiencia general (Usamos 'completed' según tu DB)
     stats = _query_one("""
         SELECT 
             COUNT(*) as total_ots,
-            -- 🔥 Convertimos el ENUM a texto para evadir el error estricto
-            SUM(CASE WHEN lower(estado::text) IN ('closed', 'done', 'cerrada', 'realizada') THEN 1 ELSE 0 END) as cerradas,
+            SUM(CASE WHEN estado = 'completed' THEN 1 ELSE 0 END) as cerradas,
             COALESCE(SUM(costo_real), 0) as costo_total
         FROM orden_trabajo
     """) or {"total_ots": 0, "cerradas": 0, "costo_total": 0}
 
-    total = stats["total_ots"]
-    cerradas = stats["cerradas"]
-    efficiency = (cerradas / total * 100) if total > 0 else 0
-
-    # 2. Tendencia de los últimos 14 días (Directo de BD)
     # 2. Tendencia de los últimos 14 días
     trend_query = """
         SELECT TO_CHAR(fecha_creacion, 'YYYY-MM-DD') as date,
                COUNT(*) as abiertas,
-               -- 🔥 Aplicamos la misma conversión de texto aquí
-               SUM(CASE WHEN lower(estado::text) IN ('closed', 'done', 'cerrada', 'realizada') THEN 1 ELSE 0 END) as cerradas
+               SUM(CASE WHEN estado = 'completed' THEN 1 ELSE 0 END) as cerradas
         FROM orden_trabajo
         WHERE fecha_creacion >= CURRENT_DATE - INTERVAL '14 days'
         GROUP BY TO_CHAR(fecha_creacion, 'YYYY-MM-DD')
@@ -302,13 +293,17 @@ def get_financial_impact(days: int = 30):
     """
     trends_raw = _query_all(trend_query)
     
-    # Rellenamos días vacíos para que el gráfico no se rompa
+    cerradas = stats["cerradas"]
+    total = stats["total_ots"]
+    efficiency = (cerradas / total * 100) if total > 0 else 0
+
+    from datetime import datetime, timedelta
     trend14Days = []
     for i in range(14):
         d_str = (datetime.now() - timedelta(days=13-i)).strftime('%Y-%m-%d')
         found = next((t for t in trends_raw if t["date"] == d_str), {"abiertas": 0, "cerradas": 0})
         
-        # 🔥 BLINDAJE: Enviamos inglés y español para que la gráfica jamás colapse
+        # Blindaje para React
         trend14Days.append({
             "date": d_str, 
             "abiertas": found["abiertas"], 
@@ -318,7 +313,6 @@ def get_financial_impact(days: int = 30):
             "open": found["abiertas"]
         })
 
-    # 3. Formato exacto que pide el Frontend de Nico
     return {
         "financials": {
             "ahorroGenerado": cerradas * 1500, 
@@ -329,7 +323,6 @@ def get_financial_impact(days: int = 30):
         },
         "trend14Days": trend14Days,
         "machines": [
-            # 🔥 BLINDAJE: Si la lista está vacía, el gráfico de torta de Nico dividirá por cero y dará Pantalla Blanca. Esto lo salva:
             {"name": "Sin datos", "label": "Sin datos", "value": 1, "count": 1}
         ]
     }
