@@ -189,9 +189,9 @@ def get_plants():
 def list_machines():
     query = """
         SELECT 
-            maquina_id AS id, 
+            maquina_id::text AS id, 
             nombre AS name, 
-            disciplina_id AS "disciplinaId"
+            disciplina_id::text AS "disciplinaId"
         FROM MAQUINA
         ORDER BY maquina_id ASC
     """
@@ -221,27 +221,25 @@ def list_work_orders():
     try:
         query = """
             SELECT 
-                ot.ot_id AS id, 
+                ot.ot_id::text AS id, 
                 ot.numero_ot AS title, 
-                -- 🔥 TRADUCCIÓN FORZADA: Convertimos los estados de tu BD al inglés exacto que espera React
                 CASE 
                     WHEN ot.estado IN ('pending', 'assigned', 'overdue') THEN 'open'
                     WHEN ot.estado = 'in_progress' THEN 'in_progress'
                     WHEN ot.estado IN ('completed', 'cancelled') THEN 'closed'
                     ELSE 'open'
                 END AS status, 
+                ot.estado::text AS estado,
                 ot.priority::text AS priority, 
                 m.nombre AS "machineName", 
-                ot.maquina_id AS "machineId",
+                ot.maquina_id::text AS "machineId",
                 COALESCE(u.nombre, 'Sin asignar') AS technician, 
                 COALESCE(ot.descripcion_problema, 'Sin descripción') AS description,
-                -- 🔥 BLINDAJE DE FECHAS: Formato ISO estricto para que React no colapse
                 TO_CHAR(ot.fecha_creacion, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "createdAt", 
                 TO_CHAR(COALESCE(ot.fecha_cierre, ot.fecha_creacion), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "closedAt",
                 d.nombre AS "disciplineName",
-                -- 🔥 BLINDAJE NUMÉRICO: Si no hay costo, enviamos 0 en vez de null
-                COALESCE(ot.costo_real, 0) AS cost,
-                COALESCE(ot.costo_estimado, 0) AS "estimatedCost"
+                COALESCE(ot.costo_real, 0)::float AS cost,
+                COALESCE(ot.costo_real, 0)::float AS costo
             FROM ORDEN_TRABAJO ot
             LEFT JOIN MAQUINA m ON ot.maquina_id = m.maquina_id
             LEFT JOIN USUARIO u ON ot.tecnico_id = u.usuario_id
@@ -250,10 +248,6 @@ def list_work_orders():
         """
         return _query_all(query)
     except Exception as e:
-        print(f"Error salvado en work-orders: {e}")
-        return []
-    except Exception as e:
-        # 🔥 SALVAVIDAS: Si ocurre un error interno, imprimimos en Render pero devolvemos vacío a React
         print(f"Error salvado en work-orders: {e}")
         return []
 @app.post("/api/work-orders")
@@ -305,7 +299,6 @@ def get_financial_impact():
             FROM ORDEN_TRABAJO
         """) or {"total_ots": 0, "cerradas": 0, "costo_total": 0}
 
-        # 🔥 Aseguramos que Python los trate como números y no explote el JSON
         cerradas = int(stats["cerradas"] or 0)
         total = int(stats["total_ots"] or 0)
         costo_total = float(stats["costo_total"] or 0)
@@ -336,9 +329,11 @@ def get_financial_impact():
                 "open": int(found["abiertas"] or 0)
             })
 
-        # 🔥 Gráfico de Torta Seguro: Buscamos máquinas con fallas
         top_machines = _query_all("""
-            SELECT m.nombre as name, COUNT(ot.ot_id) as value
+            SELECT 
+                m.nombre as name, 
+                COUNT(ot.ot_id)::int as value,
+                COUNT(ot.ot_id)::int as count
             FROM MAQUINA m
             JOIN ORDEN_TRABAJO ot ON m.maquina_id = ot.maquina_id
             GROUP BY m.nombre
@@ -346,14 +341,16 @@ def get_financial_impact():
             LIMIT 5
         """)
         if not top_machines:
-            top_machines = [{"name": "Operando al 100%", "value": 1}]
+            top_machines = [{"name": "Operando al 100%", "value": 1, "count": 1}]
 
         return {
             "financials": {
                 "ahorroGenerado": cerradas * 1500, 
+                "ahorro_generado": cerradas * 1500, 
                 "mttr": 45.5, 
                 "efficiency": round(efficiency, 1),
                 "costoTotalAcumulado": costo_total, 
+                "costo_total_acumulado": costo_total, 
                 "mtbfHours": 120
             },
             "trend14Days": trend14Days,
@@ -361,8 +358,7 @@ def get_financial_impact():
         }
     except Exception as e:
         print(f"Error salvado en financial-impact: {e}")
-        return {"financials": {"ahorroGenerado": 0, "mttr": 0, "efficiency": 0, "costoTotalAcumulado": 0, "mtbfHours": 0}, "trend14Days": [], "machines": [{"name": "Cargando...", "value": 1}]}
-
+        return {"financials": {"ahorroGenerado": 0, "ahorro_generado": 0, "mttr": 0, "efficiency": 0, "costoTotalAcumulado": 0, "costo_total_acumulado": 0, "mtbfHours": 0}, "trend14Days": [], "machines": [{"name": "Cargando...", "value": 1, "count": 1}]}
 # =============================================================================
 # 6. RAG (DOCUMENTOS Y CHAT)
 # =============================================================================
