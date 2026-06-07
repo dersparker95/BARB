@@ -196,6 +196,7 @@ def list_machines():
         ORDER BY maquina_id ASC
     """
     return _query_all(query)
+
 @app.get("/api/disciplines")
 @lru_cache(maxsize=1)
 def get_disciplines():
@@ -217,26 +218,31 @@ def get_topologia():
 
 @app.get("/api/work-orders")
 def list_work_orders():
-    query = """
-        SELECT 
-            ot.ot_id AS id, 
-            ot.numero_ot AS title, 
-            ot.estado::text AS status, 
-            ot.priority::text AS priority, 
-            m.nombre AS "machineName", 
-            ot.maquina_id AS "machineId",
-            u.nombre AS technician, 
-            ot.descripcion_problema AS description,
-            ot.fecha_creacion AS "createdAt", 
-            ot.fecha_cierre AS "closedAt",
-            d.nombre AS "disciplineName"
-        FROM orden_trabajo ot
-        LEFT JOIN maquina m ON ot.maquina_id = m.maquina_id
-        LEFT JOIN usuario u ON ot.tecnico_id = u.usuario_id
-        LEFT JOIN disciplina d ON m.disciplina_id = d.disciplina_id
-        ORDER BY ot.ot_id DESC
-    """
-    return _query_all(query)
+    try:
+        query = """
+            SELECT 
+                ot.ot_id AS id, 
+                ot.numero_ot AS title, 
+                ot.estado::text AS status, 
+                ot.priority::text AS priority, 
+                m.nombre AS "machineName", 
+                ot.maquina_id AS "machineId",
+                u.nombre AS technician, 
+                ot.descripcion_problema AS description,
+                ot.fecha_creacion::text AS "createdAt",   -- 🔥 BLINDAJE: Forzamos la fecha a texto
+                ot.fecha_cierre::text AS "closedAt",      -- 🔥 BLINDAJE: Forzamos la fecha a texto
+                d.nombre AS "disciplineName"
+            FROM ORDEN_TRABAJO ot
+            LEFT JOIN MAQUINA m ON ot.maquina_id = m.maquina_id
+            LEFT JOIN USUARIO u ON ot.tecnico_id = u.usuario_id
+            LEFT JOIN DISCIPLINA d ON m.disciplina_id = d.disciplina_id
+            ORDER BY ot.ot_id DESC
+        """
+        return _query_all(query)
+    except Exception as e:
+        # 🔥 SALVAVIDAS: Si ocurre un error interno, imprimimos en Render pero devolvemos vacío a React
+        print(f"Error salvado en work-orders: {e}")
+        return []
 @app.post("/api/work-orders")
 def create_work_order(payload: WorkOrderCreate):
     from datetime import datetime
