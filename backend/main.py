@@ -186,11 +186,16 @@ def get_plants():
     return [{"id": str(r.get("id", 1)), "name": str(r.get("name", "Planta Principal")), "ubicacion": str(r.get("ubicacion", ""))} for r in rows]
 
 @app.get("/api/machines")
-@lru_cache(maxsize=1)
-def get_machines():
-    rows = _query_all("SELECT maquina_id AS id, nombre AS label, disciplina_id FROM maquina ORDER BY nombre")
-    return [{"id": str(r["id"]), "name": r["label"], "disciplinaId": str(r["disciplina_id"])} for r in rows]
-
+def list_machines():
+    query = """
+        SELECT 
+            maquina_id AS id, 
+            nombre AS name, 
+            disciplina_id AS "disciplinaId"
+        FROM MAQUINA
+        ORDER BY maquina_id ASC
+    """
+    return _query_all(query)
 @app.get("/api/disciplines")
 @lru_cache(maxsize=1)
 def get_disciplines():
