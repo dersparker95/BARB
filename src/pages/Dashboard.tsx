@@ -85,7 +85,6 @@ export default function Dashboard() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
-  // 🔥 MEJORA: AbortController integrado para evitar Memory Leaks
   const loadData = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true)
     try {
@@ -102,7 +101,7 @@ export default function Dashboard() {
         setTickets(ticketsArray.map(mapApiWorkOrder))
       }
     } catch (err: any) { 
-      if (err.name === 'AbortError') return; // Ignoramos si fue cancelado por React
+      if (err.name === 'AbortError') return; 
       showToast(t.common?.error || 'Error de conexión al cargar el Dashboard') 
     } finally { 
       setIsLoading(false) 
@@ -190,7 +189,8 @@ export default function Dashboard() {
         <Block title={t.dashboard?.chartResolution || 'Resolución'} style={{ flex: '2 1 400px' }}>
           {resolutionData.length === 0 ? <div className="p-8 text-center text-slate-500">{t.dashboard?.noData || 'Sin datos'}</div> : (
             <div style={{ height: 260 }}>
-              <ResponsiveContainer width="100%" height="100%">
+              {/* 🔥 FIX: minWidth y minHeight agregados */}
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <BarChart data={resolutionData} margin={{ top: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="machineName" tick={{ fontSize: 10, fill: 'var(--ink3)' }} angle={-25} textAnchor="end" height={60} />
@@ -215,7 +215,8 @@ export default function Dashboard() {
         <Block title={t.dashboard?.strategyTitle || 'Estrategia'} style={{ flex: '1 1 300px' }}>
           {typeData.length === 0 ? <div className="p-8 text-center text-slate-500">{t.dashboard?.noData || 'Sin datos'}</div> : (
             <div style={{ height: 260 }}>
-              <ResponsiveContainer width="100%" height="100%">
+              {/* 🔥 FIX: minWidth y minHeight agregados */}
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <PieChart>
                   <Pie data={typeData} innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value" nameKey="name">
                     {typeData.map((d, i) => <Cell key={i} fill={d.fill} />)}
@@ -337,7 +338,7 @@ export default function Dashboard() {
             setSelectedTicket(null);
           } catch(error) {
             showToast(t.common?.error || "Error al eliminar");
-            throw error; // Propagamos el error para que el Modal no se cierre si falló
+            throw error;
           }
         }}
       />

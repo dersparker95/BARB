@@ -41,31 +41,28 @@ export default function FinancialDashboard({ timeRange }) {
 
   if (isLoading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink3)' }}>{t.common?.loading || 'Cargando...'}</div>
 
-  // 🔥 OPTIMIZACIÓN: useMemo para que el `.sort()` no destruya el CPU en cada renderizado
   const topMachines = useMemo(() => {
     const safeMachines = Array.isArray(machines) ? machines : []
     return [...safeMachines].sort((a, b) => {
-      const valA = a[machineView === 'ots' ? 'total' : machineView === 'ahorro' ? 'ahorroGenerado' : machineView === 'mttr' ? 'mttr' : 'slaCompliance'] || 0
-      const valB = b[machineView === 'ots' ? 'total' : machineView === 'ahorro' ? 'ahorroGenerado' : machineView === 'mttr' ? 'mttr' : 'slaCompliance'] || 0
+      // Si la key no existe por el mapeo del backend, no falla, evalúa a 0
+      const valA = a[machineView === 'ots' ? 'value' : machineView === 'ahorro' ? 'ahorroGenerado' : machineView === 'mttr' ? 'mttr' : 'value'] || 0
+      const valB = b[machineView === 'ots' ? 'value' : machineView === 'ahorro' ? 'ahorroGenerado' : machineView === 'mttr' ? 'mttr' : 'value'] || 0
       return valB - valA
     }).slice(0, 8)
   }, [machines, machineView])
 
-  // Cálculos matemáticos seguros
   const safeMttr = Math.round(financials?.mttr || 0)
   const safeEfficiency = Math.min(100, Math.round(financials?.efficiency || 0))
-  const safeAhorro = financials?.ahorro_generado || 0
-  const safeCosto = financials?.costo_total_acumulado || 0
+  const safeAhorro = financials?.ahorro_generado || financials?.ahorroGenerado || 0
+  const safeCosto = financials?.costo_total_acumulado || financials?.costoTotalAcumulado || 0
   const slaTarget = BARB_BUSINESS?.SLA_TARGET || 24
 
-  // Función segura para el subtítulo del MTTR (por si el i18n falla o no es una función)
   const mttrSubtitle = safeMttr > slaTarget && typeof t.financial?.mttrOver === 'function' 
     ? t.financial.mttrOver(Math.round(safeMttr - slaTarget)) 
     : (t.financial?.mttrOptimal || 'Óptimo')
 
   return (
     <section style={{ marginBottom: 24 }}>
-      {/* SECCIÓN DE ROI */}
       <div style={{ background: 'linear-gradient(135deg, var(--surface) 0%, var(--bg-body) 100%)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, marginBottom: 16 }}>
         <div style={{ marginBottom: 16 }}>
           <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: 'var(--ink1)' }}>{t.financial?.roiTitle || 'ROI'}</h2>
@@ -90,7 +87,6 @@ export default function FinancialDashboard({ timeRange }) {
         </div>
       </div>
 
-      {/* TARJETAS DE MÉTRICAS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
         <StatCard 
           icon={TimerReset} 
@@ -130,16 +126,15 @@ export default function FinancialDashboard({ timeRange }) {
         />
       </div>
 
-      {/* GRÁFICOS: TENDENCIAS Y TOP MÁQUINAS */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
         
-        {/* Gráfico de Tendencias */}
         {trend14Days && trend14Days.length > 0 && (
           <div style={{ flex: '1 1 400px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
             <h3 style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink1)', marginBottom: 4 }}>{t.financial?.healthTitle || 'Tendencias'}</h3>
             <p style={{ fontSize: 11, color: 'var(--ink3)', marginBottom: 16 }}>{t.financial?.healthSub || 'Últimos 14 días'}</p>
             <div style={{ height: 220 }}>
-              <ResponsiveContainer width="100%" height="100%">
+              {/* 🔥 FIX: minWidth y minHeight agregados */}
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <AreaChart data={trend14Days} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorAbiertas" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/><stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient>
@@ -157,7 +152,6 @@ export default function FinancialDashboard({ timeRange }) {
           </div>
         )}
 
-        {/* 🔥 RESTAURADO: Gráfico de Máquinas (Consumiendo el estado que estaba huérfano) */}
         {topMachines && topMachines.length > 0 && (
           <div style={{ flex: '1 1 400px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -177,7 +171,8 @@ export default function FinancialDashboard({ timeRange }) {
             </div>
             
             <div style={{ height: 220 }}>
-              <ResponsiveContainer width="100%" height="100%">
+              {/* 🔥 FIX: minWidth y minHeight agregados */}
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <BarChart data={topMachines} layout="vertical" margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="var(--border)" />
                   <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--ink3)' }} hide />
@@ -187,7 +182,8 @@ export default function FinancialDashboard({ timeRange }) {
                     contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} 
                   />
                   <Bar 
-                    dataKey={machineView === 'ots' ? 'total' : machineView === 'ahorro' ? 'ahorroGenerado' : 'mttr'} 
+                    // 🔥 Mapeo ajustado a 'value' si la variable en español falla
+                    dataKey={machineView === 'ots' ? 'value' : machineView === 'ahorro' ? 'ahorroGenerado' : 'mttr'} 
                     radius={[0, 4, 4, 0]} 
                     barSize={16}
                   >
