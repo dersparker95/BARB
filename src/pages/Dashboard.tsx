@@ -1,8 +1,7 @@
 // @ts-nocheck
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Bar, BarChart, Cell, CartesianGrid, ReferenceLine, ResponsiveContainer,
-  Tooltip, XAxis, YAxis, PieChart, Pie, Legend
+  Bar, BarChart, Cell, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis, PieChart, Pie, Legend
 } from 'recharts'
 import * as XLSX from 'xlsx'
 import TicketTable from '../components/TicketTable'
@@ -188,10 +187,8 @@ export default function Dashboard() {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 24 }}>
         <Block title={t.dashboard?.chartResolution || 'Resolución'} style={{ flex: '2 1 400px' }}>
           {resolutionData.length === 0 ? <div className="p-8 text-center text-slate-500">{t.dashboard?.noData || 'Sin datos'}</div> : (
-            <div style={{ height: 260 }}>
-              {/* 🔥 FIX APLICADO AQUÍ: minWidth y minHeight */}
-              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                <BarChart data={resolutionData} margin={{ top: 20 }}>
+            <div style={{ width: '100%', overflowX: 'auto', display: 'flex', justifyContent: 'center' }}>
+                <BarChart width={500} height={260} data={resolutionData} margin={{ top: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="machineName" tick={{ fontSize: 10, fill: 'var(--ink3)' }} angle={-25} textAnchor="end" height={60} />
                   <YAxis tick={{ fontSize: 10, fill: 'var(--ink3)' }} tickFormatter={v => `${v}m`} />
@@ -207,24 +204,20 @@ export default function Dashboard() {
                     {resolutionData.map((d, i) => <Cell key={i} fill={d.minutos > (BARB_BUSINESS?.SLA_TARGET || 24) ? '#ef4444' : '#10b981'} />)}
                   </Bar>
                 </BarChart>
-              </ResponsiveContainer>
             </div>
           )}
         </Block>
 
         <Block title={t.dashboard?.strategyTitle || 'Estrategia'} style={{ flex: '1 1 300px' }}>
           {typeData.length === 0 ? <div className="p-8 text-center text-slate-500">{t.dashboard?.noData || 'Sin datos'}</div> : (
-            <div style={{ height: 260 }}>
-              {/* 🔥 FIX APLICADO AQUÍ TAMBIÉN: minWidth y minHeight */}
-              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                <PieChart>
+            <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+                <PieChart width={300} height={260}>
                   <Pie data={typeData} innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value" nameKey="name">
                     {typeData.map((d, i) => <Cell key={i} fill={d.fill} />)}
                   </Pie>
                   <Tooltip contentStyle={{ background: 'var(--surface)', borderRadius: 8 }} />
                   <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: 11 }} />
                 </PieChart>
-              </ResponsiveContainer>
             </div>
           )}
         </Block>
