@@ -231,6 +231,8 @@ def list_work_orders():
                 END AS status, 
                 ot.estado::text AS estado,
                 ot.priority::text AS priority, 
+                
+                -- Variables para el Dashboard (camelCase)
                 m.nombre AS "machineName", 
                 ot.maquina_id::text AS "machineId",
                 COALESCE(u.nombre, 'Sin asignar') AS technician, 
@@ -239,7 +241,22 @@ def list_work_orders():
                 TO_CHAR(COALESCE(ot.fecha_cierre, ot.fecha_creacion), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "closedAt",
                 d.nombre AS "disciplineName",
                 COALESCE(ot.costo_real, 0)::float AS cost,
-                COALESCE(ot.costo_real, 0)::float AS costo
+                COALESCE(ot.costo_estimado, 0)::float AS "estimatedCost",
+                
+                -- Variables para DocChat y Gráficos Profundos (snake_case)
+                m.nombre AS machine_name,
+                ot.maquina_id::text AS machine_id,
+                COALESCE(u.nombre, 'Sin asignar') AS tecnico_nombre,
+                d.nombre AS discipline_name,
+                TO_CHAR(ot.fecha_creacion, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                TO_CHAR(COALESCE(ot.fecha_cierre, ot.fecha_creacion), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS closed_at,
+                ot.tipo::text AS tipo,
+                COALESCE(ot.costo_estimado, 0)::float AS costo_estimado,
+                COALESCE(ot.costo_real, 0)::float AS costo_real,
+                ot.reporte_id,
+                ot.diagnostico_id,
+                ot.downtime_minutes,
+                EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ot.fecha_creacion))/60 AS age_minutes
             FROM ORDEN_TRABAJO ot
             LEFT JOIN MAQUINA m ON ot.maquina_id = m.maquina_id
             LEFT JOIN USUARIO u ON ot.tecnico_id = u.usuario_id
@@ -252,33 +269,49 @@ def list_work_orders():
         return []
 @app.post("/api/work-orders")
 def create_work_order(payload: WorkOrderCreate):
-    from datetime import datetime
-    numero_unico = f"OT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    
-    query = """
-        INSERT INTO orden_trabajo (
-            numero_ot, maquina_id, tecnico_id, creado_por, 
-            tipo, priority, estado, descripcion_problema, fecha_creacion
-        )
-        VALUES (
-            :numero_ot, :machine, :tecnicoId, 1, 
-            'corrective', :priority::prioridad_ot, :status::estado_ot, :description, CURRENT_TIMESTAMP
-        )
-        RETURNING ot_id
-    """
-    params = {
-        "numero_ot": numero_unico,
-        "machine": payload.maquina_id,
-        "tecnicoId": payload.tecnico_id,
-        "priority": "high",  # 'low', 'medium', 'high', 'urgent'
-        "status": "pending", # 'pending', 'assigned', 'in_progress', 'completed'
-        "description": payload.description
-    }
-    _execute_write(query, params)
-    
-    get_financial_impact.cache_clear()
-    return {"status": "success"}
+    try:
+        from datetime import datetime
+        numero_unico = f"OT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+        # 🔥 Traducción al vuelo para proteger la base de datos (ENUMs)
+        safe_priority = payload.priority.lower()
+        if safe_priority not in ['low', 'medium', 'high', 'urgent']:
+            safe_priority = 'medium'
+            
+        safe_status = payload.status.lower()
+        if safe_status not in ['pending', 'assigned', 'in_progress', 'completed', 'cancelled', 'overdue']:
+            safe_status = 'pending'
 
+        query = """
+            INSERT INTO ORDEN_TRABAJO (
+                numero_ot, maquina_id, tecnico_id, creado_por, 
+                tipo, priority, estado, descripcion_problema, fecha_creacion
+            )
+            VALUES (
+                :numero_ot, :machine, :tecnicoId, 1, 
+                'corrective', :priority::prioridad_ot, :status::estado_ot, :description, CURRENT_TIMESTAMP
+            )
+            RETURNING ot_id
+        """
+        params = {
+            "numero_ot": numero_unico,
+            "machine": payload.maquina_id,
+            "tecnicoId": payload.tecnico_id,
+            "priority": safe_priority,
+            "status": safe_status,
+            "description": payload.description
+        }
+        _execute_write(query, params)
+        
+        get_financial_impact.cache_clear()
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Error al crear OT: {e}")
+        # Si falla, devolvemos un error 500 elegante para que el frontend no explote
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail="Error de base de datos al crear OT")
+    
+    
 @app.put("/api/work-orders/{order_id}/status")
 def update_work_order_status(order_id: int, payload: WorkOrderStatusUpdate):
     # Si se cierra, guardamos la fecha de cierre

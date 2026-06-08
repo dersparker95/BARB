@@ -455,7 +455,36 @@ const DocChat: React.FC = () => {
               const priority = getWorkOrderPriority(ot)
 
               return (
-                <button key={String(ot.id)} className="manual-item" type="button" title={`${title} · ${machineLabel} · ${status} · ${priority}`} onClick={() => {}}>
+                <button 
+                  key={String(ot.id)} 
+                  className="manual-item" 
+                  type="button" 
+                  title={`${title} · ${machineLabel} · ${status} · ${priority}`} 
+                  onClick={() => {
+                    // 🔥 INYECCIÓN DE CONTEXTO: Armamos el prompt con los datos de la BD
+                    const descripcion = ot.description || ot.descripcion_problema || 'Sin descripción detallada';
+                    const contextPrompt = `Contexto de OT seleccionada:
+- Orden: ${title}
+- Equipo: ${machineLabel}
+- Estado: ${status} (Prioridad: ${priority})
+- Problema reportado: ${descripcion}
+
+Considerando esta información, `;
+                    
+                    // Lo metemos en la caja de texto
+                    setInput(contextPrompt);
+                    
+                    // Hacemos que la caja crezca y se enfoque sola
+                    setTimeout(() => {
+                      const el = document.getElementById('doc-input');
+                      if (el) {
+                        el.focus();
+                        el.style.height = 'auto';
+                        el.style.height = `${Math.min(el.scrollHeight, 150)}px`;
+                      }
+                    }, 50);
+                  }}
+                >
                   <div className="mi-icon">🛠️</div>
                   <div className="mi-body">
                     <div className="mi-name">{title}</div>
