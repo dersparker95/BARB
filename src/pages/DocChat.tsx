@@ -122,7 +122,7 @@ const getWorkOrderTitle = (ot: WorkOrderRecord): string => String(ot.numero_ot ?
 const getWorkOrderStatus = (ot: WorkOrderRecord): string => String(ot.status ?? ot.estado ?? 'open').trim().toLowerCase()
 const getWorkOrderPriority = (ot: WorkOrderRecord): string => String(ot.priority ?? 'medium').trim().toLowerCase()
 
-const DocChat: React.FC = () => {
+export default function DocChat() {
   const {
     apiBase, lmBase, discipline, plant, docMachine, docMessages, pushDocMessage,
     clearDocMessages, loading, setLoading, setDiscipline, setPlant, setDocMachine,
@@ -188,7 +188,6 @@ const DocChat: React.FC = () => {
     if (areaRef.current) areaRef.current.scrollTop = areaRef.current.scrollHeight
   }, [docMessages.length])
 
-  // 🔥 MEJORA: AbortController para las cargas iniciales de catálogos
   useEffect(() => {
     const controller = new AbortController()
 
@@ -229,39 +228,20 @@ const DocChat: React.FC = () => {
     return () => controller.abort()
   }, [apiRoot])
 
-  // 🔥 TU LÓGICA DE FILTRADO INTACTA Y PROTEGIDA
+  // 🔥 MEJORA DE FILTRADO: Comparación robusta por IDs y Strings normalizados (Formatos Backend unificados)
   const filteredOTs = useMemo(() => {
-    const selectedPlantId = String(plant || '')
-    const selectedDisciplineId = selectedDisciplineRecord ? String(selectedDisciplineRecord.id) : ''
-    const selectedMachineId = docMachine && docMachine !== 'all' ? String(docMachine) : ''
+    const targetPlantId = String(plant || '');
+    const targetDisc = discipline ? String(discipline).toLowerCase() : '';
+    const targetMachineId = (docMachine && docMachine !== 'all') ? String(docMachine) : '';
 
     return workOrders.filter(ot => {
-      const machineMatch = selectedMachineId === '' ? true : (() => {
-        const otMachineName = normalizeWorkOrderMachine(ot)
-        const machineById = machines.find(m => String(m.id) === selectedMachineId)
-        const machineByName = machines.find(m => normalizeMachineLabel(m) === selectedMachineId)
-        const selectedMachineLabel = normalizeMachineLabel(machineById ?? machineByName ?? null)
-        if (selectedMachineLabel) return otMachineName === selectedMachineLabel || otMachineName === selectedMachineId
-        return otMachineName === selectedMachineId
-      })()
+      const plantMatch = targetPlantId === '' || String(ot.plant_id ?? ot.planta_id ?? '') === targetPlantId;
+      const discMatch = targetDisc === '' || String(ot.discipline_name ?? ot.disciplina ?? '').toLowerCase() === targetDisc;
+      const machMatch = targetMachineId === '' || String(ot.machine_id ?? '') === targetMachineId || String(ot.machine_name ?? '') === targetMachineId;
 
-      const machineForOt = machines.find(m => normalizeMachineLabel(m) === normalizeWorkOrderMachine(ot)) ?? machines.find(m => String(m.id) === String(ot.machineId ?? ot.machine_id ?? '')) ?? null
-      const disciplineMatch = selectedDisciplineId === '' ? true : (() => {
-        const otDiscipline = normalizeWorkOrderDiscipline(ot, machineForOt)
-        if (!otDiscipline) return true
-        return otDiscipline === selectedDisciplineId || otDiscipline === normalizeCatalogName(selectedDisciplineRecord)
-      })()
-
-      const plantMatch = selectedPlantId === '' ? true : (() => {
-        const selectedPlantLabel = normalizePlantLabel(selectedPlantRecord)
-        const otPlant = normalizeWorkOrderPlant(ot, machineForOt)
-        if (!otPlant) return true
-        return (otPlant === selectedPlantId || otPlant === selectedPlantLabel || otPlant === String(selectedPlantRecord?.id ?? ''))
-      })()
-
-      return machineMatch && disciplineMatch && plantMatch
-    })
-  }, [docMachine, machines, plant, selectedDisciplineRecord, selectedPlantRecord, workOrders])
+      return plantMatch && discMatch && machMatch;
+    });
+  }, [docMachine, discipline, plant, workOrders]);
 
   useEffect(() => {
     const selectedPlantId = String(plant || '')
@@ -345,7 +325,6 @@ const DocChat: React.FC = () => {
     if (activeManualId === id) setActiveManualId('')
   }
 
-  // 🔥 BUG FIX: Lógica de chat reparada para no hacer doble fetch
   const send = async () => {
     const query = input.trim()
     if (!query || loading || !discipline) return
@@ -360,7 +339,6 @@ const DocChat: React.FC = () => {
     pushDocMessage({ role: 'user', content: query, timestamp: Date.now() })
 
     try {
-      // 1. Intentamos el Backend FastAPI principal
       const response = await fetch(`${apiRoot}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -388,7 +366,6 @@ const DocChat: React.FC = () => {
       console.warn("Fallo conexión con FastAPI, intentando modo Offline (RAG Local)")
     }
 
-    // 2. Fallback: Modo Local si FastAPI no responde
     const chunks = retrieveFromManual(query, activeManual?.chunks ?? [])
     const ctx = chunks.length
       ? chunks.map((chunk, index) => `[FRAGMENTO ${index + 1} — ${chunk.doc} p.${chunk.page}]\n${chunk.text}`).join('\n\n')
@@ -400,7 +377,6 @@ const DocChat: React.FC = () => {
     const sysPrompt = `Eres BARB, asistente experto en mantenimiento industrial. Disciplina: ${discipline}. ${machineName ? `Equipo seleccionado: ${machineName}.` : ''} ${manualNote}\nResponde en ${nLang === 'en' ? 'inglés' : 'español'}, paso a paso, citando página del manual cuando disponible. Usa ⚠️ para advertencias de seguridad.\n\nCONTEXTO MANUAL:\n${ctx}`
 
     try {
-      // Intentamos pegarle a LM Studio directamente como último recurso
       const lmResponse = await fetch(`${lmRoot}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -421,7 +397,6 @@ const DocChat: React.FC = () => {
         return
       }
     } catch {
-      // 3. Fallback del Fallback: Demo Text
       const demoAns = chunks.length
         ? `**[DEMO — sin backend activo]**\n\nBasado en el manual:\n\n${chunks[0].text}\n\n*Inicia LM Studio o el backend FastAPI para respuestas inteligentes.*`
         : `**[Modo Local]** No hay conexión al backend ni manuales PDF cargados.`
@@ -442,7 +417,7 @@ const DocChat: React.FC = () => {
       <div className="panel-left">
         <div className="panel-section">
           <span className="panel-label">
-            🗂️ {t.docChat?.assignedOts || (nLang === 'en' ? 'Assigned OTs' : 'OTs asignadas')}
+            Target OTs
             <span className="ml-count">{filteredOTs.length}</span>
           </span>
 
@@ -461,7 +436,7 @@ const DocChat: React.FC = () => {
                   type="button" 
                   title={`${title} · ${machineLabel} · ${status} · ${priority}`} 
                   onClick={() => {
-                    // 🔥 INYECCIÓN DE CONTEXTO: Armamos el prompt con los datos de la BD
+                    // 🔥 INYECCIÓN DE CONTEXTO: Carga automatizada de variables de la OT en el input
                     const descripcion = ot.description || ot.descripcion_problema || 'Sin descripción detallada';
                     const contextPrompt = `Contexto de OT seleccionada:
 - Orden: ${title}
@@ -471,10 +446,7 @@ const DocChat: React.FC = () => {
 
 Considerando esta información, `;
                     
-                    // Lo metemos en la caja de texto
                     setInput(contextPrompt);
-                    
-                    // Hacemos que la caja crezca y se enfoque sola
                     setTimeout(() => {
                       const el = document.getElementById('doc-input');
                       if (el) {
@@ -502,9 +474,15 @@ Considerando esta información, `;
 
         <div className="lib-sep" />
 
+        {/* 🔥 UNIFICACIÓN DE DISEÑO: Selectores con la misma clase estilizada de los modales */}
         <div className="panel-section">
           <span className="panel-label">{t.common?.plant || 'Planta / Ubicación'}</span>
-          <select className="form-select" value={String(plant)} onChange={e => setPlant(e.target.value)} disabled={loading || catalogsLoading}>
+          <select 
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60" 
+            value={String(plant || '')} 
+            onChange={e => setPlant(e.target.value)} 
+            disabled={loading || catalogsLoading}
+          >
             {normalizedPlants.map(p => (
               <option key={String(p.id)} value={String(p.id)}>{normalizePlantLabel(p) || p.ubicacion || String(p.id)}</option>
             ))}
@@ -513,10 +491,13 @@ Considerando esta información, `;
 
         <div className="panel-section">
           <span className="panel-label">{t.common?.discipline || 'Disciplina'}</span>
-          <select className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60"
-            value={discipline ?? ''} onChange={e => {
+          <select 
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60"
+            value={discipline ?? ''} 
+            onChange={e => {
               setDiscipline(e.target.value || null); setDocMachine('all'); setSelectedMachine(null); clearDocMessages()
-            }} disabled={loading || catalogsLoading}
+            }} 
+            disabled={loading || catalogsLoading}
           >
             <option value="">{t.docChat?.selectDiscipline || 'Seleccionar disciplina...'}</option>
             {disciplines.map(option => (
@@ -527,10 +508,13 @@ Considerando esta información, `;
 
         <div className="panel-section">
           <span className="panel-label">{t.common?.machine || 'Máquina'} ({t.common?.optional || 'opcional'})</span>
-          <select className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60"
-            value={docMachine === 'all' ? '' : docMachine} onChange={e => {
+          <select 
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60"
+            value={docMachine === 'all' ? '' : docMachine} 
+            onChange={e => {
               const nextMachineId = e.target.value; setDocMachine(nextMachineId || 'all'); setSelectedMachine(nextMachineId || null); clearDocMessages()
-            }} disabled={loading || catalogsLoading || !selectedDisciplineRecord}
+            }} 
+            disabled={loading || catalogsLoading || !selectedDisciplineRecord}
           >
             <option value="">{t.docChat?.selectMachine || 'Seleccionar máquina...'}</option>
             {availableMachines.map(option => (
@@ -623,7 +607,6 @@ Considerando esta información, `;
             </div>
           )}
 
-          {/* 🔥 MEJORA: Combinación de botones de manuales (Selección + Quitar) para no ensuciar el DOM */}
           {manuals.length > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {manuals.map(manual => (
@@ -643,5 +626,3 @@ Considerando esta información, `;
     </div>
   )
 }
-
-export default DocChat
