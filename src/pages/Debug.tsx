@@ -1,265 +1,198 @@
 // @ts-nocheck
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useAppContext } from '../context/AppContext'
-import createApiService from '../services/api'
 import ChatBubble, { Thinking } from '../components/ChatBubble'
-import { retrieveContext } from '../utils/rag'
-import { callLMStudio } from '../services/lm'
-import { Message, DebugApiResponse } from '../types'
-import { useNavigate } from 'react-router-dom'
-import { getTranslations } from '../utils/i18n'
+import { getTranslations, normalizeLang } from '../utils/i18n'
 
-interface DebugProps {
-  machineId?: string | null
-}
-
-const Debug: React.FC<DebugProps> = ({ machineId }) => {
-  // 🔥 BLINDAJE: Agregamos lang y lo conectamos a las traducciones
-  const { apiBase, lmBase, selectedMachine, getDebugMessages, pushDebugMessage, setLoading, loading, lang } = useAppContext()
+export default function DebugChat() {
+  const { apiBase, lmBase, user, lang } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
-  
+  const nLang = normalizeLang(lang)
+
   const [input, setInput] = useState('')
-  const areaRef = useRef<HTMLDivElement | null>(null)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [messages, setMessages] = useState([])
+  const [loading, setLoading] = useState(false)
   
-  const [machineData, setMachineData] = useState<any>(null)
-  const [disciplineName, setDisciplineName] = useState<string>('General')
+  // Datos del backend
+  const [machines, setMachines] = useState([])
+  const [workOrders, setWorkOrders] = useState([])
+  const [selectedMachineId, setSelectedMachineId] = useState(null)
+  
+  const areaRef = useRef(null)
+  const apiRoot = (apiBase || 'https://barb-2ih8.onrender.com/api').replace(/\/$/, '')
 
-  const safeApiBase = (apiBase || 'http://localhost:9000/api').replace(/\/$/, '')
-  const api = useMemo(() => createApiService(safeApiBase, lmBase), [safeApiBase, lmBase])
-  const navigate = useNavigate()
-
-  const activeMachineId = machineId ?? selectedMachine
-
-  const sessionIdVisual = useMemo(() => {
-    if (!activeMachineId) return '—'
-    return `ACT-${Math.floor(Date.now() % 100000)}`
-  }, [activeMachineId])
-
-  // 🔥 OPTIMIZACIÓN: AbortController en lugar de variable booleana para evitar Memory Leaks
+  // 1. Cargar Máquinas y OTs al iniciar
   useEffect(() => {
-    if (!activeMachineId) return;
-    
-    const controller = new AbortController();
-    
-    const fetchMachineInfo = async () => {
+    const fetchData = async () => {
       try {
-        const [machRes, discRes] = await Promise.all([
-          fetch(`${safeApiBase}/machines`, { signal: controller.signal }),
-          fetch(`${safeApiBase}/disciplines`, { signal: controller.signal })
-        ]);
-        
-        if (machRes.ok && discRes.ok) {
-          const machines = await machRes.json();
-          const disciplines = await discRes.json();
-          
-          if (controller.signal.aborted) return;
-
-          const currentMachine = machines.find((m: any) => String(m.id) === String(activeMachineId));
-          if (currentMachine) {
-            setMachineData(currentMachine);
-            const disc = disciplines.find((d: any) => String(d.id) === String(currentMachine.discipline_id || currentMachine.disciplineId));
-            if (disc) setDisciplineName(disc.name || disc.nombre || 'General');
-          }
-        }
-      } catch (error: any) {
-        if (error.name !== 'AbortError') console.error("Error cargando detalles:", error);
+        const [machRes, otRes] = await Promise.all([
+          fetch(`${apiRoot}/machines`),
+          fetch(`${apiRoot}/work-orders`)
+        ])
+        if (machRes.ok) setMachines(await machRes.json())
+        if (otRes.ok) setWorkOrders(await otRes.json())
+      } catch (error) {
+        console.error("Error cargando datos para Debug:", error)
       }
-    };
-    
-    void fetchMachineInfo();
-    return () => controller.abort();
-  }, [activeMachineId, safeApiBase]);
+    }
+    fetchData()
+  }, [apiRoot])
 
-  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value)
-    e.target.style.height = 'auto'
-    e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px'
-  }
-
-  const machineMessages = useMemo(() => getDebugMessages(activeMachineId), [activeMachineId, getDebugMessages])
-
+  // Scroll automático
   useEffect(() => {
     if (areaRef.current) areaRef.current.scrollTop = areaRef.current.scrollHeight
-  }, [machineMessages.length])
+  }, [messages])
 
-  const send = async (queryText?: string) => {
-    const query = (queryText || input).trim()
-    if (!query || loading || !activeMachineId) return
-    
+  // 2. Filtrar el historial de la máquina seleccionada
+  const machineHistory = useMemo(() => {
+    if (!selectedMachineId) return []
+    return workOrders.filter(ot => String(ot.machineId ?? ot.machine_id) === String(selectedMachineId))
+  }, [selectedMachineId, workOrders])
+
+  const selectedMachine = machines.find(m => String(m.id ?? m.maquina_id) === String(selectedMachineId))
+
+  // 3. Enviar mensaje a la IA
+  const send = async () => {
+    const query = input.trim()
+    if (!query || loading) return
+
     setLoading(true)
-    if (!queryText) setInput('')
+    setInput('')
+    setMessages(prev => [...prev, { role: 'user', content: query }])
+
+    try {
+      const response = await fetch(`${apiRoot}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: query,
+          language: nLang,
+          machine: selectedMachine?.name || 'general'
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Error de conexión con el motor de IA.' }])
+      }
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Servidor inalcanzable.' }])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 4. INYECCIÓN DE HISTORIAL (La Magia)
+  const injectHistory = () => {
+    if (!selectedMachine || machineHistory.length === 0) return;
     
-    pushDebugMessage(activeMachineId, { role: 'user', content: query, timestamp: Date.now() })
+    const historyText = machineHistory.map(ot => 
+      `- [${ot.createdAt ? ot.createdAt.slice(0,10) : 'Fecha N/A'}] OT: ${ot.title}. Problema: ${ot.description}. Estado: ${ot.status}.`
+    ).join('\n');
 
-    const el = document.getElementById('debug-input')
-    if (el) el.style.height = 'auto'
-
-    const realMachineName = machineData?.name || machineData?.nombre || `Equipo ${activeMachineId}`;
-
-    try {
-      const resp = await api.chat.debug({ sessionId: null, machineId: activeMachineId, message: query, attachments: [], sensorData: null }) as DebugApiResponse
-      if (resp && resp.response) {
-        pushDebugMessage(activeMachineId, { role: 'assistant', content: resp.response, timestamp: Date.now() })
-        setLoading(false)
-        return
-      }
-    } catch (_) {}
-
-    try {
-      const chunks = retrieveContext(query)
-      const ctx = chunks.length ? chunks.map((c, i) => `[FRAGMENTO ${i + 1} — p.${c.page}]\n${c.text}`).join('\n\n') : '[Sin manual disponible. Usa tu conocimiento general técnico.]'
-      
-      // 🔥 Ajuste de idioma dinámico en el System Prompt
-      const languageInstruction = lang === 'en' ? 'Reply always in English.' : 'Responde siempre en español.';
-
-      const system = `Eres BARB, un asistente de Inteligencia Artificial estrictamente especializado en diagnóstico, mantenimiento y reparación de maquinaria industrial.
-      
-REGLA DE ORO INQUEBRANTABLE: Tienes PROHIBIDO responder preguntas fuera del ámbito industrial, mecánico, eléctrico, o de esta plataforma. Si el usuario pregunta algo no relacionado, debes negarte educadamente.
-
-Máquina actual bajo análisis: ${realMachineName} (Disciplina: ${disciplineName}).
-${languageInstruction} Ofrece un diagnóstico preciso, posibles causas y acciones paso a paso. Usa formato Markdown (negritas, viñetas) para que sea fácil de leer. Usa ⚠️ para advertencias críticas de seguridad.
-
-CONTEXTO RECUPERADO DE LOS MANUALES:
-${ctx}`;
-
-      const resp = await callLMStudio([{ role: 'system', content: system }, ...machineMessages.slice(-4).map(m => ({ role: m.role, content: m.content })), { role: 'user', content: query }], lmBase, 'local-model')
-      if (resp && resp.ok) {
-        const data = await resp.json()
-        const answer = data.choices?.[0]?.message?.content || data.result || ''
-        pushDebugMessage(activeMachineId, { role: 'assistant', content: answer, timestamp: Date.now() })
-        setLoading(false)
-        return
-      }
-    } catch (_) {}
-
-    const chunks = retrieveContext(query)
-    const demoAns = chunks.length ? `**[Offline]**:\n\n${chunks[0].text}` : `**[Offline]** Conecta el backend FastAPI para habilitar a BARB.`
-    pushDebugMessage(activeMachineId, { role: 'assistant', content: demoAns, timestamp: Date.now() })
-    setLoading(false)
+    const prompt = `Analiza el siguiente historial de fallas del equipo "${selectedMachine.name}":\n\n${historyText}\n\n¿Ves algún patrón de falla repetitiva? ¿Qué componente deberíamos inspeccionar a fondo?`;
+    
+    setInput(prompt);
   }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      send()
-    }
-  }
-
-  const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0]
-      const userMsg = lang === 'en' 
-        ? `[📷 Image captured: ${file.name}] - Please analyze the visible damages.` 
-        : `[📷 Imagen capturada: ${file.name}] - Por favor analiza los daños visibles.`
-      const queryMsg = lang === 'en' 
-        ? `Please analyze possible visible damages based on maintenance protocols, I have uploaded a reference image.` 
-        : `Por favor analiza posibles daños visibles basándote en protocolos de mantenimiento, he subido una imagen de referencia.`
-
-      pushDebugMessage(activeMachineId!, { role: 'user', content: userMsg, timestamp: Date.now() })
-      send(queryMsg)
-    }
-  }
-
-  const visualName = machineData?.name || machineData?.nombre || (activeMachineId ? `${t.common?.machine || 'Equipo'} ${activeMachineId}` : (t.topology?.noMachineSelected || 'Sin equipo seleccionado'));
-  const visualStatus = machineData?.status || machineData?.estado || 'Operativo';
-
-  // 🔥 Banderas para los chips de sugerencias rápidas
-  const chipSecurity = lang === 'en' ? "⚠️ What are the safety risks for this equipment?" : "⚠️ ¿Cuáles son los riesgos de seguridad en este equipo?"
-  const chipPreventive = lang === 'en' ? "What are the steps for basic preventive maintenance?" : "¿Cuáles son los pasos para un mantenimiento preventivo básico?"
-  const chipChecklist = lang === 'en' ? "Generate an inspection checklist" : "Genera una lista de verificación (checklist) de inspección"
 
   return (
-    <div className="two-panel">
-      <div className="debug-panel-left">
-        <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--ink)', marginBottom: '12px' }}>
-          {t.debug?.equipmentInfo || 'Información del Equipo'}
-        </h3>
-        <div className="debug-machine-img">
-          <div className="big-icon">{disciplineName === 'Eléctrica' || disciplineName === 'Electrical' ? '⚡' : disciplineName === 'Hidráulica' || disciplineName === 'Hydraulics' ? '💧' : '⚙️'}</div>
-          <div className="dm-name">{visualName}</div>
-          <div className="dm-model">ID BD: {activeMachineId || '—'}</div>
+    <div className="two-panel w-full h-full">
+      
+      {/* PANEL IZQUIERDO: Selector de Máquinas y Ficha Histórica */}
+      <div className="panel-left flex flex-col gap-4">
+        <div className="panel-section">
+          <span className="panel-label">🛠️ Diagnóstico de Equipos</span>
+          <p className="text-xs text-[var(--ink3)] mb-4">Selecciona una máquina para analizar su patrón de fallas con IA.</p>
+          
+          <select 
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)]"
+            value={selectedMachineId || ''} 
+            onChange={e => setSelectedMachineId(e.target.value)}
+          >
+            <option value="">Seleccionar equipo...</option>
+            {machines.map(m => (
+              <option key={m.id || m.maquina_id} value={m.id || m.maquina_id}>{m.name || m.nombre}</option>
+            ))}
+          </select>
         </div>
-        
-        {activeMachineId && (
-          <div className="debug-specs">
-            <h4>{t.debug?.specs || 'Especificaciones'}</h4>
-            <div className="spec-row">
-              <span className="spec-label">{t.common?.status || 'Estado'}</span>
-              <span className="spec-val" style={{ 
-                color: visualStatus.toLowerCase().includes('alarma') || visualStatus.toLowerCase().includes('error') ? '#ef4444' : visualStatus.toLowerCase().includes('warning') ? '#f59e0b' : '#10b981',
-                fontWeight: 700,
-                textTransform: 'capitalize' 
-              }}>
-                {t.statuses?.[visualStatus.toLowerCase()] || visualStatus}
-              </span>
-            </div>
-            <div className="spec-row"><span className="spec-label">{t.common?.discipline || 'Disciplina'}</span><span className="spec-val">{disciplineName}</span></div>
-            <div className="spec-row"><span className="spec-label">{t.debug?.sessionId || 'ID de Sesión'}</span><span className="spec-val font-mono text-secondary">{sessionIdVisual}</span></div>
+
+        {selectedMachine && (
+          <div className="panel-section flex-1 overflow-hidden flex flex-col">
+            <span className="panel-label mb-2">Historial de OTs ({machineHistory.length})</span>
             
-            <div style={{ marginTop: '20px', padding: '12px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px' }}>
-              <p style={{ fontSize: '11px', color: 'var(--blue)', fontWeight: 600, margin: 0, display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <span>🛡️</span> {t.debug?.strictMode || 'Modo Estricto BARB Activado'}
-              </p>
-              <p style={{ fontSize: '10px', color: 'var(--ink3)', margin: '4px 0 0 0', lineHeight: 1.4 }}>
-                {t.debug?.strictModeDesc || 'La IA está bloqueada para responder solo temas industriales.'}
-              </p>
+            <div className="overflow-y-auto pr-2 flex-1 space-y-2">
+              {machineHistory.length === 0 ? (
+                <div className="text-xs text-[var(--ink3)] italic">Este equipo no tiene historial de fallas reportadas.</div>
+              ) : (
+                machineHistory.map((ot, i) => (
+                  <div key={i} className="p-3 bg-[var(--bg-body)] border border-[var(--border)] rounded-lg text-xs">
+                    <div className="font-bold text-[var(--ink1)]">{ot.title}</div>
+                    <div className="text-[var(--ink2)] mt-1">{ot.description}</div>
+                    <div className="flex justify-between items-center mt-2 text-[10px] text-[var(--ink3)]">
+                      <span className="capitalize">{ot.status}</span>
+                      <span>{ot.createdAt ? ot.createdAt.slice(0, 10) : ''}</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
+
+            {machineHistory.length > 0 && (
+              <button 
+                onClick={injectHistory}
+                className="mt-4 w-full py-2 bg-[var(--blue-bg)] text-[var(--blue)] border border-[var(--blue)] rounded-lg text-[13px] font-bold hover:bg-[var(--blue)] hover:text-white transition-colors"
+              >
+                🧠 Inyectar historial a la IA
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      <div className="debug-panel-right">
-        <div className="debug-chat" ref={areaRef}>
-          {machineMessages.length === 0 ? (
-            <div className="chat-empty">
-              <h3>{activeMachineId ? (t.debug?.startSession || 'Inicia la sesión de diagnóstico') : (t.debug?.selectMachine || 'Selecciona una máquina desde la topología')}</h3>
-            </div>
-          ) : (
-            machineMessages.map((m, i) => (<ChatBubble key={i} msg={m} side={m.role === 'user' ? 'user' : 'bot'} />))
-          )}
-          {loading && <div className="mt-md"><Thinking /></div>}
+      {/* PANEL DERECHO: El Chat */}
+      <div className="panel-right flex flex-col h-full bg-[var(--surface)]">
+        <div className="p-4 border-b border-[var(--border)] bg-[var(--surface)] flex justify-between items-center shrink-0">
+          <div>
+            <h2 className="text-base font-black text-[var(--ink1)]">Debug & Análisis Predictivo</h2>
+            <p className="text-xs text-[var(--ink3)]">Analiza causas raíz y solicita sugerencias de mantenimiento.</p>
+          </div>
         </div>
 
-        <div className="debug-input-zone" style={{ flexShrink: 0, opacity: activeMachineId ? 1 : 0.5, pointerEvents: activeMachineId ? 'auto' : 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          
-          {/* 🔥 SUGERENCIAS RÁPIDAS (CHIPS) CON i18n */}
-          {activeMachineId && (
-            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }} className="hide-scrollbar">
-              <button onClick={() => send(chipSecurity)} style={{ whiteSpace: 'nowrap', fontSize: '11px', padding: '6px 12px', borderRadius: '16px', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--ink2)', cursor: 'pointer' }}>
-                {t.debug?.chipSecurity || 'Riesgos de seguridad'}
-              </button>
-              <button onClick={() => send(chipPreventive)} style={{ whiteSpace: 'nowrap', fontSize: '11px', padding: '6px 12px', borderRadius: '16px', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--ink2)', cursor: 'pointer' }}>
-                {t.debug?.chipMaintenance || 'Mantenimiento preventivo'}
-              </button>
-              <button onClick={() => send(chipChecklist)} style={{ whiteSpace: 'nowrap', fontSize: '11px', padding: '6px 12px', borderRadius: '16px', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--ink2)', cursor: 'pointer' }}>
-                {t.debug?.chipChecklist || 'Generar Checklist'}
-              </button>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={areaRef}>
+          {messages.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-[var(--ink3)] text-sm italic">
+              Selecciona un equipo e inyecta su historial, o haz una pregunta directa.
             </div>
+          ) : (
+            messages.map((msg, idx) => (
+              <ChatBubble key={idx} msg={msg} side={msg.role === 'user' ? 'user' : 'bot'} />
+            ))
           )}
+          {loading && <div className="mt-2"><Thinking /></div>}
+        </div>
 
-          <div className="debug-input-row">
-            <div className="input-wrap" style={{ flex: 1 }}>
-              <textarea id="debug-input" value={input} onChange={handleInput} onKeyDown={handleKeyDown} rows={1} placeholder={t.debug?.inputPlaceholder || 'Describe el problema para que BARB lo analice...'} disabled={loading || !activeMachineId} className="flex-1 resize-none overflow-hidden bg-transparent border-none outline-none text-[13px] text-[var(--ink)] placeholder-[var(--ink3)]" />
-              <button className="send-btn" onClick={() => send()} disabled={loading || !activeMachineId || !input.trim()}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-              </button>
-            </div>
-            
-            <input type="file" accept="image/*" capture="environment" ref={fileInputRef} style={{ display: 'none' }} onChange={handleCameraCapture} />
-            <button className="camera-btn" title={t.debug?.takePhoto || 'Tomar foto del problema'} onClick={() => fileInputRef.current?.click()}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <div className="p-4 bg-[var(--surface)] border-t border-[var(--border)] shrink-0">
+          <div className="flex gap-2">
+            <textarea 
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+              placeholder="Escribe tu consulta analítica..."
+              className="flex-1 resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-body)] p-3 text-[13px] text-[var(--ink)] outline-none focus:border-[var(--blue)]"
+              rows={2}
+            />
+            <button 
+              onClick={send} 
+              disabled={loading || !input.trim()}
+              className="px-4 bg-[var(--ink1)] text-[var(--surface)] rounded-xl font-bold hover:opacity-90 disabled:opacity-50"
+            >
+              Enviar
             </button>
           </div>
-          
-          <button className="report-btn" onClick={() => navigate('/report')}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            {t.debug?.generateReport || 'Generar Reporte IA'}
-          </button>
         </div>
       </div>
     </div>
   )
 }
-
-export default Debug
