@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import ChatBubble, { Thinking } from '../components/ChatBubble'
 import { getTranslations, normalizeLang } from '../utils/i18n'
@@ -8,6 +9,9 @@ export default function DebugChat() {
   const { apiBase, lmBase, user, lang } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
   const nLang = normalizeLang(lang)
+  
+  // 🔥 Importamos useLocation para leer datos de otras pantallas
+  const location = useLocation()
 
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
@@ -38,7 +42,14 @@ export default function DebugChat() {
     fetchData()
   }, [apiRoot])
 
-  // Scroll automático
+  // 🔥 NUEVO: Atrapamos la máquina que seleccionaron en Topología
+  useEffect(() => {
+    if (location.state && typeof location.state === 'object' && location.state.machineId) {
+      setSelectedMachineId(String(location.state.machineId))
+    }
+  }, [location.state])
+
+  // Scroll automático del chat
   useEffect(() => {
     if (areaRef.current) areaRef.current.scrollTop = areaRef.current.scrollHeight
   }, [messages])
@@ -84,7 +95,7 @@ export default function DebugChat() {
     }
   }
 
-  // 4. INYECCIÓN DE HISTORIAL (La Magia)
+  // 4. INYECCIÓN DE HISTORIAL (La Magia de RAG)
   const injectHistory = () => {
     if (!selectedMachine || machineHistory.length === 0) return;
     
@@ -92,7 +103,7 @@ export default function DebugChat() {
       `- [${ot.createdAt ? ot.createdAt.slice(0,10) : 'Fecha N/A'}] OT: ${ot.title}. Problema: ${ot.description}. Estado: ${ot.status}.`
     ).join('\n');
 
-    const prompt = `Analiza el siguiente historial de fallas del equipo "${selectedMachine.name}":\n\n${historyText}\n\n¿Ves algún patrón de falla repetitiva? ¿Qué componente deberíamos inspeccionar a fondo?`;
+    const prompt = `Analiza el siguiente historial de fallas del equipo "${selectedMachine.name || selectedMachine.nombre}":\n\n${historyText}\n\n¿Ves algún patrón de falla repetitiva? ¿Qué componente deberíamos inspeccionar a fondo para evitar que vuelva a ocurrir?`;
     
     setInput(prompt);
   }
@@ -128,10 +139,10 @@ export default function DebugChat() {
               ) : (
                 machineHistory.map((ot, i) => (
                   <div key={i} className="p-3 bg-[var(--bg-body)] border border-[var(--border)] rounded-lg text-xs">
-                    <div className="font-bold text-[var(--ink1)]">{ot.title}</div>
-                    <div className="text-[var(--ink2)] mt-1">{ot.description}</div>
+                    <div className="font-bold text-[var(--ink1)]">{ot.title || ot.numero_ot}</div>
+                    <div className="text-[var(--ink2)] mt-1">{ot.description || ot.descripcion_problema || 'Sin descripción.'}</div>
                     <div className="flex justify-between items-center mt-2 text-[10px] text-[var(--ink3)]">
-                      <span className="capitalize">{ot.status}</span>
+                      <span className="capitalize">{ot.status || ot.estado}</span>
                       <span>{ot.createdAt ? ot.createdAt.slice(0, 10) : ''}</span>
                     </div>
                   </div>
