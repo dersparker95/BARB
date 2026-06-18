@@ -27,7 +27,8 @@ interface PlantRecord { id: number | string; name?: string; nombre?: string; ubi
 interface DisciplineRecord { id: number | string; name?: string; nombre?: string }
 interface MachineRecord {
   id: number | string; name?: string; nombre?: string;
-  discipline_id?: number | string | null; disciplineId?: number | string | null;
+  // 🔥 AQUÍ AGREGAMOS disciplinaId
+  discipline_id?: number | string | null; disciplineId?: number | string | null; disciplina_id?: number | string | null; disciplinaId?: number | string | null;
   plant_id?: number | string | null; plantId?: number | string | null; planta_id?: number | string | null;
   plant_name?: string | null; plant?: string | null
 }
@@ -85,9 +86,16 @@ const retrieveFromManual = (query: string, chunks: ManualDoc['chunks'], k = 4) =
     .filter(chunk => chunk.score > 0)
 }
 
-const normalizeCatalogName = (record: { name?: string; nombre?: string } | null | undefined): string => {
-  if (!record) return ''
-  return String(record.name ?? record.nombre ?? '').trim()
+const normalizeCatalogName = (record: any): string => {
+  if (!record) return '';
+  if (typeof record === 'string') return record.trim();
+  
+  // 🔥 ¡AQUÍ ESTÁ LA CLAVE! Agregamos "record.label" al principio
+  const possibleName = record.label ?? record.nombre ?? record.Nombre ?? record.name ?? record.disciplina;
+  
+  if (possibleName) return String(possibleName).trim();
+  
+  return '';
 }
 
 const normalizePlantLabel = (record: { name?: string; nombre?: string; ubicacion?: string } | null | undefined): string => {
@@ -160,13 +168,22 @@ export default function DocChat() {
   const selectedDisciplineRecord = useMemo(() => discipline ? (disciplines.find(item => normalizeCatalogName(item) === discipline) ?? null) : null, [discipline, disciplines])
   const selectedMachineRecord = useMemo(() => (!docMachine || docMachine === 'all') ? null : (machines.find(item => String(item.id) === docMachine) ?? machines.find(item => normalizeMachineLabel(item) === docMachine) ?? null), [docMachine, machines])
 
-  const availableMachines = useMemo(() => {
-    if (!selectedDisciplineRecord) return machines
+const availableMachines = useMemo(() => {
+    if (!selectedDisciplineRecord) return machines;
+
     return machines.filter(m => {
-      const md = m.discipline_id ?? m.disciplineId
-      return (md === undefined || md === null || md === '') ? true : String(md) === String(selectedDisciplineRecord.id)
-    })
-  }, [machines, selectedDisciplineRecord])
+      // 🔥 AHORA SÍ: Buscamos m.disciplinaId
+      const mId = m.discipline_id ?? m.disciplineId ?? m.disciplina_id ?? m.disciplinaId;
+
+      // Comparamos el ID de la máquina con el de la disciplina seleccionada
+      if (mId !== undefined && mId !== null && mId !== '') {
+        return String(mId) === String(selectedDisciplineRecord.id);
+      }
+
+      // Si por alguna razón la máquina viene sin disciplina, la ocultamos
+      return false;
+    });
+  }, [machines, selectedDisciplineRecord]);
 
   useEffect(() => {
     if (location.state && typeof location.state === 'object') {
@@ -500,9 +517,17 @@ Considerando esta información, `;
             disabled={loading || catalogsLoading}
           >
             <option value="">{t.docChat?.selectDiscipline || 'Seleccionar disciplina...'}</option>
-            {disciplines.map(option => (
-              <option key={String(option.id)} value={normalizeCatalogName(option)}>{normalizeCatalogName(option) || String(option.id)}</option>
-            ))}
+            {disciplines.map((option, index) => {
+              // Ahora sí encontrará el "label" (Ej: "Automatización")
+              const finalName = normalizeCatalogName(option);
+              const fallbackId = option.id ?? option.disciplina_id ?? index;
+
+              return (
+                <option key={String(fallbackId)} value={finalName || String(fallbackId)}>
+                  {finalName || `Disciplina ${fallbackId}`}
+                </option>
+              );
+            })}
           </select>
         </div>
 

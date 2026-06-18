@@ -163,7 +163,7 @@ export default function FinancialDashboard({ timeRange }) {
               <select 
                 value={machineView} 
                 onChange={e => setMachineView(e.target.value)}
-                style={{ fontSize: 11, padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-body)', color: 'var(--ink1)', outline: 'none' }}
+                style={{ fontSize: 11, padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--ink)', outline: 'none' }}
               >
                 <option value="ots">Volumen OTs</option>
                 <option value="mttr">MTTR (Minutos)</option>
@@ -175,7 +175,7 @@ export default function FinancialDashboard({ timeRange }) {
                 <BarChart width={500} height={220} data={topMachines} layout="vertical" margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="var(--border)" />
                   <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--ink3)' }} hide />
-                  <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--ink1)' }} width={90} />
+                  <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--ink)' }} width={90} />
                   <Tooltip 
                     cursor={{ fill: 'rgba(0,0,0,0.05)' }} 
                     contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} 

@@ -198,9 +198,12 @@ body {
 .ots-line { position:absolute; top:5px; left:50%; right:-50%; height:2px; background:var(--border); z-index:0; }
 .ots-line.done { background:var(--green); }
 
-/* Extras */
-.topo-node { transition: all 0.3s ease; }
-.topo-node:hover { filter: drop-shadow(0 0 8px var(--color-tertiary)); transform: translateY(-2px); }
+/* Extras - CORREGIDO */
+.topo-node { transition: filter 0.3s ease; /* 👇 Solo animamos el brillo, no todo */ }
+.topo-node:hover {
+  /* 👇 Mantenemos el brillo pero eliminamos el 'transform' */
+  filter: drop-shadow(0 0 8px var(--color-tertiary));
+}
 .shadow-soft { box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
 .shadow-glow { box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
 

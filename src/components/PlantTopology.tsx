@@ -53,7 +53,7 @@ const PlantTopology: React.FC = () => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   
-  // Contexto global
+  // Eliminamos 'dark' de aquí ya que CSS hará el trabajo
   const { lang, selectedMachine, setSelectedMachine, apiBase } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
 
@@ -315,12 +315,15 @@ const PlantTopology: React.FC = () => {
                     className="transition-colors duration-200"
                   />
                   <text x={width / 2} y={26} textAnchor="middle" fontSize={20}>{node.icon}</text>
-                  <text x={width / 2} y={48} textAnchor="middle" fontSize={11} fill="var(--ink)" fontWeight={600}>
+                  
+                  {/* 🔥 Usando 'style' aseguramos la máxima prioridad y sobreescribimos cualquier otro CSS rebelde */}
+                  <text x={width / 2} y={48} textAnchor="middle" fontSize={11} style={{ fill: 'var(--ink)' }} fontWeight={600}>
                     {node.nombre || 'Desconocido'}
                   </text>
-                  <text x={width / 2} y={64} textAnchor="middle" fontSize={9} fill="var(--ink3)">
+                  <text x={width / 2} y={64} textAnchor="middle" fontSize={9} style={{ fill: 'var(--ink3)' }}>
                     {(node.tipo || 'default').toUpperCase()}
                   </text>
+
                   <circle cx={width - 14} cy={14} r={6} fill={getStatusColor(node.estado)} />
                 </g>
               )
@@ -330,14 +333,16 @@ const PlantTopology: React.FC = () => {
           {/* 3. Renderizado del Tooltip */}
           {tooltip.visible && tooltip.node && (
             <div
-              className="absolute p-4 rounded-xl border bg-[var(--surface)] text-[var(--ink)] shadow-[var(--shadow-lg)]"
-              style={{
+                className="absolute p-4 rounded-xl border shadow-glow transition-colors duration-200"
+                style={{
                 left: Math.min(tooltip.x + 12, (containerRef.current?.clientWidth || 800) - 260),
                 top: Math.min(tooltip.y + 12, (containerRef.current?.clientHeight || 600) - 150),
                 zIndex: 60,
                 minWidth: 240,
+                backgroundColor: 'var(--surface)',
+                color: 'var(--ink)',
                 borderColor: 'var(--border2)',
-              }}
+                }}
             >
               <div className="flex items-center gap-2 mb-2">
                 <div className="text-xl">{tooltip.node.icon}</div>

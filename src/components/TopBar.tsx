@@ -2,14 +2,18 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import SettingsModal from './SettingsModal'
+import HelpModal from './HelpModal' // 🔥 NUEVO: Importamos el modal de ayuda
 import { showToast } from './Toast'
 import { getTranslations, normalizeLang } from '../utils/i18n'
+import { helpContentData } from '../utils/helpContent' // 🔥 NUEVO: Importamos el diccionario
 
 const TopBar: React.FC = () => {
   const { user, setUser, dark, setDark, lang, setLang, apiBase, setLoading } = useAppContext()
   const navigate = useNavigate()
   const location = useLocation()
+  
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false) // 🔥 NUEVO: Estado para abrir/cerrar la ayuda
 
   const translations = useMemo(() => getTranslations(lang), [lang])
 
@@ -34,7 +38,6 @@ const TopBar: React.FC = () => {
       })
       if (!response.ok) throw new Error('Fallo al cerrar sesión en el servidor')
     } catch (error) {
-      // Fallback local: registramos el error silenciosamente pero forzamos el deslogueo en el cliente
       console.warn("Logout warning:", error)
     } finally {
       setUser(null)
@@ -53,30 +56,41 @@ const TopBar: React.FC = () => {
 
   const path = location.pathname
   
-  // 🔥 BLINDAJE: Optional chaining y valores de respaldo (Fallbacks)
   let title = translations.topbar?.maintenance || 'Mantenimiento'
   let showBack = true
   let backPath: string | number = '/menu'
+  let helpKey = 'default' // 🔥 NUEVO: Clave para buscar la ayuda correcta
 
+  // 🔥 Lógica combinada para título y ayuda
   if (path.includes('/menu')) {
     showBack = false
     title = translations.topbar?.mainMenu || 'Menú Principal'
+    helpKey = '/menu'
   } else if (path.includes('/dashboard')) {
     title = translations.menu?.dashboardTitle || 'Dashboard'
+    helpKey = '/dashboard'
   } else if (path.includes('/docchat')) {
     title = translations.topbar?.documentChat || 'Asistente IA'
+    helpKey = '/docchat'
   } else if (path.includes('/debug')) {
     title = translations.topbar?.machineDebug || 'Diagnóstico de Equipo'
     backPath = '/topology'
+    helpKey = '/debug'
   } else if (path.includes('/topology')) {
     title = translations.topbar?.plantTopology || 'Topología de Planta'
+    helpKey = '/topology'
   } else if (path.includes('/memory')) {
     title = translations.topbar?.machineMemory || 'Memoria de Máquina'
     backPath = -1
+    helpKey = '/memory'
   } else if (path.includes('/report')) {
     title = translations.topbar?.debugReport || 'Reporte de Diagnóstico'
     backPath = '/debug'
+    helpKey = '/report'
   }
+
+  // 🔥 NUEVO: Obtenemos el texto de ayuda según la ruta actual
+  const currentHelp = helpContentData[helpKey]
 
   return (
     <div className="topbar">
@@ -101,7 +115,6 @@ const TopBar: React.FC = () => {
         <select
           id="language-select"
           className="topbar-select"
-          // 🔥 NORMALIZACIÓN: Aseguramos que siempre empate con "es" o "en"
           value={normalizeLang(lang)}
           onChange={event => handleLanguageChange(event.target.value)}
           aria-label={translations.common?.language || 'Idioma'}
@@ -124,6 +137,15 @@ const TopBar: React.FC = () => {
           </svg>
         </button>
 
+        {/* 🔥 NUEVO: Botón de Ayuda contextual */}
+        <button className="icon-btn" onClick={() => setHelpOpen(true)} title="Guía de esta pantalla">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </button>
+
         {user && (
           <button className="icon-btn" onClick={handleLogout} title={translations.topbar?.logout || 'Cerrar sesión'}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -136,6 +158,14 @@ const TopBar: React.FC = () => {
       </div>
 
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      
+      {/* 🔥 NUEVO: Renderizamos el modal pasándole el título y contenido */}
+      <HelpModal 
+        isOpen={helpOpen} 
+        onClose={() => setHelpOpen(false)} 
+        title={currentHelp.title} 
+        content={currentHelp.content} 
+      />
     </div>
   )
 }

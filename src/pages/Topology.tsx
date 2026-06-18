@@ -23,7 +23,6 @@ type TopologyEdge = {
   tipo_relacion: string
 }
 
-// 🔥 FIX VISUAL: Ampliamos el lienzo inicial para que todo se vea alejado y centrado por defecto
 const INITIAL_VB = { x: -100, y: -50, w: 1200, h: 800 }
 const NODE_W = 130
 const NODE_H = 85
@@ -38,6 +37,10 @@ const PlantTopology: React.FC = () => {
   
   const [viewBox, setViewBox] = useState(INITIAL_VB)
   const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; node?: TopologyNode }>({ visible: false, x: 0, y: 0 })
+  
+  // 👇 NUEVOS ESTADOS PARA EL ARRASTRE (PANNING)
+  const [isPanning, setIsPanning] = useState(false)
+  const [startPan, setStartPan] = useState({ x: 0, y: 0 })
   
   const [nodes, setNodes] = useState<TopologyNode[]>([])
   const [edges, setEdges] = useState<TopologyEdge[]>([])
@@ -76,14 +79,44 @@ const PlantTopology: React.FC = () => {
     return dict
   }, [nodes])
 
+  // 👇 NUEVAS FUNCIONES PARA MANEJAR EL MOUSE (ARRASRE)
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.topo-node')) return;
+    setIsPanning(true);
+    setStartPan({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isPanning || !svgRef.current) return;
+    
+    const rect = svgRef.current.getBoundingClientRect();
+    const scaleX = viewBox.w / rect.width;
+    const scaleY = viewBox.h / rect.height;
+    
+    const dx = (e.clientX - startPan.x) * scaleX;
+    const dy = (e.clientY - startPan.y) * scaleY;
+    
+    setViewBox(prev => ({
+      ...prev,
+      x: prev.x - dx,
+      y: prev.y - dy
+    }));
+    
+    setStartPan({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setIsPanning(false);
+  };
+
   const handleNodeClick = (node: TopologyNode, e: React.MouseEvent) => {
+    e.stopPropagation(); // 👈 EVITA QUE EL CLICK SE CONFUNDA CON ARRASTRE
     const rect = containerRef.current?.getBoundingClientRect()
     const cx = e.clientX - (rect?.left || 0)
     const cy = e.clientY - (rect?.top || 0)
     setTooltip({ visible: true, x: cx, y: cy, node })
   }
 
-  // 🔥 FIX NAVEGACIÓN: Empacamos el ID de la máquina y se lo mandamos a la ruta /debug
   const goToDebug = (machineId?: number) => {
     if (machineId) {
       setSelectedMachine(String(machineId))
@@ -127,7 +160,21 @@ const PlantTopology: React.FC = () => {
       </div>
 
       <div style={{ minHeight: 0, borderRadius: 12, overflow: 'hidden' }} className="topo-canvas flex-1 bg-[var(--surface)] border border-[var(--border)] shadow-soft relative">
-        <svg ref={svgRef} id="topo-svg" viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: '100%' }}>
+        <svg 
+          ref={svgRef} 
+          id="topo-svg" 
+          viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} 
+          preserveAspectRatio="xMidYMid meet" 
+          style={{ 
+            width: '100%', 
+            height: '100%',
+            cursor: isPanning ? 'grabbing' : 'grab' // 👈 CAMBIA EL CURSOR
+          }}
+          onMouseDown={handleMouseDown}       // 👈 EVENTOS DE MOUSE PARA ARRASTRAR
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUpOrLeave}
+          onMouseLeave={handleMouseUpOrLeave}
+        >
           
           <g id="topo-lines" stroke="currentColor" className="text-[var(--ink3)] opacity-40" strokeWidth={2} fill="none">
             {edges.map(edge => {
@@ -155,8 +202,11 @@ const PlantTopology: React.FC = () => {
               <g key={n.nodo_id} transform={`translate(${n.pos_x || 0},${n.pos_y || 0})`} className="topo-node transition-transform" style={{ cursor: 'pointer' }} onClick={(e) => handleNodeClick(n, e)}>
                 <rect x={0} y={0} width={NODE_W} height={NODE_H} rx={12} fill="var(--surface2)" stroke={nodeColor} strokeWidth={2} />
                 <text x={NODE_W / 2} y={28} textAnchor="middle" fontSize={22}>{n.icono}</text>
-                <text x={NODE_W / 2} y={50} textAnchor="middle" fontSize={11} fill="var(--ink1)" fontWeight={600}>{n.nombre_visual || 'Sin nombre'}</text>
-                <text x={NODE_W / 2} y={65} textAnchor="middle" fontSize={10} fill="var(--ink3)">{n.tipo || 'Desconocido'}</text>
+                
+                {/* Textos con el color corregido para modo oscuro */}
+                <text x={NODE_W / 2} y={50} textAnchor="middle" fontSize={11} className="text-[var(--ink)]" fill="currentColor" fontWeight={600}>{n.nombre_visual || 'Sin nombre'}</text>
+                <text x={NODE_W / 2} y={65} textAnchor="middle" fontSize={10} className="text-[var(--ink3)]" fill="currentColor">{n.tipo || 'Desconocido'}</text>
+                
                 <circle cx={NODE_W - 14} cy={14} r={7} fill={nodeColor} />
               </g>
             )
@@ -174,7 +224,7 @@ const PlantTopology: React.FC = () => {
             }} 
             className="bg-[var(--surface)] border border-[var(--border)] p-3 rounded-xl shadow-lg"
           >
-            <div className="font-semibold text-[var(--ink1)]">{tooltip.node.nombre_visual}</div>
+            <div className="font-semibold text-[var(--ink)]">{tooltip.node.nombre_visual}</div>
             <div className="text-xs text-[var(--ink3)] mt-1 mb-3">
               {tooltip.node.tipo} · {t.statuses?.[tooltip.node.estado_actual?.toLowerCase()] || tooltip.node.estado_actual}
             </div>
