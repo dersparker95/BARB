@@ -245,30 +245,42 @@ const availableMachines = useMemo(() => {
     return () => controller.abort()
   }, [apiRoot])
 
-  // 🔥 MEJORA DE FILTRADO: Comparación robusta por todas las variantes de la interfaz
+  // 🔥 MEJORA DE FILTRADO 2.0: Con herencia de máquinas y validación cruzada (ID vs Nombre)
   const filteredOTs = useMemo(() => {
+    // 1. Identificamos qué está buscando exactamente el usuario
     const targetPlantId = String(plant || '');
-    const targetDisc = discipline ? String(discipline).toLowerCase() : '';
     const targetMachineId = (docMachine && docMachine !== 'all') ? String(docMachine) : '';
+    
+    // Como el estado guarda el "nombre" pero la BD suele mandar el "ID", extraemos ambos:
+    const targetDiscName = discipline ? String(discipline).toLowerCase() : '';
+    const targetDiscId = selectedDisciplineRecord ? String(selectedDisciplineRecord.id ?? selectedDisciplineRecord.disciplina_id ?? '') : '';
 
     return workOrders.filter(ot => {
-      // 1. Validar Planta (ID o Nombres)
-      const otPlantId = String(ot.plant_id ?? ot.planta_id ?? '');
-      const otPlantStr = String(ot.plant_name ?? ot.plant ?? ot.planta ?? '');
-      const plantMatch = targetPlantId === '' || otPlantId === targetPlantId || otPlantStr === targetPlantId;
-
-      // 2. Validar Disciplina (Cubre discipline, disciplina, discipline_id)
-      const otDisc = String(ot.discipline ?? ot.disciplina ?? ot.discipline_id ?? '').toLowerCase();
-      const discMatch = targetDisc === '' || otDisc === targetDisc;
-
-      // 3. Validar Máquina (Cubre machine_id, machineId, machine y machine_name)
+      // 2. Buscamos la máquina asociada a la OT por si necesitamos heredar su planta o disciplina
       const otMachId = String(ot.machine_id ?? ot.machineId ?? '');
-      const otMachStr = String(ot.machine_name ?? ot.machine ?? '');
-      const machMatch = targetMachineId === '' || otMachId === targetMachineId || otMachStr === targetMachineId;
+      const otMachine = machines.find(m => String(m.id) === otMachId);
+
+      // 3. Validación de Planta (Propia de la OT o heredada de la máquina)
+      const otPlantId = String(ot.plant_id ?? ot.planta_id ?? otMachine?.plant_id ?? otMachine?.plantId ?? '');
+      const plantMatch = targetPlantId === '' || otPlantId === targetPlantId;
+
+      // 4. Validación de Disciplina (Cruzamos ID y Nombre, e incluye lo que hereda de la máquina)
+      const otDiscId = String(ot.discipline_id ?? ot.disciplina_id ?? otMachine?.discipline_id ?? otMachine?.disciplineId ?? otMachine?.disciplina_id ?? '');
+      const otDiscName = String(ot.discipline_name ?? ot.discipline ?? ot.disciplina ?? '').toLowerCase();
+      
+      const discMatch = targetDiscName === '' || 
+                        otDiscName === targetDiscName || 
+                        (targetDiscId !== '' && otDiscId === targetDiscId);
+
+      // 5. Validación de Máquina
+      const machMatch = targetMachineId === '' || otMachId === targetMachineId;
+
+      // 🐛 DEBUG: Si quieres ver exactamente por qué una OT no aparece, descomenta la siguiente línea:
+      // console.log(`OT: ${ot.numero_ot || ot.id}`, { pasaFiltro: plantMatch && discMatch && machMatch, fallóEn: { planta: !plantMatch, disciplina: !discMatch, maquina: !machMatch } });
 
       return plantMatch && discMatch && machMatch;
     });
-  }, [docMachine, discipline, plant, workOrders]);
+  }, [docMachine, discipline, plant, workOrders, machines, selectedDisciplineRecord]);
 
   useEffect(() => {
     const selectedPlantId = String(plant || '')
