@@ -245,16 +245,26 @@ const availableMachines = useMemo(() => {
     return () => controller.abort()
   }, [apiRoot])
 
-  // 🔥 MEJORA DE FILTRADO: Comparación robusta por IDs y Strings normalizados (Formatos Backend unificados)
+  // 🔥 MEJORA DE FILTRADO: Comparación robusta por todas las variantes de la interfaz
   const filteredOTs = useMemo(() => {
     const targetPlantId = String(plant || '');
     const targetDisc = discipline ? String(discipline).toLowerCase() : '';
     const targetMachineId = (docMachine && docMachine !== 'all') ? String(docMachine) : '';
 
     return workOrders.filter(ot => {
-      const plantMatch = targetPlantId === '' || String(ot.plant_id ?? ot.planta_id ?? '') === targetPlantId;
-      const discMatch = targetDisc === '' || String(ot.discipline_name ?? ot.disciplina ?? '').toLowerCase() === targetDisc;
-      const machMatch = targetMachineId === '' || String(ot.machine_id ?? '') === targetMachineId || String(ot.machine_name ?? '') === targetMachineId;
+      // 1. Validar Planta (ID o Nombres)
+      const otPlantId = String(ot.plant_id ?? ot.planta_id ?? '');
+      const otPlantStr = String(ot.plant_name ?? ot.plant ?? ot.planta ?? '');
+      const plantMatch = targetPlantId === '' || otPlantId === targetPlantId || otPlantStr === targetPlantId;
+
+      // 2. Validar Disciplina (Cubre discipline, disciplina, discipline_id)
+      const otDisc = String(ot.discipline ?? ot.disciplina ?? ot.discipline_id ?? '').toLowerCase();
+      const discMatch = targetDisc === '' || otDisc === targetDisc;
+
+      // 3. Validar Máquina (Cubre machine_id, machineId, machine y machine_name)
+      const otMachId = String(ot.machine_id ?? ot.machineId ?? '');
+      const otMachStr = String(ot.machine_name ?? ot.machine ?? '');
+      const machMatch = targetMachineId === '' || otMachId === targetMachineId || otMachStr === targetMachineId;
 
       return plantMatch && discMatch && machMatch;
     });
