@@ -27,17 +27,18 @@ interface PlantRecord { id: number | string; name?: string; nombre?: string; ubi
 interface DisciplineRecord { id: number | string; name?: string; nombre?: string }
 interface MachineRecord {
   id: number | string; name?: string; nombre?: string;
-  // 🔥 AQUÍ AGREGAMOS disciplinaId
   discipline_id?: number | string | null; disciplineId?: number | string | null; disciplina_id?: number | string | null; disciplinaId?: number | string | null;
   plant_id?: number | string | null; plantId?: number | string | null; planta_id?: number | string | null;
   plant_name?: string | null; plant?: string | null
 }
 interface WorkOrderRecord {
-  id: number | string; numero_ot?: string | number; title?: string; nombre?: string;
+  id?: number | string; ot_id?: number | string;
+  numero_ot?: string | number; title?: string; nombre?: string;
   description?: string; descripcion_problema?: string;
   machine?: string | null; machine_name?: string | null; machineId?: number | string | null; machine_id?: number | string | null;
-  plant?: string | null; planta?: string | null; plant_name?: string | null; plant_id?: number | string | null;
-  disciplina?: string | null; discipline?: string | null; discipline_id?: number | string | null;
+  maquina_id?: number | string | null; maquinaId?: number | string | null;
+  plant?: string | null; planta?: string | null; plant_name?: string | null; plant_id?: number | string | null; planta_id?: number | string | null;
+  disciplina?: string | null; discipline?: string | null; discipline_id?: number | string | null; discipline_name?: string | null;
   priority?: string; status?: string; estado?: string; age_minutes?: number;
   machine_meta?: MachineRecord | null
 }
@@ -89,12 +90,8 @@ const retrieveFromManual = (query: string, chunks: ManualDoc['chunks'], k = 4) =
 const normalizeCatalogName = (record: any): string => {
   if (!record) return '';
   if (typeof record === 'string') return record.trim();
-  
-  // 🔥 ¡AQUÍ ESTÁ LA CLAVE! Agregamos "record.label" al principio
   const possibleName = record.label ?? record.nombre ?? record.Nombre ?? record.name ?? record.disciplina;
-  
   if (possibleName) return String(possibleName).trim();
-  
   return '';
 }
 
@@ -108,10 +105,14 @@ const normalizeMachineLabel = (record: MachineRecord | null | undefined): string
   return String(record.name ?? record.nombre ?? '').trim()
 }
 
-const normalizeWorkOrderMachine = (ot: WorkOrderRecord): string => {
-  return String(ot.machine_name ?? ot.machine ?? ot.machineId ?? ot.machine_id ?? '').trim()
+// 🔥 MEJORA: Ahora busca el nombre de la máquina conectada
+const normalizeWorkOrderMachine = (ot: WorkOrderRecord, machine?: MachineRecord | null): string => {
+  const machineName = machine?.nombre ?? machine?.name;
+  if (machineName) return String(machineName).trim();
+  return String(ot.machine_name ?? ot.machine ?? ot.maquina_id ?? ot.machine_id ?? '').trim()
 }
 
+// 🔥 MEJORA: Obtiene la planta directamente de la máquina encontrada
 const normalizeWorkOrderPlant = (ot: WorkOrderRecord, machine: MachineRecord | null): string => {
   const raw = String(ot.plant_name ?? ot.plant ?? ot.planta ?? '').trim()
   if (raw) return raw
@@ -126,7 +127,9 @@ const normalizeWorkOrderDiscipline = (ot: WorkOrderRecord, machine: MachineRecor
   return machineDiscipline === null || machineDiscipline === undefined ? '' : String(machineDiscipline).trim()
 }
 
-const getWorkOrderTitle = (ot: WorkOrderRecord): string => String(ot.numero_ot ?? ot.title ?? ot.nombre ?? `OT ${ot.id}`).trim()
+const getWorkOrderTitle = (ot: WorkOrderRecord): string => {
+    return String(ot.numero_ot || ot.title || ot.nombre || `OT ${ot.ot_id || ot.id}`).trim();
+};
 const getWorkOrderStatus = (ot: WorkOrderRecord): string => String(ot.status ?? ot.estado ?? 'open').trim().toLowerCase()
 const getWorkOrderPriority = (ot: WorkOrderRecord): string => String(ot.priority ?? 'medium').trim().toLowerCase()
 
@@ -168,19 +171,13 @@ export default function DocChat() {
   const selectedDisciplineRecord = useMemo(() => discipline ? (disciplines.find(item => normalizeCatalogName(item) === discipline) ?? null) : null, [discipline, disciplines])
   const selectedMachineRecord = useMemo(() => (!docMachine || docMachine === 'all') ? null : (machines.find(item => String(item.id) === docMachine) ?? machines.find(item => normalizeMachineLabel(item) === docMachine) ?? null), [docMachine, machines])
 
-const availableMachines = useMemo(() => {
+  const availableMachines = useMemo(() => {
     if (!selectedDisciplineRecord) return machines;
-
     return machines.filter(m => {
-      // 🔥 AHORA SÍ: Buscamos m.disciplinaId
       const mId = m.discipline_id ?? m.disciplineId ?? m.disciplina_id ?? m.disciplinaId;
-
-      // Comparamos el ID de la máquina con el de la disciplina seleccionada
       if (mId !== undefined && mId !== null && mId !== '') {
         return String(mId) === String(selectedDisciplineRecord.id);
       }
-
-      // Si por alguna razón la máquina viene sin disciplina, la ocultamos
       return false;
     });
   }, [machines, selectedDisciplineRecord]);
@@ -245,20 +242,47 @@ const availableMachines = useMemo(() => {
     return () => controller.abort()
   }, [apiRoot])
 
-  // 🔥 MEJORA DE FILTRADO: Comparación robusta por IDs y Strings normalizados (Formatos Backend unificados)
+  // 🔥 MEJORA DE FILTRADO: Lógica flexible y destructible a prueba de bases de datos incompletas.
   const filteredOTs = useMemo(() => {
     const targetPlantId = String(plant || '');
-    const targetDisc = discipline ? String(discipline).toLowerCase() : '';
+    const targetDiscId = selectedDisciplineRecord ? String(selectedDisciplineRecord.id) : '';
     const targetMachineId = (docMachine && docMachine !== 'all') ? String(docMachine) : '';
 
     return workOrders.filter(ot => {
-      const plantMatch = targetPlantId === '' || String(ot.plant_id ?? ot.planta_id ?? '') === targetPlantId;
-      const discMatch = targetDisc === '' || String(ot.discipline_name ?? ot.disciplina ?? '').toLowerCase() === targetDisc;
-      const machMatch = targetMachineId === '' || String(ot.machine_id ?? '') === targetMachineId || String(ot.machine_name ?? '') === targetMachineId;
+      // 1. Extraer ID de la máquina de forma súper segura
+      const rawOtMachineId = ot.maquina_id ?? ot.maquinaId ?? ot.machine_id ?? ot.machineId;
+      const otMachineId = rawOtMachineId !== null && rawOtMachineId !== undefined ? String(rawOtMachineId) : '';
+      
+      // Encontrar la máquina asociada (si no está, continuaremos evaluando)
+      const associatedMachine = machines.find(m => String(m.id) === otMachineId);
+
+      // 2. Filtro de Planta
+      let plantMatch = true;
+      if (targetPlantId !== '') {
+        const mPlantId = associatedMachine ? String(associatedMachine.planta_id ?? associatedMachine.plantaId ?? associatedMachine.plant_id ?? '') : '';
+        // 🔥 MAGIA AQUÍ: Si la máquina no tiene planta en la BD, la dejamos pasar.
+        if (mPlantId !== '') {
+          plantMatch = mPlantId === targetPlantId;
+        }
+      }
+
+      // 3. Filtro de Disciplina
+      let discMatch = true;
+      if (targetDiscId !== '') {
+        const mDiscId = associatedMachine ? String(associatedMachine.disciplinaId ?? associatedMachine.disciplina_id ?? associatedMachine.discipline_id ?? '') : '';
+        // Aquí SÍ somos estrictos, porque queremos ver OTs de una disciplina específica
+        discMatch = mDiscId === targetDiscId;
+      }
+
+      // 4. Filtro de Máquina
+      let machMatch = true;
+      if (targetMachineId !== '') {
+        machMatch = otMachineId === targetMachineId;
+      }
 
       return plantMatch && discMatch && machMatch;
     });
-  }, [docMachine, discipline, plant, workOrders]);
+  }, [docMachine, plant, workOrders, machines, selectedDisciplineRecord]);
 
   useEffect(() => {
     const selectedPlantId = String(plant || '')
@@ -440,8 +464,13 @@ const availableMachines = useMemo(() => {
 
           <div className="manual-list-scroll">
             {filteredOTs.map(ot => {
+              // 🔥 MEJORA: Buscamos la máquina exacta para renderizar sus datos en el botón
+              const rawOtMachineId = ot.maquina_id ?? ot.maquinaId ?? ot.machine_id ?? ot.machineId;
+              const otMachineId = rawOtMachineId !== null && rawOtMachineId !== undefined ? String(rawOtMachineId) : '';
+              const associatedMachine = machines.find(m => String(m.id) === otMachineId) ?? null;
+
               const title = getWorkOrderTitle(ot)
-              const machineLabel = normalizeWorkOrderMachine(ot) || '—'
+              const machineLabel = normalizeWorkOrderMachine(ot, associatedMachine) || '—'
               const statusKey = getWorkOrderStatus(ot)
               const status = t.statuses?.[statusKey] || statusKey
               const priority = getWorkOrderPriority(ot)
@@ -453,7 +482,6 @@ const availableMachines = useMemo(() => {
                   type="button" 
                   title={`${title} · ${machineLabel} · ${status} · ${priority}`} 
                   onClick={() => {
-                    // 🔥 INYECCIÓN DE CONTEXTO: Carga automatizada de variables de la OT en el input
                     const descripcion = ot.description || ot.descripcion_problema || 'Sin descripción detallada';
                     const contextPrompt = `Contexto de OT seleccionada:
 - Orden: ${title}
@@ -477,7 +505,7 @@ Considerando esta información, `;
                   <div className="mi-icon">🛠️</div>
                   <div className="mi-body">
                     <div className="mi-name">{title}</div>
-                    <div className="mi-meta">{normalizeWorkOrderPlant(ot, ot.machine_meta ?? null) || selectedPlantRecord?.name || selectedPlantRecord?.nombre || '—'}</div>
+                    <div className="mi-meta">{normalizeWorkOrderPlant(ot, associatedMachine) || selectedPlantRecord?.name || selectedPlantRecord?.nombre || '—'}</div>
                     <div className="mi-meta">{machineLabel}</div>
                     <div className="mi-meta capitalize">{status} · {priority}</div>
                   </div>
@@ -491,7 +519,6 @@ Considerando esta información, `;
 
         <div className="lib-sep" />
 
-        {/* 🔥 UNIFICACIÓN DE DISEÑO: Selectores con la misma clase estilizada de los modales */}
         <div className="panel-section">
           <span className="panel-label">{t.common?.plant || 'Planta / Ubicación'}</span>
           <select 
@@ -518,7 +545,6 @@ Considerando esta información, `;
           >
             <option value="">{t.docChat?.selectDiscipline || 'Seleccionar disciplina...'}</option>
             {disciplines.map((option, index) => {
-              // Ahora sí encontrará el "label" (Ej: "Automatización")
               const finalName = normalizeCatalogName(option);
               const fallbackId = option.id ?? option.disciplina_id ?? index;
 
