@@ -10,29 +10,34 @@ from pathlib import Path
 from typing import Any, Optional
 
 import bcrypt
-import httpx
 import psycopg2
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from openai import AsyncOpenAI
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import ThreadedConnectionPool
+from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
+
+# Carga segura de variables de entorno (incluyendo DEEPSEEK_API_KEY)
+load_dotenv()
 
 try:
     from redis import Redis
-except ImportError:  # pragma: no cover - import guard for local/dev parity
+except ImportError:
     Redis = None  # type: ignore[assignment]
 
+# --- Configuraciones Globales ---
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://barb_admin:barb_password123@db:5432/barb_database",
 )
-LM_STUDIO_URL = os.getenv("LM_STUDIO_URL", "http://host.docker.internal:1234/v1")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+# --- Clientes de Base de Datos y Caché ---
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
@@ -44,8 +49,15 @@ db_pool: ThreadedConnectionPool | None = None
 redis_client: Redis | None = None
 redis_ready = False
 
+# --- Cliente IA (DeepSeek) ---
+ia_client = AsyncOpenAI(
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
+    base_url="https://api.deepseek.com"
+)
+
 
 def get_db_connection():
+    """Obtiene una conexión del pool de PostgreSQL."""
     global db_pool
     if db_pool is None:
         db_pool = ThreadedConnectionPool(1, 10, dsn=DATABASE_URL)
@@ -53,6 +65,7 @@ def get_db_connection():
 
 
 def release_db_connection(conn) -> None:
+    """Libera la conexión de vuelta al pool."""
     global db_pool
     if db_pool is not None:
         db_pool.putconn(conn)
@@ -61,6 +74,7 @@ def release_db_connection(conn) -> None:
 
 
 def _query_all(sql: str, params: Optional[dict] = None):
+    """Ejecuta una consulta y retorna todos los registros como diccionarios."""
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -71,11 +85,13 @@ def _query_all(sql: str, params: Optional[dict] = None):
 
 
 def _query_one(sql: str, params: Optional[dict] = None):
+    """Ejecuta una consulta y retorna el primer registro encontrado."""
     rows = _query_all(sql, params)
     return rows[0] if rows else None
 
 
 def get_redis_client() -> Redis | None:
+    """Inicializa y retorna la conexión a Redis para el sistema de caché."""
     global redis_client, redis_ready
     if Redis is None:
         return None
@@ -94,6 +110,7 @@ def get_redis_client() -> Redis | None:
 
 
 def cache_get(key: str) -> Any | None:
+    """Recupera un valor de la caché de Redis."""
     client = get_redis_client()
     if not client:
         return None
@@ -108,6 +125,7 @@ def cache_get(key: str) -> Any | None:
 
 
 def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> None:
+    """Almacena un valor en la caché de Redis con un tiempo de vida (TTL)."""
     client = get_redis_client()
     if not client:
         return
@@ -118,10 +136,12 @@ def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> None:
 
 
 def hash_password(raw_password: str) -> str:
+    """Encripta una contraseña utilizando bcrypt."""
     return bcrypt.hashpw(raw_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(raw_password: str, stored_password: str) -> bool:
+    """Verifica si una contraseña en texto plano coincide con el hash almacenado."""
     stored = (stored_password or "").strip()
     if stored.startswith("$2"):
         try:
@@ -132,6 +152,7 @@ def verify_password(raw_password: str, stored_password: str) -> bool:
 
 
 def serialize_user(user: dict) -> dict:
+    """Parsea el objeto de base de datos de un usuario a un diccionario limpio."""
     return {
         "usuario_id": int(user["usuario_id"]),
         "nombre": str(user["nombre"]),
@@ -143,6 +164,7 @@ def serialize_user(user: dict) -> dict:
 
 
 def normalize_db_status(value: str | None) -> str:
+    """Normaliza los distintos estados de la OT para mantener consistencia en la BD."""
     raw = (value or "").strip().lower()
     mapping = {
         "open": "pending",
@@ -163,6 +185,7 @@ def normalize_db_status(value: str | None) -> str:
 
 
 def humanize_status(value: str | None) -> str:
+    """Convierte el estado interno de la OT a un formato legible para el usuario."""
     raw = (value or "").strip().lower()
     mapping = {
         "pending": "Open",
@@ -176,6 +199,7 @@ def humanize_status(value: str | None) -> str:
 
 
 def parse_optional_datetime(value: Any) -> datetime | None:
+    """Convierte de forma segura un valor a datetime."""
     if value in (None, "", "null"):
         return None
     if isinstance(value, datetime):
@@ -188,6 +212,7 @@ def parse_optional_datetime(value: Any) -> datetime | None:
 
 
 def safe_int(value: Any, field_name: str) -> int:
+    """Convierte un valor a entero asegurando el manejo de errores."""
     if value in (None, "", "null"):
         raise HTTPException(status_code=400, detail=f"El campo '{field_name}' es obligatorio.")
     try:
@@ -197,13 +222,14 @@ def safe_int(value: Any, field_name: str) -> int:
 
 
 def safe_text(value: Any, default: str = "") -> str:
+    """Extrae texto de forma segura previniendo errores por valores nulos."""
     if value is None:
         return default
     return str(value).strip()
 
 
-# FIX: Función auxiliar para formatear la fecha como UTC estricto
 def iso_z(val):
+    """Formatea una fecha como UTC estricto (ISO 8601 con Z) para compatibilidad."""
     if not val:
         return None
     if isinstance(val, str):
@@ -213,6 +239,7 @@ def iso_z(val):
 
 
 def row_to_work_order(row: dict, photos: list[dict] | None = None) -> dict:
+    """Mapea una fila de la base de datos a la estructura JSON de la Orden de Trabajo."""
     photo_list = photos or row.get("photos") or []
     return {
         "id": str(row["numero_ot"]),
@@ -241,7 +268,7 @@ def row_to_work_order(row: dict, photos: list[dict] | None = None) -> dict:
         "photos": photo_list,
         "tecnico_nombre": str(row.get("tecnico_nombre") or ""),
         
-        # FIX: Se exponen explícitamente los datos para los Dashboards de BI
+        # Datos expuestos para Dashboards de BI
         "tipo": str(row.get("tipo") or "corrective"),
         "costo_estimado": float(row.get("costo_estimado") or 0),
         "costo_real": float(row.get("costo_real") or 0),
@@ -252,6 +279,7 @@ def row_to_work_order(row: dict, photos: list[dict] | None = None) -> dict:
 
 
 def fetch_work_order_row(numero_ot: str) -> dict | None:
+    """Extrae todos los detalles de una OT específica desde la base de datos."""
     return _query_one(
         """
         SELECT
@@ -296,6 +324,7 @@ def fetch_work_order_row(numero_ot: str) -> dict | None:
 
 
 def fetch_work_order_photos(ot_id: int) -> list[dict]:
+    """Obtiene la lista de evidencias fotográficas asociadas a una OT."""
     rows = _query_all(
         """
         SELECT ot_foto_id, ot_id, file_name, original_name, content_type, file_path, created_at
@@ -320,6 +349,7 @@ def fetch_work_order_photos(ot_id: int) -> list[dict]:
 
 
 def parse_work_order_status(value: str | None) -> str:
+    """Valida que el estado proporcionado para una OT sea válido en el sistema."""
     db_status = normalize_db_status(value)
     allowed = {"pending", "assigned", "in_progress", "completed", "cancelled", "overdue"}
     if db_status not in allowed:
@@ -328,6 +358,7 @@ def parse_work_order_status(value: str | None) -> str:
 
 
 def store_upload_file(file: UploadFile, destination_dir: Path, prefix: str) -> dict:
+    """Almacena un archivo en el servidor y genera un nombre seguro único."""
     original_name = Path(file.filename or "file").name
     suffix = Path(original_name).suffix.lower()
     if suffix == "":
@@ -348,6 +379,7 @@ def store_upload_file(file: UploadFile, destination_dir: Path, prefix: str) -> d
 
 
 async def save_ot_photos(numero_ot: str, ot_id: int, images: list[UploadFile]) -> list[dict]:
+    """Procesa y guarda múltiples imágenes asociadas a una Orden de Trabajo."""
     saved_photos: list[dict] = []
     if not images:
         return saved_photos
@@ -406,6 +438,7 @@ async def save_ot_photos(numero_ot: str, ot_id: int, images: list[UploadFile]) -
 
 
 def delete_ot_files(ot_id: int) -> None:
+    """Elimina permanentemente los archivos físicos de una OT del disco del servidor."""
     rows = _query_all(
         """
         SELECT file_path
@@ -433,20 +466,25 @@ def delete_ot_files(ot_id: int) -> None:
                     pass
 
 
+# ==========================================
+# INICIO DE LA APLICACIÓN FASTAPI
+# ==========================================
 app = FastAPI(title="BARB Plant Memory API", version="1.5.0")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "https://barb-7jfguz636-tvasquezms-projects.vercel.app"],
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://barb-7jfguz636-tvasquezms-projects.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+# --- Modelos Pydantic ---
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -477,6 +515,7 @@ class WorkOrderStatusRequest(BaseModel):
     status: str
 
 
+# --- Endpoints de Sistema ---
 @app.get("/")
 async def root():
     return {"service": "BARB API", "status": "online"}
@@ -506,23 +545,20 @@ async def health_redis():
 
 @app.get("/api/health/llm")
 async def health_llm():
+    """Valida el estado de la conexión a la base de datos y la disponibilidad de la API Key."""
     db_status = await health()
-    lm_status = {"status": "offline", "detail": "LM Studio no configurado o no disponible."}
+    has_key = bool(os.getenv("DEEPSEEK_API_KEY"))
+    
+    lm_status = {
+        "status": "online" if has_key else "offline",
+        "detail": "API Key de DeepSeek configurada correctamente." if has_key else "Falta configurar DEEPSEEK_API_KEY en el entorno."
+    }
 
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(f"{LM_STUDIO_URL}/models", timeout=5.0)
-            if resp.status_code == 200:
-                lm_status = {"status": "online", "detail": "LM Studio respondió 200 OK."}
-            else:
-                lm_status = {"status": "error", "detail": f"LM Studio respondió {resp.status_code}."}
-    except Exception as e:
-        lm_status = {"status": "offline", "detail": str(e)}
-
-    overall = "online" if db_status.get("status") == "online" and lm_status.get("status") == "online" else "degraded"
+    overall = "online" if db_status.get("status") == "online" and has_key else "degraded"
     return {"status": overall, "db": db_status, "llm": lm_status}
 
 
+# --- Endpoints de Autenticación y Usuarios ---
 @app.post("/auth/login")
 @app.post("/api/auth/login")
 async def login(payload: LoginRequest):
@@ -704,6 +740,7 @@ async def delete_user(usuario_id: int):
         raise HTTPException(status_code=500, detail=f"Error al eliminar USUARIO: {str(e)}")
 
 
+# --- Endpoints de Finanzas y Órdenes de Trabajo ---
 @app.get("/api/stats/financial-impact")
 def get_financial_impact():
     query = text(
@@ -821,7 +858,6 @@ async def update_work_order_status(numero_ot: str, payload: WorkOrderStatusReque
     try:
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
-        # FIX: Removemos el COALESCE problemático
         cursor.execute(
             """
             UPDATE orden_trabajo
@@ -924,7 +960,7 @@ async def create_work_order(request: Request):
     estado = parse_work_order_status(safe_text(payload.get("estado") or payload.get("status"), "pending"))
     fecha_vencimiento = parse_optional_datetime(payload.get("fecha_vencimiento") or payload.get("due_date"))
     
-    # FIX: Generamos un nombre temporal antes de guardar
+    # Generación de código temporal único para la OT
     temp_numero_ot = f"OT-TEMP-{uuid.uuid4().hex[:6]}"
 
     conn = None
@@ -968,7 +1004,7 @@ async def create_work_order(request: Request):
         row = cursor.fetchone()
         ot_id = int(row["ot_id"])
         
-        # FIX: Estandarización elegante (Ej: OT-2026-0012)
+        # Estandarización de folio final (Ej: OT-2026-0012)
         clean_numero_ot = f"OT-{datetime.utcnow().year}-{ot_id:04d}"
         cursor.execute("UPDATE orden_trabajo SET numero_ot = %s WHERE ot_id = %s", (clean_numero_ot, ot_id))
         
@@ -1102,44 +1138,54 @@ def get_technicians():
         return []
 
 
+# --- Endpoint de Inteligencia Artificial (DeepSeek) ---
 @app.post("/api/chat")
 @app.post("/chat")
 async def chat(payload: ChatRequest):
+    """Procesa el historial de diagnósticos y manuales a través de DeepSeek en la nube."""
     cache_key = hashlib.sha256(
         f"chat:{payload.language}:{payload.message.strip()}".encode("utf-8")
     ).hexdigest()
+    
     cached = cache_get(cache_key)
     if cached:
         return cached
 
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{LM_STUDIO_URL}/chat/completions",
-                json={
-                    "model": "local-model",
-                    "messages": [
-                        {"role": "system", "content": "Asistente experto en mantenimiento de la planta BARB."},
-                        {"role": "user", "content": payload.message},
-                    ],
-                    "temperature": 0.4,
-                },
-                timeout=30.0,
-            )
-            if response.status_code != 200:
-                raise HTTPException(status_code=502, detail="LM Studio devolvió un error.")
+    # Verificación de seguridad de API Key
+    if not os.getenv("DEEPSEEK_API_KEY"):
+        raise HTTPException(status_code=500, detail="API Key de IA no configurada en el servidor.")
 
-            data = response.json()
-            reply = data["choices"][0]["message"]["content"]
-            result = {"reply": reply, "sources": ["Manual_Local.pdf"], "language": payload.language}
-            cache_set(cache_key, result, ttl_seconds=300)
-            return result
-    except httpx.RequestError:
-        raise HTTPException(status_code=503, detail="LM Studio local inalcanzable desde el contenedor backend.")
-    except HTTPException:
-        raise
+    try:
+        # Petición asíncrona segura a DeepSeek
+        response = await ia_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "Eres BARB, un asistente experto en mantenimiento industrial. Responde de manera clara y técnica."
+                },
+                {
+                    "role": "user", 
+                    "content": payload.message
+                },
+            ],
+            temperature=0.3,
+            max_tokens=800
+        )
+        
+        reply = response.choices[0].message.content
+        result = {
+            "reply": reply, 
+            "sources": ["Base de Conocimiento BARB"], 
+            "language": payload.language
+        }
+        
+        cache_set(cache_key, result, ttl_seconds=300)
+        return result
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error DeepSeek: {e}")
+        raise HTTPException(status_code=502, detail="Error de comunicación con el motor de IA.")
 
 
 if __name__ == "__main__":
