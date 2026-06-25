@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import bcrypt
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,14 +54,27 @@ redis_ready = False
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
+_http_limits = httpx.Limits(
+    max_connections=10,
+    max_keepalive_connections=5,
+    keepalive_expiry=30,
+)
+
+# Timeout de 60s y pool HTTP acotado para evitar sobrecarga bajo concurrencia.
 ia_client = AsyncOpenAI(
     api_key=DEEPSEEK_API_KEY,
     base_url="https://api.deepseek.com",
+    timeout=60.0,
+    max_retries=2,
+    http_client=httpx.AsyncClient(timeout=60.0, limits=_http_limits),
 )
 
-# =============================================================================
-# GESTIÓN DE CONEXIONES
-# =============================================================================
+_BARB_SYSTEM_PROMPT = (
+    "Eres BARB, asistente experto en mantenimiento industrial. "
+    "Responde de forma clara, técnica y concisa. "
+    "Si el usuario menciona una máquina específica, orienta tu respuesta a ese equipo."
+)
+
 
 
 def get_db_connection():
@@ -785,6 +799,12 @@ async def startup_checks():
             conn.execute(text("SELECT 1"))
     except Exception as e:
         print(f"⚠️  ADVERTENCIA: No se pudo conectar a PostgreSQL al iniciar: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_cleanup():
+    """Cierra el cliente HTTP de DeepSeek para liberar conexiones keep-alive."""
+    await ia_client.close()
 
 # =============================================================================
 # ENDPOINTS — SALUD Y DIAGNÓSTICO
@@ -1611,12 +1631,9 @@ async def chat(payload: ChatRequest):
     if cached:
         return cached
 
-    system_content = (
-        "Eres BARB, asistente experto en mantenimiento industrial. "
-        "Responde de forma clara, técnica y concisa. "
-        "Si el usuario menciona una máquina específica, orienta tu respuesta a ese equipo. "
-        f"Idioma de respuesta: {payload.language or 'es'}."
-    )
+    system_content = _BARB_SYSTEM_PROMPT
+    if payload.language and payload.language != "es":
+        system_content += f" Idioma de respuesta: {payload.language}."
     if payload.machine:
         system_content += f" Máquina en contexto: {payload.machine}."
 

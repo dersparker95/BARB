@@ -53,8 +53,35 @@ const readStoredAuth = (): StoredAuth | null => {
 const AppContext = createContext<AppContextValue | undefined>(undefined)
 
 // === VARIABLES DE ENTORNO DINÁMICAS ===
-const defaultApiUrl = 'https://barb-2ih8.onrender.com/api'
-const defaultLmUrl = import.meta.env.VITE_LM_URL || 'http://localhost:1234/v1'
+const defaultApiUrl: string = import.meta.env.VITE_API_URL || 'https://barb-2ih8.onrender.com/api'
+const defaultLmUrl: string = import.meta.env.VITE_LM_URL || 'http://localhost:1234/v1'
+
+const isLocalUrl = (url: string): boolean =>
+  url.includes('localhost') || url.includes('127.0.0.1') || url.includes('0.0.0.0')
+
+const isProduction: boolean =
+  typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+
+/**
+ * Resuelve la URL base de la API desde localStorage descartando valores de localhost
+ * en entornos de producción, lo que evita que URLs residuales de desarrollo rompan
+ * la app desplegada en Vercel.
+ */
+const resolveApiBase = (): string => {
+  if (typeof window === 'undefined') return defaultApiUrl
+  const stored = window.localStorage.getItem('barb.apiBase')
+  if (stored && isProduction && isLocalUrl(stored)) {
+    window.localStorage.removeItem('barb.apiBase')
+    return defaultApiUrl
+  }
+  return stored ?? defaultApiUrl
+}
+
+const resolveLmBase = (): string => {
+  if (typeof window === 'undefined') return defaultLmUrl
+  // lmBase puede ser localhost legítimamente (LM Studio local), no se filtra.
+  return window.localStorage.getItem('barb.lmBase') ?? defaultLmUrl
+}
 
 // === ESTADO POR DEFECTO ===
 const defaultState = {
@@ -89,9 +116,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [debugMessagesByMachine, setDebugMessagesByMachine] = useState<Record<string, Message[]>>(defaultState.debugMessagesByMachine)
   const [loading, setLoading] = useState<boolean>(defaultState.loading)
 
-  // 🔥 BLINDAJE: Estados dinámicos para las URLs (Requerido por SettingsModal)
-  const [apiBase, setApiBase] = useState<string>(() => readStoredString('barb.apiBase', defaultApiUrl) ?? defaultApiUrl)
-  const [lmBase, setLmBase] = useState<string>(() => readStoredString('barb.lmBase', defaultLmUrl) ?? defaultLmUrl)
+  // Estados dinámicos para las URLs. Se resuelven con guards que descartan
+  // valores de localStorage inválidos para el entorno actual.
+  const [apiBase, setApiBase] = useState<string>(resolveApiBase)
+  const [lmBase, setLmBase] = useState<string>(resolveLmBase)
 
   // API Dinámica: Se reconstruye sola si el usuario cambia la URL en Configuración
   const authService = useMemo(() => createApiService(apiBase), [apiBase])
@@ -169,9 +197,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { if (typeof window !== 'undefined') window.localStorage.setItem('barb.dark', String(dark)) }, [dark])
   useEffect(() => { if (typeof window !== 'undefined') window.localStorage.setItem('barb.lang', lang) }, [lang])
   
-  // 🔥 BLINDAJE: Guardamos los endpoints de la API al ser modificados
-  useEffect(() => { if (typeof window !== 'undefined') window.localStorage.setItem('barb.apiBase', apiBase) }, [apiBase])
-  useEffect(() => { if (typeof window !== 'undefined') window.localStorage.setItem('barb.lmBase', lmBase) }, [lmBase])
+  // Persiste las URLs solo si son válidas para el entorno actual.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (isProduction && isLocalUrl(apiBase)) return
+    window.localStorage.setItem('barb.apiBase', apiBase)
+  }, [apiBase])
+  useEffect(() => {
+    if (typeof window !== 'undefined') window.localStorage.setItem('barb.lmBase', lmBase)
+  }, [lmBase])
 
   useEffect(() => { if (typeof window !== 'undefined') { if (discipline) window.localStorage.setItem('barb.discipline', discipline); else window.localStorage.removeItem('barb.discipline') } }, [discipline])
   useEffect(() => { if (typeof window !== 'undefined') { if (selectedMachine) window.localStorage.setItem('barb.selectedMachine', selectedMachine); else window.localStorage.removeItem('barb.selectedMachine') } }, [selectedMachine])
