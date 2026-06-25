@@ -105,14 +105,12 @@ const normalizeMachineLabel = (record: MachineRecord | null | undefined): string
   return String(record.name ?? record.nombre ?? '').trim()
 }
 
-// 🔥 MEJORA: Ahora busca el nombre de la máquina conectada
 const normalizeWorkOrderMachine = (ot: WorkOrderRecord, machine?: MachineRecord | null): string => {
   const machineName = machine?.nombre ?? machine?.name;
   if (machineName) return String(machineName).trim();
   return String(ot.machine_name ?? ot.machine ?? ot.maquina_id ?? ot.machine_id ?? '').trim()
 }
 
-// 🔥 MEJORA: Obtiene la planta directamente de la máquina encontrada
 const normalizeWorkOrderPlant = (ot: WorkOrderRecord, machine: MachineRecord | null): string => {
   const raw = String(ot.plant_name ?? ot.plant ?? ot.planta ?? '').trim()
   if (raw) return raw
@@ -242,39 +240,31 @@ export default function DocChat() {
     return () => controller.abort()
   }, [apiRoot])
 
-  // 🔥 MEJORA DE FILTRADO: Lógica flexible y destructible a prueba de bases de datos incompletas.
   const filteredOTs = useMemo(() => {
     const targetPlantId = String(plant || '');
     const targetDiscId = selectedDisciplineRecord ? String(selectedDisciplineRecord.id) : '';
     const targetMachineId = (docMachine && docMachine !== 'all') ? String(docMachine) : '';
 
     return workOrders.filter(ot => {
-      // 1. Extraer ID de la máquina de forma súper segura
       const rawOtMachineId = ot.maquina_id ?? ot.maquinaId ?? ot.machine_id ?? ot.machineId;
       const otMachineId = rawOtMachineId !== null && rawOtMachineId !== undefined ? String(rawOtMachineId) : '';
       
-      // Encontrar la máquina asociada (si no está, continuaremos evaluando)
       const associatedMachine = machines.find(m => String(m.id) === otMachineId);
 
-      // 2. Filtro de Planta
       let plantMatch = true;
       if (targetPlantId !== '') {
         const mPlantId = associatedMachine ? String(associatedMachine.planta_id ?? associatedMachine.plantaId ?? associatedMachine.plant_id ?? '') : '';
-        // 🔥 MAGIA AQUÍ: Si la máquina no tiene planta en la BD, la dejamos pasar.
         if (mPlantId !== '') {
           plantMatch = mPlantId === targetPlantId;
         }
       }
 
-      // 3. Filtro de Disciplina
       let discMatch = true;
       if (targetDiscId !== '') {
         const mDiscId = associatedMachine ? String(associatedMachine.disciplinaId ?? associatedMachine.disciplina_id ?? associatedMachine.discipline_id ?? '') : '';
-        // Aquí SÍ somos estrictos, porque queremos ver OTs de una disciplina específica
         discMatch = mDiscId === targetDiscId;
       }
 
-      // 4. Filtro de Máquina
       let machMatch = true;
       if (targetMachineId !== '') {
         machMatch = otMachineId === targetMachineId;
@@ -380,6 +370,12 @@ export default function DocChat() {
     pushDocMessage({ role: 'user', content: query, timestamp: Date.now() })
 
     try {
+      // 🚀 PUNTO 2: Preparamos la memoria aislando los últimos 6 mensajes
+      const recentHistory = docMessages.slice(-6).map(m => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.content
+      }));
+
       const response = await fetch(`${apiRoot}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -387,6 +383,7 @@ export default function DocChat() {
           message: query,
           language: nLang,
           machine: chatMachine,
+          history: recentHistory // 🚀 PUNTO 2: Le inyectamos la memoria al backend
         }),
       })
 
@@ -403,6 +400,16 @@ export default function DocChat() {
         setLoading(false)
         return
       }
+
+      // 🚀 PUNTO 1: Capturamos el error real del backend (Ej: 500 o 502)
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        const errMsg = errData.detail || `Error del servidor: ${response.status}`;
+        pushDocMessage({ role: 'assistant', content: `⚠️ Falla en la IA en la nube: ${errMsg}`, timestamp: Date.now() });
+        setLoading(false);
+        return;
+      }
+
     } catch {
       console.warn("Fallo conexión con FastAPI, intentando modo Offline (RAG Local)")
     }
@@ -464,7 +471,6 @@ export default function DocChat() {
 
           <div className="manual-list-scroll">
             {filteredOTs.map(ot => {
-              // 🔥 MEJORA: Buscamos la máquina exacta para renderizar sus datos en el botón
               const rawOtMachineId = ot.maquina_id ?? ot.maquinaId ?? ot.machine_id ?? ot.machineId;
               const otMachineId = rawOtMachineId !== null && rawOtMachineId !== undefined ? String(rawOtMachineId) : '';
               const associatedMachine = machines.find(m => String(m.id) === otMachineId) ?? null;
