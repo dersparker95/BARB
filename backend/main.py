@@ -1,87 +1,25 @@
 from __future__ import annotations
 
-<<<<<<< HEAD
-=======
-"""
-==================================================
-MÓDULO: BARB Plant Memory API Core
-PROPÓSITO: Proveer los servicios backend principales para la plataforma de mantenimiento industrial BARB, gestionando órdenes de trabajo, usuarios y diagnósticos mediante IA.
-RESPONSABILIDADES:
-- Gestión de ciclo de vida de Órdenes de Trabajo (OT).
-- Autenticación y autorización de usuarios.
-- Integración con motor de Inteligencia Artificial (DeepSeek).
-- Almacenamiento y recuperación de evidencia fotográfica y documental.
-- Caché de respuestas para optimización de rendimiento.
-
-DEPENDENCIAS PRINCIPALES:
-- FastAPI (Framework web).
-- SQLAlchemy y Psycopg2 (Gestión de base de datos PostgreSQL).
-- Redis (Sistema de caché).
-- OpenAI Async Client (Interacción con API de DeepSeek).
-
-AUTORÍA:
-Documentación generada automáticamente.
-==================================================
-"""
-
 import hashlib
 import json
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
 import os
 import secrets
-import uuid
-import json
 import shutil
-from datetime import datetime, timedelta
+import uuid
+from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
-from functools import lru_cache # 🔥 Importado para optimizar velocidad en RAM
-from fastapi.concurrency import run_in_threadpool
 
 import bcrypt
-<<<<<<< HEAD
-import httpx
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, text
-
-# --- Importaciones RAG (IA) ---
-import chromadb
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-# =============================================================================
-# 1. CONFIGURACIÓN DE ENTORNO Y DIRECTORIOS
-# =============================================================================
-BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(BASE_DIR / "uploads")))
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-CHROMA_DIR = Path(os.getenv("CHROMA_DIR", str(UPLOAD_DIR / "chroma")))
-CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "barb_manuals")
-=======
-import psycopg2
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import ThreadedConnectionPool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import create_engine, text
-
-"""
---------------------------------------------------
-SECCIÓN: Inicialización de Servicios y Configuraciones Globales
-OBJETIVO: Configurar las variables de entorno y preparar las dependencias externas.
-RESPONSABILIDADES:
-- Cargar variables de entorno ocultas.
-- Inicializar pools de conexión a bases de datos.
-- Configurar clientes de IA y sistemas de caché.
---------------------------------------------------
-"""
 
 load_dotenv()
 
@@ -89,69 +27,52 @@ try:
     from redis import Redis
 except ImportError:
     Redis = None
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
+
+# =============================================================================
+# CONFIGURACIÓN DE ENTORNO
+# =============================================================================
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg2://barb_admin:barb_password123@db:5432/barb_database",
 )
-<<<<<<< HEAD
-LM_STUDIO_URL = os.getenv("LM_STUDIO_URL", "http://host.docker.internal:1234/v1")
-=======
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
 
 # =============================================================================
-# 2. MOTORES DE BASE DE DATOS (BLINDADOS)
+# MOTORES Y CLIENTES
 # =============================================================================
+
+# SQLAlchemy se mantiene para endpoints legacy; psycopg2 pool para el resto.
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=5, max_overflow=15)
 
-<<<<<<< HEAD
-def _query_all(query: str, params: Optional[dict] = None) -> list[dict]:
-    try:
-        with engine.connect() as conn:
-            result = conn.execute(text(query), params or {})
-            return [dict(row._mapping) for row in result]
-    except Exception as e:
-        print(f"🚨 [DB Error - _query_all]: {e}")
-        return []
-=======
 db_pool: ThreadedConnectionPool | None = None
 redis_client: Redis | None = None
 redis_ready = False
 
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+
 ia_client = AsyncOpenAI(
-    api_key=os.getenv("DEEPSEEK_API_KEY"),
-    base_url="https://api.deepseek.com"
+    api_key=DEEPSEEK_API_KEY,
+    base_url="https://api.deepseek.com",
 )
 
+# =============================================================================
+# GESTIÓN DE CONEXIONES
+# =============================================================================
 
-"""
---------------------------------------------------
-SECCIÓN: Gestión de Conexiones de Base de Datos y Caché
-OBJETIVO: Proveer mecanismos seguros y eficientes para la interacción con los almacenes de datos.
-RESPONSABILIDADES:
-- Administrar el ciclo de vida de conexiones PostgreSQL.
-- Abstraer la ejecución de consultas SQL.
-- Gestionar operaciones de lectura y escritura en Redis.
---------------------------------------------------
-"""
 
 def get_db_connection():
     """
-    Descripción:
-    Obtiene una conexión activa desde el pool de hilos de PostgreSQL. Inicializa el pool si no existe.
+    Obtiene una conexión activa desde el pool de hilos de PostgreSQL.
+    Inicializa el pool si no existe.
 
-    Parámetros:
-    - Ninguno.
+    ## Returns:
+    Objeto de conexión psycopg2.
 
-    Retorno:
-    - psycopg2.extensions.connection - Objeto de conexión a la base de datos.
-
-    Excepciones:
-    - psycopg2.OperationalError: Fallo al establecer conexión con el servidor de base de datos.
+    ## Raises:
+    psycopg2.OperationalError: Si no puede establecer conexión con el servidor.
     """
     global db_pool
     if db_pool is None:
@@ -161,17 +82,10 @@ def get_db_connection():
 
 def release_db_connection(conn) -> None:
     """
-    Descripción:
-    Libera una conexión activa de base de datos devolviéndola al pool o cerrándola si el pool no está disponible.
+    Devuelve una conexión al pool o la cierra si el pool no está disponible.
 
-    Parámetros:
-    - conn: psycopg2.extensions.connection - Conexión a liberar.
-
-    Retorno:
-    - None
-
-    Excepciones:
-    - Ninguna.
+    ## Args:
+    conn: Conexión psycopg2 a liberar.
     """
     global db_pool
     if db_pool is not None:
@@ -180,20 +94,19 @@ def release_db_connection(conn) -> None:
         conn.close()
 
 
-def _query_all(sql: str, params: Optional[dict] = None):
+def _query_all(sql: str, params: Optional[dict] = None) -> list[dict]:
     """
-    Descripción:
-    Ejecuta una consulta SQL estructurada y retorna todos los registros coincidentes en formato de diccionario.
+    Ejecuta una consulta SQL y retorna todos los registros como lista de diccionarios.
 
-    Parámetros:
-    - sql: str - Sentencia SQL a ejecutar.
-    - params: dict | None - Parámetros de interpolación para la consulta.
+    ## Args:
+    sql: Sentencia SQL a ejecutar.
+    params: Parámetros de interpolación.
 
-    Retorno:
-    - list[dict] - Lista de registros recuperados.
+    ## Returns:
+    Lista de registros recuperados.
 
-    Excepciones:
-    - psycopg2.DatabaseError: Error de ejecución en la consulta SQL.
+    ## Raises:
+    psycopg2.DatabaseError: Error de ejecución en la consulta SQL.
     """
     conn = get_db_connection()
     try:
@@ -204,56 +117,59 @@ def _query_all(sql: str, params: Optional[dict] = None):
         release_db_connection(conn)
 
 
-def _query_one(sql: str, params: Optional[dict] = None):
+def _query_one(sql: str, params: Optional[dict] = None) -> dict | None:
     """
-    Descripción:
-    Ejecuta una consulta SQL y retorna exclusivamente el primer registro coincidente.
+    Ejecuta una consulta SQL y retorna el primer registro coincidente.
 
-    Parámetros:
-    - sql: str - Sentencia SQL a ejecutar.
-    - params: dict | None - Parámetros de interpolación para la consulta.
+    ## Args:
+    sql: Sentencia SQL a ejecutar.
+    params: Parámetros de interpolación.
 
-    Retorno:
-    - dict | None - Diccionario con el registro encontrado, o None si no hay resultados.
-
-    Excepciones:
-    - psycopg2.DatabaseError: Error de ejecución en la consulta SQL.
+    ## Returns:
+    Diccionario con el registro o None si no hay resultados.
     """
     rows = _query_all(sql, params)
     return rows[0] if rows else None
 
 
+def _execute_write(query: str, params: Optional[dict] = None) -> Any:
+    """
+    Ejecuta una sentencia SQL de escritura (INSERT, UPDATE, DELETE) con confirmación transaccional.
+
+    ## Args:
+    query: Sentencia SQL con parámetros nombrados (SQLAlchemy text).
+    params: Valores de interpolación.
+
+    ## Raises:
+    HTTPException(500): Si la escritura falla en base de datos.
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(query), params or {})
+            conn.commit()
+            return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error de escritura en DB")
+
+
+# =============================================================================
+# CACHÉ REDIS
+# =============================================================================
+
+
 def get_redis_client() -> Redis | None:
     """
-    Descripción:
-    Inicializa y retorna la conexión persistente al servidor Redis para operaciones de caché.
+    Inicializa y retorna la conexión al servidor Redis.
 
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - Redis | None - Cliente Redis activo, o None si el servicio no está disponible.
-
-    Excepciones:
-    - redis.exceptions.ConnectionError: Capturada internamente para retornar None de forma segura.
+    ## Returns:
+    Cliente Redis activo o None si el servicio no está disponible.
     """
     global redis_client, redis_ready
     if Redis is None:
         return None
     if redis_client is not None and redis_ready:
         return redis_client
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
-
-def _query_one(query: str, params: Optional[dict] = None) -> dict | None:
     try:
-<<<<<<< HEAD
-        with engine.connect() as conn:
-            result = conn.execute(text(query), params or {})
-            row = result.fetchone()
-            return dict(row._mapping) if row else None
-    except Exception as e:
-        print(f"🚨 [DB Error - _query_one]: {e}")
-=======
         redis_client = Redis.from_url(REDIS_URL, decode_responses=True)
         redis_client.ping()
         redis_ready = True
@@ -266,64 +182,32 @@ def _query_one(query: str, params: Optional[dict] = None) -> dict | None:
 
 def cache_get(key: str) -> Any | None:
     """
-    Descripción:
-    Recupera y deserializa un valor almacenado en la caché de Redis asociado a una clave específica.
+    Recupera y deserializa un valor almacenado en Redis.
 
-    Parámetros:
-    - key: str - Identificador único del recurso en caché.
+    ## Args:
+    key: Identificador único del recurso en caché.
 
-    Retorno:
-    - Any | None - Estructura de datos deserializada o None si la clave no existe.
-
-    Excepciones:
-    - json.JSONDecodeError: Capturada internamente si el valor no es JSON válido.
+    ## Returns:
+    Estructura de datos deserializada o None si la clave no existe.
     """
     client = get_redis_client()
     if not client:
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
+        return None
+    try:
+        raw = client.get(key)
+        return json.loads(raw) if raw else None
+    except Exception:
         return None
 
-def _execute_write(query: str, params: Optional[dict] = None) -> Any:
-    try:
-        with engine.connect() as conn:
-            result = conn.execute(text(query), params or {})
-            conn.commit()
-            return result
-    except Exception as e:
-        print(f"🚨 [DB Error - _execute_write]: {e}")
-        raise HTTPException(status_code=500, detail="Error de escritura en DB")
-
-<<<<<<< HEAD
-vector_collection: Any | None = None
-def get_vector_collection() -> Any | None:
-    global vector_collection
-    if vector_collection is not None:
-        return vector_collection
-    try:
-        CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-        chroma_client = chromadb.PersistentClient(path=str(CHROMA_DIR))
-        vector_collection = chroma_client.get_or_create_collection(name=CHROMA_COLLECTION_NAME)
-    except Exception as exc:
-        print(f"⚠️ [RAG] Error ChromaDB: {exc}")
-        vector_collection = None
-    return vector_collection
-=======
 
 def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> None:
     """
-    Descripción:
-    Serializa y almacena un valor en la caché de Redis con un tiempo de expiración definido.
+    Serializa y almacena un valor en Redis con tiempo de expiración.
 
-    Parámetros:
-    - key: str - Identificador único para el recurso.
-    - value: Any - Datos a almacenar (deben ser serializables a JSON).
-    - ttl_seconds: int - Tiempo de vida en segundos (por defecto 300).
-
-    Retorno:
-    - None
-
-    Excepciones:
-    - TypeError: Capturada internamente si el valor no es serializable.
+    ## Args:
+    key: Identificador único del recurso.
+    value: Datos a almacenar (deben ser serializables a JSON).
+    ttl_seconds: Tiempo de vida en segundos (por defecto 300).
     """
     client = get_redis_client()
     if not client:
@@ -334,52 +218,35 @@ def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> None:
         return
 
 
-"""
---------------------------------------------------
-SECCIÓN: Utilidades de Seguridad y Normalización de Datos
-OBJETIVO: Garantizar la integridad, confidencialidad y consistencia de los datos procesados.
-RESPONSABILIDADES:
-- Criptografía de credenciales.
-- Saneamiento y transformación de cadenas de texto.
-- Conversión segura de tipos de datos.
---------------------------------------------------
-"""
+# =============================================================================
+# SEGURIDAD Y NORMALIZACIÓN
+# =============================================================================
+
 
 def hash_password(raw_password: str) -> str:
     """
-    Descripción:
-    Aplica una función de derivación de claves criptográficas (bcrypt) a una contraseña en texto plano.
+    Aplica bcrypt a una contraseña en texto plano.
 
-    Parámetros:
-    - raw_password: str - Contraseña proporcionada por el usuario.
+    ## Args:
+    raw_password: Contraseña proporcionada por el usuario.
 
-    Retorno:
-    - str - Hash criptográfico seguro.
-
-    Excepciones:
-    - Ninguna.
+    ## Returns:
+    Hash criptográfico seguro.
     """
     return bcrypt.hashpw(raw_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
 
-# =============================================================================
-# 3. SEGURIDAD Y ARCHIVOS
-# =============================================================================
 def verify_password(raw_password: str, stored_password: str) -> bool:
     """
-    Descripción:
-    Verifica criptográficamente si una contraseña en texto plano corresponde al hash almacenado.
+    Verifica si una contraseña en texto plano corresponde al hash almacenado.
+    Soporta hashes bcrypt y contraseñas en texto plano (legacy).
 
-    Parámetros:
-    - raw_password: str - Contraseña de intento de acceso.
-    - stored_password: str - Hash criptográfico almacenado en base de datos.
+    ## Args:
+    raw_password: Contraseña del intento de acceso.
+    stored_password: Hash almacenado en base de datos.
 
-    Retorno:
-    - bool - Verdadero si las credenciales coinciden, falso en caso contrario.
-
-    Excepciones:
-    - Ninguna.
+    ## Returns:
+    True si las credenciales coinciden.
     """
     stored = (stored_password or "").strip()
     if stored.startswith("$2"):
@@ -389,22 +256,17 @@ def verify_password(raw_password: str, stored_password: str) -> bool:
             return False
     return stored == raw_password
 
-<<<<<<< HEAD
-=======
 
 def serialize_user(user: dict) -> dict:
     """
-    Descripción:
-    Filtra y estandariza la estructura de datos de un usuario para su exposición a través de la API.
+    Filtra y estandariza un registro de usuario para su exposición vía API.
+    Excluye campos sensibles como password_hash.
 
-    Parámetros:
-    - user: dict - Registro crudo de usuario obtenido de la base de datos.
+    ## Args:
+    user: Registro crudo obtenido de base de datos.
 
-    Retorno:
-    - dict - Diccionario de usuario sanitizado (sin datos sensibles como contraseñas).
-
-    Excepciones:
-    - KeyError: Si la estructura de entrada carece de campos obligatorios.
+    ## Returns:
+    Diccionario de usuario sanitizado.
     """
     return {
         "usuario_id": int(user["usuario_id"]),
@@ -418,17 +280,13 @@ def serialize_user(user: dict) -> dict:
 
 def normalize_db_status(value: str | None) -> str:
     """
-    Descripción:
-    Convierte variaciones semánticas y lingüísticas de estados operativos hacia un conjunto estándar de la base de datos.
+    Normaliza variaciones semánticas de estados operativos al conjunto estándar de la base de datos.
 
-    Parámetros:
-    - value: str | None - Estado en formato libre o de sistema externo.
+    ## Args:
+    value: Estado en formato libre.
 
-    Retorno:
-    - str - Clave de estado normalizado.
-
-    Excepciones:
-    - Ninguna.
+    ## Returns:
+    Clave de estado normalizado.
     """
     raw = (value or "").strip().lower()
     mapping = {
@@ -451,17 +309,13 @@ def normalize_db_status(value: str | None) -> str:
 
 def humanize_status(value: str | None) -> str:
     """
-    Descripción:
-    Traduce claves de estado de sistema a etiquetas legibles y estandarizadas para interfaces de usuario.
+    Traduce claves de estado de sistema a etiquetas legibles para interfaces de usuario.
 
-    Parámetros:
-    - value: str | None - Clave de estado normalizado de base de datos.
+    ## Args:
+    value: Clave de estado normalizado.
 
-    Retorno:
-    - str - Etiqueta de estado capitalizada y legible.
-
-    Excepciones:
-    - Ninguna.
+    ## Returns:
+    Etiqueta de estado capitalizada.
     """
     raw = (value or "").strip().lower()
     mapping = {
@@ -477,17 +331,13 @@ def humanize_status(value: str | None) -> str:
 
 def parse_optional_datetime(value: Any) -> datetime | None:
     """
-    Descripción:
-    Interpreta y transforma cadenas de texto, marcas de tiempo o valores nulos en objetos datetime nativos.
+    Convierte cadenas, timestamps o valores nulos en objetos datetime nativos.
 
-    Parámetros:
-    - value: Any - Valor crudo representando una fecha/hora.
+    ## Args:
+    value: Valor crudo representando una fecha/hora.
 
-    Retorno:
-    - datetime | None - Objeto datetime analizado, o None si el valor es inválido/vacío.
-
-    Excepciones:
-    - Ninguna. Retorna None ante fallos de formato.
+    ## Returns:
+    Objeto datetime o None si el valor es inválido o vacío.
     """
     if value in (None, "", "null"):
         return None
@@ -502,18 +352,17 @@ def parse_optional_datetime(value: Any) -> datetime | None:
 
 def safe_int(value: Any, field_name: str) -> int:
     """
-    Descripción:
-    Asegura la conversión estricta de un valor a número entero, disparando errores HTTP informativos si falla.
+    Convierte un valor a entero disparando errores HTTP descriptivos si falla.
 
-    Parámetros:
-    - value: Any - Valor numérico crudo.
-    - field_name: str - Nombre semántico del campo para mensajes de error.
+    ## Args:
+    value: Valor numérico crudo.
+    field_name: Nombre del campo para mensajes de error.
 
-    Retorno:
-    - int - Valor numérico validado.
+    ## Returns:
+    Valor numérico validado.
 
-    Excepciones:
-    - HTTPException(400): Si el valor es nulo, vacío o no coercible a entero.
+    ## Raises:
+    HTTPException(400): Si el valor es nulo, vacío o no convertible a entero.
     """
     if value in (None, "", "null"):
         raise HTTPException(status_code=400, detail=f"El campo '{field_name}' es obligatorio.")
@@ -525,71 +374,53 @@ def safe_int(value: Any, field_name: str) -> int:
 
 def safe_text(value: Any, default: str = "") -> str:
     """
-    Descripción:
-    Extrae contenido de texto de forma segura garantizando la ausencia de excepciones por valores nulos.
+    Extrae texto de forma segura garantizando ausencia de excepciones por valores nulos.
 
-    Parámetros:
-    - value: Any - Variable objetivo.
-    - default: str - Cadena de respaldo si el valor es nulo.
+    ## Args:
+    value: Variable objetivo.
+    default: Cadena de respaldo si el valor es nulo.
 
-    Retorno:
-    - str - Texto final saneado sin espacios perimetrales.
-
-    Excepciones:
-    - Ninguna.
+    ## Returns:
+    Texto saneado sin espacios perimetrales.
     """
     if value is None:
         return default
     return str(value).strip()
 
 
-def iso_z(val):
+def iso_z(val) -> str | None:
     """
-    Descripción:
-    Estandariza fechas en formato ISO 8601 asegurando la sufijación explícita de huso horario UTC (Z).
+    Estandariza fechas a formato ISO 8601 con sufijo UTC explícito (Z).
 
-    Parámetros:
-    - val: datetime | str | None - Objeto o cadena de fecha.
+    ## Args:
+    val: Objeto datetime o cadena de fecha.
 
-    Retorno:
-    - str | None - Cadena de fecha formateada, o None si no se provee valor.
-
-    Excepciones:
-    - Ninguna.
+    ## Returns:
+    Cadena de fecha formateada o None si no se provee valor.
     """
     if not val:
         return None
     if isinstance(val, str):
-        return val if val.endswith('Z') or '+' in val else val + 'Z'
+        return val if val.endswith("Z") or "+" in val else val + "Z"
     s = val.isoformat()
-    return s if s.endswith('Z') or '+' in s else s + 'Z'
+    return s if s.endswith("Z") or "+" in s else s + "Z"
 
 
-"""
---------------------------------------------------
-SECCIÓN: Mapeadores y Gestores de Dominio (Órdenes de Trabajo)
-OBJETIVO: Transformar esquemas de datos relacionales hacia modelos de dominio y gobernar lógicas transaccionales.
-RESPONSABILIDADES:
-- Ensamblar entidades complejas (OTs con evidencias).
-- Validar transiciones de estado.
-- Ejecutar consultas altamente especializadas de negocio.
---------------------------------------------------
-"""
+# =============================================================================
+# MAPEADORES DE DOMINIO — ÓRDENES DE TRABAJO
+# =============================================================================
+
 
 def row_to_work_order(row: dict, photos: list[dict] | None = None) -> dict:
     """
-    Descripción:
-    Convierte un conjunto de resultados planos de base de datos en una estructura JSON jerárquica de Orden de Trabajo.
+    Convierte un registro relacional plano en la estructura JSON jerárquica de una Orden de Trabajo.
 
-    Parámetros:
-    - row: dict - Registro unificado proveniente de cruces relacionales (JOINs).
-    - photos: list[dict] | None - Colección pre-procesada de evidencias fotográficas.
+    ## Args:
+    row: Registro unificado proveniente de JOINs.
+    photos: Colección de evidencias fotográficas pre-procesadas.
 
-    Retorno:
-    - dict - Representación de dominio de la Orden de Trabajo lista para entrega API.
-
-    Excepciones:
-    - KeyError: Si el registro relacional está incompleto o corrupto estructuralmente.
+    ## Returns:
+    Representación de dominio de la OT lista para entrega vía API.
     """
     photo_list = photos or row.get("photos") or []
     return {
@@ -629,17 +460,13 @@ def row_to_work_order(row: dict, photos: list[dict] | None = None) -> dict:
 
 def fetch_work_order_row(numero_ot: str) -> dict | None:
     """
-    Descripción:
-    Ejecuta la recuperación integral de una Orden de Trabajo consolidando información de tablas periféricas (máquinas, plantas, usuarios).
+    Recupera una Orden de Trabajo con sus relaciones consolidadas (máquina, planta, técnico).
 
-    Parámetros:
-    - numero_ot: str - Código único de identificación de la Orden de Trabajo.
+    ## Args:
+    numero_ot: Código único de identificación de la OT.
 
-    Retorno:
-    - dict | None - Diccionario con datos relacionales cruzados o None si la OT no existe.
-
-    Excepciones:
-    - psycopg2.DatabaseError: Ante fallos en la estructura o disponibilidad de base de datos.
+    ## Returns:
+    Diccionario con datos relacionales cruzados o None si la OT no existe.
     """
     return _query_one(
         """
@@ -686,17 +513,13 @@ def fetch_work_order_row(numero_ot: str) -> dict | None:
 
 def fetch_work_order_photos(ot_id: int) -> list[dict]:
     """
-    Descripción:
-    Recupera los metadatos y rutas físicas de todas las fotografías asociadas a una Orden de Trabajo.
+    Recupera los metadatos y rutas de todas las fotografías asociadas a una OT.
 
-    Parámetros:
-    - ot_id: int - Identificador primario interno de la OT.
+    ## Args:
+    ot_id: Identificador primario de la OT.
 
-    Retorno:
-    - list[dict] - Colección de registros de evidencia visual.
-
-    Excepciones:
-    - psycopg2.DatabaseError: Fallo de ejecución de consulta.
+    ## Returns:
+    Colección de registros de evidencia visual.
     """
     rows = _query_all(
         """
@@ -723,17 +546,16 @@ def fetch_work_order_photos(ot_id: int) -> list[dict]:
 
 def parse_work_order_status(value: str | None) -> str:
     """
-    Descripción:
-    Audita y restringe las transiciones de estado de órdenes de trabajo para evitar corrupciones lógicas en flujos operativos.
+    Valida que el estado propuesto pertenezca al conjunto de transiciones permitidas.
 
-    Parámetros:
-    - value: str | None - Estado propuesto.
+    ## Args:
+    value: Estado propuesto.
 
-    Retorno:
-    - str - Estado auditado y validado.
+    ## Returns:
+    Estado auditado y validado.
 
-    Excepciones:
-    - HTTPException(400): Si el estado propuesto rompe las reglas de negocio permitidas.
+    ## Raises:
+    HTTPException(400): Si el estado propuesto no está dentro del conjunto permitido.
     """
     db_status = normalize_db_status(value)
     allowed = {"pending", "assigned", "in_progress", "completed", "cancelled", "overdue"}
@@ -742,33 +564,25 @@ def parse_work_order_status(value: str | None) -> str:
     return db_status
 
 
-"""
---------------------------------------------------
-SECCIÓN: Gestión de Archivos Físicos y Almacenamiento
-OBJETIVO: Proveer un sistema resiliente para la manipulación segura de archivos binarios e imágenes en el servidor.
-RESPONSABILIDADES:
-- Almacenar archivos multimedia garantizando nomenclatura única.
-- Indexar metadatos visuales en base de datos.
-- Purgar archivos físicos desasociados de forma segura.
---------------------------------------------------
-"""
+# =============================================================================
+# GESTIÓN DE ARCHIVOS
+# =============================================================================
 
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
+
 def store_upload_file(file: UploadFile, destination_dir: Path, prefix: str) -> dict:
     """
-    Descripción:
-    Procesa un flujo de bytes entrante y lo persiste en el sistema de archivos generando mitigaciones de colisión de nombres.
+    Persiste un archivo en el sistema de archivos generando un nombre único para evitar colisiones.
 
-    Parámetros:
-    - file: UploadFile - Archivo recibido desde la solicitud HTTP.
-    - destination_dir: Path - Directorio de destino absoluto.
-    - prefix: str - Prefijo taxonómico para categorización de archivos.
+    ## Args:
+    file: Archivo recibido desde la solicitud HTTP.
+    destination_dir: Directorio de destino absoluto.
+    prefix: Prefijo categórico para el nombre del archivo.
 
-    Retorno:
-    - dict - Diccionario de mapeo entre nomenclatura original, generada y rutas.
+    ## Returns:
+    Diccionario con file_id, stored_name, stored_path y original_name.
 
-    Excepciones:
-    - IOError: Si los permisos del sistema de archivos deniegan la escritura.
+    ## Raises:
+    IOError: Si los permisos del sistema de archivos deniegan la escritura.
     """
     original_name = Path(file.filename or "file").name
     suffix = Path(original_name).suffix.lower() or ".bin"
@@ -777,23 +591,6 @@ def store_upload_file(file: UploadFile, destination_dir: Path, prefix: str) -> d
     stored_path = destination_dir / stored_name
     with stored_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    return {"file_id": file_id, "original_name": original_name, "stored_path": stored_path}
-
-<<<<<<< HEAD
-# =============================================================================
-# 4. FASTAPI Y CORS
-# =============================================================================
-app = FastAPI(title="BARB Core API", version="3.1.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost",
-        "http://localhost:5173",
-        "https://barb-rose.vercel.app",
-        "https://barb-tvasquezms-projects.vercel.app"
-    ],
-    allow_origin_regex=r"https://barb.*\.vercel\.app",  # 🔥 EL COMODÍN MÁGICO
-=======
     return {
         "file_id": file_id,
         "stored_name": stored_name,
@@ -804,21 +601,19 @@ app.add_middleware(
 
 async def save_ot_photos(numero_ot: str, ot_id: int, images: list[UploadFile]) -> list[dict]:
     """
-    Descripción:
-    Coordina el procesamiento transaccional múltiple de fotografías, validando tipos MIME e impactando rutas relativas en la base de datos.
-    Implementa rollback del sistema de archivos físico en caso de fallo relacional.
+    Procesa fotográficamente una OT de forma transaccional: valida tipos MIME,
+    persiste archivos e inserta metadatos en BD. Ejecuta rollback físico si la transacción falla.
 
-    Parámetros:
-    - numero_ot: str - Identificador público de la Orden de Trabajo (usado para estructura de carpetas).
-    - ot_id: int - Clave primaria de la Orden de Trabajo.
-    - images: list[UploadFile] - Listado de archivos multimedia a procesar.
+    ## Args:
+    numero_ot: Identificador público de la OT (usado para estructura de carpetas).
+    ot_id: Clave primaria de la OT.
+    images: Archivos multimedia a procesar.
 
-    Retorno:
-    - list[dict] - Registros fotográficos creados exitosamente.
+    ## Returns:
+    Registros fotográficos creados exitosamente.
 
-    Excepciones:
-    - HTTPException(415): Si un archivo vulnera las restricciones MIME (JPEG/PNG/WEBP).
-    - Exception: Burbuja fallos no previstos activando lógicas compensatorias (borrado de archivos huérfanos).
+    ## Raises:
+    HTTPException(415): Si un archivo no cumple con los tipos MIME permitidos (JPEG/PNG/WEBP).
     """
     saved_photos: list[dict] = []
     if not images:
@@ -879,24 +674,14 @@ async def save_ot_photos(numero_ot: str, ot_id: int, images: list[UploadFile]) -
 
 def delete_ot_files(ot_id: int) -> None:
     """
-    Descripción:
-    Desencadena una limpieza total de archivos asociados a una Orden de Trabajo que se está eliminando o purgando del sistema.
+    Elimina físicamente todos los archivos asociados a una OT y limpia directorios vacíos.
+    Suprime errores de sistema de archivos para no bloquear transacciones de BD.
 
-    Parámetros:
-    - ot_id: int - Clave primaria de la Orden de Trabajo objetivo.
-
-    Retorno:
-    - None
-
-    Excepciones:
-    - Ninguna. Suprime errores de sistema de archivos para no bloquear transacciones de BD.
+    ## Args:
+    ot_id: Clave primaria de la OT objetivo.
     """
     rows = _query_all(
-        """
-        SELECT file_path
-        FROM ot_foto
-        WHERE ot_id = %(ot_id)s
-        """,
+        "SELECT file_path FROM ot_foto WHERE ot_id = %(ot_id)s",
         {"ot_id": ot_id},
     )
     for row in rows:
@@ -918,16 +703,59 @@ def delete_ot_files(ot_id: int) -> None:
                     pass
 
 
-"""
---------------------------------------------------
-SECCIÓN: Modelos de Datos (Pydantic) e Inicialización de API
-OBJETIVO: Definir esquemas de validación estricta y levantar el enrutador de FastAPI.
-RESPONSABILIDADES:
-- Validación de payloads HTTP.
-- Configuración de políticas de acceso CORS.
-- Asignación de metadatos de Swagger/OpenAPI.
---------------------------------------------------
-"""
+# =============================================================================
+# MODELOS PYDANTIC
+# =============================================================================
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class MessageItem(BaseModel):
+    role: str
+    content: str
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in {"user", "assistant", "system"}:
+            raise ValueError("role debe ser 'user', 'assistant' o 'system'.")
+        return v
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000)
+    language: Optional[str] = "es"
+    machine: Optional[str] = None
+    # Limita el historial a las últimas 10 interacciones para evitar exceder el contexto del LLM.
+    history: list[MessageItem] = Field(default_factory=list, max_length=10)
+
+
+class UserCreateRequest(BaseModel):
+    nombre: str
+    email: str
+    password: str
+    rol: str
+    activo: bool = True
+
+
+class UserUpdateRequest(BaseModel):
+    nombre: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+    rol: Optional[str] = None
+    activo: Optional[bool] = None
+
+
+class WorkOrderStatusRequest(BaseModel):
+    status: str
+
+
+# =============================================================================
+# APLICACIÓN Y CORS
+# =============================================================================
 
 app = FastAPI(title="BARB Plant Memory API", version="1.5.0")
 
@@ -936,127 +764,35 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
-        "https://barb-7jfguz636-tvasquezms-projects.vercel.app"
+        "https://barb-7jfguz636-tvasquezms-projects.vercel.app",
+        "https://barb-rose.vercel.app",
     ],
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
+    # Permite cualquier subdominio de barb en Vercel sin hardcodeo exhaustivo.
+    allow_origin_regex=r"https://barb.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-<<<<<<< HEAD
-=======
 
-CLASE: LoginRequest
-"""
-Descripción: Estructura de validación para peticiones de autenticación.
-"""
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
-class LoginRequest(BaseModel):
-    email: str
-    password: str
 
-<<<<<<< HEAD
-class MessageItem(BaseModel):
-    role: str
-    content: str
-
-=======
-CLASE: ChatRequest
-"""
-Descripción: Estructura de validación para consultas de Inteligencia Artificial (DeepSeek).
-"""
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
-class ChatRequest(BaseModel):
-    message: str
-    machine: Optional[str] = None
-    history: list[MessageItem] = Field(default_factory=list)
-
-<<<<<<< HEAD
-class WorkOrderCreate(BaseModel):
-    title: str
-    maquina_id: int
-    tecnico_id: int
-    priority: str
-    status: str
-    description: str
-
-    class Config:
-        populate_by_name = True
-        extra = "ignore"
-
-class WorkOrderStatusUpdate(BaseModel):
-    status: str
+@app.on_event("startup")
+async def startup_checks():
+    """Valida dependencias críticas al iniciar el servidor."""
+    if not DEEPSEEK_API_KEY:
+        print("⚠️  ADVERTENCIA: DEEPSEEK_API_KEY no configurada. El endpoint /api/chat estará degradado.")
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as e:
+        print(f"⚠️  ADVERTENCIA: No se pudo conectar a PostgreSQL al iniciar: {e}")
 
 # =============================================================================
-# 5. ENDPOINTS OPTIMIZADOS (CACHÉ + DB REAL)
+# ENDPOINTS — SALUD Y DIAGNÓSTICO
 # =============================================================================
-@app.get("/api/health")
-def health():
-    return {"status": "online", "db_connected": engine is not None}
 
-@app.post("/api/auth/login")
-def login(payload: LoginRequest):
-    user = _query_one("SELECT * FROM usuario WHERE lower(email) = :email LIMIT 1", {"email": payload.email.strip().lower()})
-    if not user or not user.get("activo", True) or not verify_password(payload.password, str(user.get("password_hash", ""))):
-        raise HTTPException(status_code=401, detail="Credenciales incorrectas")
-    
-=======
-CLASE: UserCreateRequest
-"""
-Descripción: Esquema de creación de un nuevo usuario en sistema con políticas predeterminadas.
-"""
-class UserCreateRequest(BaseModel):
-    nombre: str
-    email: str
-    password: str
-    rol: str
-    activo: bool = True
-
-CLASE: UserUpdateRequest
-"""
-Descripción: Esquema mutante de actualización de perfiles permitiendo modificaciones parciales de campos.
-"""
-class UserUpdateRequest(BaseModel):
-    nombre: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None
-    rol: Optional[str] = None
-    activo: Optional[bool] = None
-
-CLASE: WorkOrderStatusRequest
-"""
-Descripción: Estructura especializada para mutación de estados en el ciclo de vida de una OT.
-"""
-class WorkOrderStatusRequest(BaseModel):
-    status: str
-
-
-"""
---------------------------------------------------
-SECCIÓN: Endpoints de Salud y Diagnóstico de Sistema
-OBJETIVO: Exponer indicadores del estatus de la infraestructura para orquestadores y monitores externos.
-RESPONSABILIDADES:
-- Validación de pulso API.
-- Comprobación bidireccional base de datos/caché.
-- Confirmación de disponibilidad del servicio LLM.
---------------------------------------------------
-"""
 
 @app.get("/")
 async def root():
-    """
-    Descripción:
-    Endpoint de sondeo básico en raíz para comprobar conectividad HTTP.
-
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - dict - Estado en línea.
-
-    Excepciones:
-    - Ninguna.
-    """
     return {"service": "BARB API", "status": "online"}
 
 
@@ -1064,17 +800,10 @@ async def root():
 @app.get("/api/health")
 async def health():
     """
-    Descripción:
-    Evalúa la capacidad de la aplicación para comunicarse y resolver sentencias triviales en la base de datos principal PostgreSQL.
+    Verifica conectividad con PostgreSQL mediante una sentencia trivial.
 
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - dict - Estado operativo o desglose de degradación.
-
-    Excepciones:
-    - Ninguna. Resuelve en payload JSON de error.
+    ## Returns:
+    Estado operativo del servicio.
     """
     try:
         with engine.connect() as conn:
@@ -1087,17 +816,10 @@ async def health():
 @app.get("/api/health/redis")
 async def health_redis():
     """
-    Descripción:
-    Comprueba el pulso y latencia general del sistema de caché Redis.
+    Comprueba disponibilidad del sistema de caché Redis.
 
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - dict - Estado en línea/fuera de línea de caché.
-
-    Excepciones:
-    - Ninguna.
+    ## Returns:
+    Estado en línea/fuera de línea del cliente Redis.
     """
     client = get_redis_client()
     if not client:
@@ -1111,57 +833,47 @@ async def health_redis():
 @app.get("/api/health/llm")
 async def health_llm():
     """
-    Descripción:
-    Sondea la integralidad del motor cognitivo cruzando viabilidad de base de datos y la correcta ingestión de la clave de API de DeepSeek.
+    Verifica disponibilidad combinada de la base de datos y la API key del motor de IA.
 
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - dict - Mapeo topológico general del sistema RAG.
-
-    Excepciones:
-    - Ninguna.
+    ## Returns:
+    Mapa topológico del estado del sistema RAG.
     """
     db_status = await health()
     has_key = bool(os.getenv("DEEPSEEK_API_KEY"))
-    
+
     lm_status = {
         "status": "online" if has_key else "offline",
-        "detail": "API Key de DeepSeek configurada correctamente." if has_key else "Falta configurar DEEPSEEK_API_KEY en el entorno."
+        "detail": (
+            "API Key de DeepSeek configurada correctamente."
+            if has_key
+            else "Falta configurar DEEPSEEK_API_KEY en el entorno."
+        ),
     }
 
     overall = "online" if db_status.get("status") == "online" and has_key else "degraded"
     return {"status": overall, "db": db_status, "llm": lm_status}
 
 
-"""
---------------------------------------------------
-SECCIÓN: Endpoints de Autenticación y Administración de Usuarios
-OBJETIVO: Restringir operaciones sensibles delegando identidades y permitiendo gestión administrativa de personal.
-RESPONSABILIDADES:
-- Resolución de credenciales cifradas.
-- Emisión de tokens de sesión temporales.
-- Gestión CRUD de operadores y técnicos del sistema.
---------------------------------------------------
-"""
+# =============================================================================
+# ENDPOINTS — AUTENTICACIÓN Y USUARIOS
+# =============================================================================
+
 
 @app.post("/auth/login")
 @app.post("/api/auth/login")
 async def login(payload: LoginRequest):
     """
-    Descripción:
-    Recibe un par de credenciales y ejecuta una autenticación criptográfica confirmando el estado activo del operario.
+    Autentica un usuario verificando sus credenciales cifradas y su estado activo.
 
-    Parámetros:
-    - payload: LoginRequest - Estructura Pydantic que contiene el email y la contraseña.
+    ## Args:
+    payload: Estructura con email y contraseña.
 
-    Retorno:
-    - dict - Token de autorización e información pública del perfil del usuario.
+    ## Returns:
+    Token de sesión e información pública del perfil del usuario.
 
-    Excepciones:
-    - HTTPException(400): Incompletitud en envío de credenciales.
-    - HTTPException(401): Credenciales incorrectas, usuario no existente o perfil desactivado.
+    ## Raises:
+    HTTPException(400): Credenciales incompletas.
+    HTTPException(401): Credenciales incorrectas o perfil desactivado.
     """
     email = payload.email.strip().lower()
     password = payload.password
@@ -1185,57 +897,32 @@ async def login(payload: LoginRequest):
     if not verify_password(password, str(user.get("password_hash") or "")):
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrecta")
 
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
     return {
         "token": secrets.token_hex(32),
-        "user": {"id": int(user["usuario_id"]), "name": str(user["nombre"]), "role": str(user["rol"]).lower()}
+        "user": {
+            "id": int(user["usuario_id"]),
+            "name": str(user["nombre"]),
+            "role": str(user["rol"]).lower(),
+        },
     }
 
-@app.post("/api/auth/logout")
-<<<<<<< HEAD
-def logout():
-    return {"status": "success"}
 
-# 🔥 OPTIMIZACIÓN: Almacenamos catálogos en RAM. Solo pide a DB 1 vez.
-@app.get("/api/plants")
-@lru_cache(maxsize=1)
-def get_plants():
-    # Fallback silencioso si la tabla planta no existe aún
-    rows = _query_all("SELECT planta_id AS id, nombre AS name, ubicacion FROM planta ORDER BY nombre")
-    return [{"id": str(r.get("id", 1)), "name": str(r.get("name", "Planta Principal")), "ubicacion": str(r.get("ubicacion", ""))} for r in rows]
-=======
 @app.post("/auth/logout")
+@app.post("/api/auth/logout")
 async def logout():
-    """
-    Descripción:
-    Invalida de forma proactiva la sesión y limpieza de contexto en el cliente web.
-
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - dict - Confirmación de éxito en la desconexión.
-
-    Excepciones:
-    - Ninguna.
-    """
     return {"status": "success"}
 
 
 @app.get("/api/usuarios")
 async def list_users():
     """
-    Descripción:
     Retorna el directorio completo del personal técnico de la plataforma.
 
-    Parámetros:
-    - Ninguno.
+    ## Returns:
+    Colección de usuarios serializados.
 
-    Retorno:
-    - list[dict] - Colección de usuarios deserializados.
-
-    Excepciones:
-    - HTTPException(500): Si se detecta un quiebre en la conectividad a PostgreSQL.
+    ## Raises:
+    HTTPException(500): Error de conectividad con PostgreSQL.
     """
     try:
         rows = _query_all(
@@ -1253,17 +940,16 @@ async def list_users():
 @app.post("/api/usuarios", status_code=201)
 async def create_user(payload: UserCreateRequest):
     """
-    Descripción:
-    Registra operarios estableciendo perfiles criptográficamente sellados dentro del esquema empresarial.
+    Registra un nuevo usuario con contraseña cifrada mediante bcrypt.
 
-    Parámetros:
-    - payload: UserCreateRequest - Datos biométricos y técnicos del empleado de nuevo ingreso.
+    ## Args:
+    payload: Datos del nuevo usuario.
 
-    Retorno:
-    - dict - Representación sanitizada del usuario persistido.
+    ## Returns:
+    Representación sanitizada del usuario creado.
 
-    Excepciones:
-    - HTTPException(500): Quiebre relacional o transaccional.
+    ## Raises:
+    HTTPException(500): Error relacional o transaccional.
     """
     conn = None
     try:
@@ -1298,19 +984,18 @@ async def create_user(payload: UserCreateRequest):
 @app.put("/api/usuarios/{usuario_id}")
 async def update_user(usuario_id: int, payload: UserUpdateRequest):
     """
-    Descripción:
-    Aplica una actualización diferencial en los metadatos y credenciales del usuario indicado por la clave primaria.
+    Aplica una actualización diferencial sobre los metadatos y credenciales del usuario.
 
-    Parámetros:
-    - usuario_id: int - Clave primaria en base de datos.
-    - payload: UserUpdateRequest - Set mutante de datos.
+    ## Args:
+    usuario_id: Clave primaria del usuario.
+    payload: Campos a modificar (todos opcionales).
 
-    Retorno:
-    - dict - Nuevo registro modificado bajo serialización autorizada.
+    ## Returns:
+    Registro actualizado bajo serialización autorizada.
 
-    Excepciones:
-    - HTTPException(404): Usuario inexistente.
-    - HTTPException(500): Transacción fallida en base de datos.
+    ## Raises:
+    HTTPException(404): Usuario inexistente.
+    HTTPException(500): Error transaccional en base de datos.
     """
     conn = None
     try:
@@ -1329,9 +1014,7 @@ async def update_user(usuario_id: int, payload: UserUpdateRequest):
         next_nombre = payload.nombre if payload.nombre is not None else current["nombre"]
         next_email = payload.email if payload.email is not None else current["email"]
         next_password_hash = (
-            hash_password(payload.password)
-            if payload.password is not None
-            else current["password_hash"]
+            hash_password(payload.password) if payload.password is not None else current["password_hash"]
         )
         next_rol = payload.rol if payload.rol is not None else current["rol"]
         next_activo = payload.activo if payload.activo is not None else current["activo"]
@@ -1341,23 +1024,11 @@ async def update_user(usuario_id: int, payload: UserUpdateRequest):
         cursor.execute(
             """
             UPDATE usuario
-            SET
-                nombre = %s,
-                email = %s,
-                password_hash = %s,
-                rol = %s,
-                activo = %s
+            SET nombre = %s, email = %s, password_hash = %s, rol = %s, activo = %s
             WHERE usuario_id = %s
             RETURNING usuario_id, nombre, email, rol, activo, created_at;
             """,
-            (
-                next_nombre,
-                next_email,
-                next_password_hash,
-                next_rol,
-                next_activo,
-                usuario_id,
-            ),
+            (next_nombre, next_email, next_password_hash, next_rol, next_activo, usuario_id),
         )
         row = cursor.fetchone()
         conn.commit()
@@ -1379,18 +1050,14 @@ async def update_user(usuario_id: int, payload: UserUpdateRequest):
 @app.delete("/api/usuarios/{usuario_id}", status_code=204)
 async def delete_user(usuario_id: int):
     """
-    Descripción:
-    Desencadena el proceso de supresión permanente de un registro de usuario en el almacén de datos (Hard Delete).
+    Elimina permanentemente un registro de usuario (hard delete).
 
-    Parámetros:
-    - usuario_id: int - Clave interna del usuario a destruir.
+    ## Args:
+    usuario_id: Clave interna del usuario a eliminar.
 
-    Retorno:
-    - None - Confirmación 204 No Content.
-
-    Excepciones:
-    - HTTPException(404): Intento de eliminación sobre registro inubicable.
-    - HTTPException(500): Integridad referencial vulnerada o error SQL.
+    ## Raises:
+    HTTPException(404): Usuario no encontrado.
+    HTTPException(500): Violación de integridad referencial u error SQL.
     """
     conn = None
     try:
@@ -1417,31 +1084,19 @@ async def delete_user(usuario_id: int):
         raise HTTPException(status_code=500, detail=f"Error al eliminar USUARIO: {str(e)}")
 
 
-"""
---------------------------------------------------
-SECCIÓN: Endpoints de Órdenes de Trabajo, Análisis Financiero y Documentación
-OBJETIVO: Canalizar el flujo transaccional y estadístico del módulo central de mantenimiento (Gestión de OTs).
-RESPONSABILIDADES:
-- Controlar creación, avance, estatus, borrado y listado masivo de Órdenes.
-- Calcular y exponer KPIs vitales gerenciales (MTTR, Ahorro proyectado).
-- Recepcionar adjuntos corporativos (manuales técnicos PDF).
---------------------------------------------------
-"""
+# =============================================================================
+# ENDPOINTS — ESTADÍSTICAS FINANCIERAS
+# =============================================================================
+
 
 @app.get("/api/stats/financial-impact")
+@lru_cache(maxsize=1)
 def get_financial_impact():
     """
-    Descripción:
-    Calcula dinámicamente indicadores de desempeño (KPIs) en base al ecosistema de fallos, estimando costos tangibles y ahorro hipotético derivado de mitigaciones tempranas.
+    Calcula KPIs de desempeño (MTTR, costos acumulados, ahorro estimado) desde la tabla de OTs completadas.
 
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - dict - Representación MTTR, costos acumulados y proyecciones monetarias de ahorros.
-
-    Excepciones:
-    - Ninguna. Proveé respuesta vacía amortizada bajo errores de ejecución relacional.
+    ## Returns:
+    Indicadores financieros: mttr, costo_total_acumulado, ahorro_estimado.
     """
     query = text(
         """
@@ -1465,47 +1120,29 @@ def get_financial_impact():
         return {"mttr": 0.0, "costo_total_acumulado": 0.0, "ahorro_estimado": 0.0}
 
 
+# =============================================================================
+# ENDPOINTS — ÓRDENES DE TRABAJO
+# =============================================================================
+
+
 @app.get("/api/work-orders")
 @app.get("/api/work_orders")
 def get_work_orders():
     """
-    Descripción:
-    Ejecuta un barrido exhaustivo en base de datos construyendo un listado enriquecido de órdenes de trabajo incorporando contadores visuales (fotos) y cruces geográficos (plantas/disciplinas).
+    Retorna el listado completo de OTs enriquecido con relaciones de máquina, planta, disciplina y conteo fotográfico.
 
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - list[dict] - Flujo procesado de Órdenes de Trabajo para paneles frontend.
-
-    Excepciones:
-    - Ninguna. Devuelve colección vacía si la sintaxis relacional experimenta una disrupción.
+    ## Returns:
+    Lista de Órdenes de Trabajo para paneles frontend.
     """
     query = text(
         """
         SELECT
-            ot.ot_id,
-            ot.numero_ot,
-            ot.maquina_id,
-            ot.tecnico_id,
-            ot.creado_por,
-            ot.diagnostico_id,
-            ot.reporte_id,
-            ot.tipo,
-            ot.descripcion_problema,
-            ot.descripcion_reparacion,
-            ot.resolution,
-            ot.priority,
-            ot.severity,
-            ot.fecha_creacion,
-            ot.fecha_inicio,
-            ot.fecha_cierre,
-            ot.fecha_vencimiento,
-            ot.tiempo_reparacion_min,
-            ot.downtime_minutes,
-            ot.costo_estimado,
-            ot.costo_real,
-            ot.estado,
+            ot.ot_id, ot.numero_ot, ot.maquina_id, ot.tecnico_id, ot.creado_por,
+            ot.diagnostico_id, ot.reporte_id, ot.tipo, ot.descripcion_problema,
+            ot.descripcion_reparacion, ot.resolution, ot.priority, ot.severity,
+            ot.fecha_creacion, ot.fecha_inicio, ot.fecha_cierre, ot.fecha_vencimiento,
+            ot.tiempo_reparacion_min, ot.downtime_minutes, ot.costo_estimado,
+            ot.costo_real, ot.estado,
             m.nombre AS machine_name,
             m.planta_id,
             d.disciplina_id AS discipline_id,
@@ -1529,11 +1166,7 @@ def get_work_orders():
     try:
         with engine.connect() as conn:
             rows = conn.execute(query).mappings().all()
-            resultados = []
-            for row in rows:
-                work_order = row_to_work_order(dict(row))
-                resultados.append(work_order)
-            return resultados
+            return [row_to_work_order(dict(row)) for row in rows]
     except Exception as e:
         print(f"Error BD: {e}")
         return []
@@ -1543,17 +1176,16 @@ def get_work_orders():
 @app.get("/api/work_orders/{numero_ot}")
 def get_work_order(numero_ot: str):
     """
-    Descripción:
-    Recupera una Orden de Trabajo individual inyectando evidencia visual al objeto relacional final.
+    Recupera una OT individual junto a su evidencia fotográfica asociada.
 
-    Parámetros:
-    - numero_ot: str - Folio unívoco de dominio.
+    ## Args:
+    numero_ot: Folio único de dominio de la OT.
 
-    Retorno:
-    - dict - Representación de la OT de forma minuciosa y completa.
+    ## Returns:
+    Representación completa de la OT.
 
-    Excepciones:
-    - HTTPException(404): Ausencia del registro solicitado.
+    ## Raises:
+    HTTPException(404): OT no encontrada.
     """
     row = fetch_work_order_row(numero_ot)
     if not row:
@@ -1566,19 +1198,19 @@ def get_work_order(numero_ot: str):
 @app.put("/api/work_orders/{numero_ot}/status")
 async def update_work_order_status(numero_ot: str, payload: WorkOrderStatusRequest):
     """
-    Descripción:
-    Ejecuta un cambio de fase controlada del ciclo de vida productivo registrando las métricas automáticas de cronometrado logístico (inicios y cierres).
+    Ejecuta una transición de estado en el ciclo de vida de la OT,
+    registrando automáticamente fechas de inicio y cierre según corresponda.
 
-    Parámetros:
-    - numero_ot: str - Folio serializado en BD a mutar.
-    - payload: WorkOrderStatusRequest - Pydantic dictaminando la progresión de estatus requerida.
+    ## Args:
+    numero_ot: Folio de la OT a mutar.
+    payload: Nuevo estado solicitado.
 
-    Retorno:
-    - dict - Orden de Trabajo con la fotografía posicional actualizada.
+    ## Returns:
+    OT actualizada con su estado definitivo.
 
-    Excepciones:
-    - HTTPException(404): Registro objetivo obsoleto o extraviado.
-    - HTTPException(500): Pérdida de integridad durante mutación transaccional PostgreSQL.
+    ## Raises:
+    HTTPException(404): OT no encontrada.
+    HTTPException(500): Error transaccional en PostgreSQL.
     """
     desired_status = parse_work_order_status(payload.status)
     current = fetch_work_order_row(numero_ot)
@@ -1602,9 +1234,7 @@ async def update_work_order_status(numero_ot: str, payload: WorkOrderStatusReque
         cursor.execute(
             """
             UPDATE orden_trabajo
-            SET estado = %s,
-                fecha_inicio = %s,
-                fecha_cierre = %s
+            SET estado = %s, fecha_inicio = %s, fecha_cierre = %s
             WHERE numero_ot = %s
             RETURNING numero_ot
             """,
@@ -1635,18 +1265,14 @@ async def update_work_order_status(numero_ot: str, payload: WorkOrderStatusReque
 @app.delete("/api/work_orders/{numero_ot}", status_code=204)
 async def delete_work_order(numero_ot: str):
     """
-    Descripción:
-    Desata la orden de cascada para purgar una OT. Elimina sistemáticamente evidencia fotográfica alojada localmente en la topología host y acto seguido elimina la entidad en BD.
+    Elimina una OT con su evidencia fotográfica asociada de forma cascada.
 
-    Parámetros:
-    - numero_ot: str - Folio de dominio identificativo.
+    ## Args:
+    numero_ot: Folio de dominio de la OT a eliminar.
 
-    Retorno:
-    - None - (Estatus Code 204 indicativo operativo silente exitoso).
-
-    Excepciones:
-    - HTTPException(404): Petición huérfana de OT.
-    - HTTPException(500): Transacción incompleta de base relacional.
+    ## Raises:
+    HTTPException(404): OT no encontrada.
+    HTTPException(500): Error transaccional en base de datos.
     """
     current = fetch_work_order_row(numero_ot)
     if not current:
@@ -1683,19 +1309,21 @@ async def delete_work_order(numero_ot: str):
 @app.post("/api/work_orders")
 async def create_work_order(request: Request):
     """
-    Descripción:
-    Procesa un pipeline polimórfico de solicitud (Soporta esquemas form-data/multimedia o esquemas primitivos JSON)
-    para levantar el reporte general en base de datos. Genera nomenclaturas cronológicas unívocas e inserta colateral fotográfico transaccional en un solo bloque.
+    Crea una OT desde un payload multipart/form-data o application/json,
+    con soporte opcional para carga de fotografías en la misma solicitud.
 
-    Parámetros:
-    - request: Request - El bloque de HTTP entrante del cliente con cabeceras que definen el método de lectura payload.
+    El número de OT se genera con formato OT-{AÑO}-{id:04d} post-inserción
+    para garantizar secuencialidad basada en la clave primaria.
 
-    Retorno:
-    - dict - Orden de trabajo conformada definitiva junto a conteos/arreglos de fotografías.
+    ## Args:
+    request: Solicitud HTTP con cabecera Content-Type definiendo el modo de lectura.
 
-    Excepciones:
-    - HTTPException(415): Si no obedece el encabezado Content-Type dictaminado.
-    - HTTPException(500): Conflictividad en el pipeline interno transaccional PostgreSQL u operaciones de archivos IO.
+    ## Returns:
+    OT creada con conteo y arreglo de fotografías adjuntas.
+
+    ## Raises:
+    HTTPException(415): Content-Type no soportado.
+    HTTPException(500): Error en el pipeline transaccional o en operaciones de archivos.
     """
     content_type = (request.headers.get("content-type") or "").lower()
     payload: dict[str, Any] = {}
@@ -1704,7 +1332,6 @@ async def create_work_order(request: Request):
     if "multipart/form-data" in content_type:
         form = await request.form()
         payload = {key: form.get(key) for key in form.keys()}
-        images = []
         for key in ("images", "photos", "attachments", "photo"):
             images.extend([value for value in form.getlist(key) if isinstance(value, UploadFile)])
     elif "application/json" in content_type:
@@ -1729,7 +1356,8 @@ async def create_work_order(request: Request):
     severity = safe_text(payload.get("severity"), "") or None
     estado = parse_work_order_status(safe_text(payload.get("estado") or payload.get("status"), "pending"))
     fecha_vencimiento = parse_optional_datetime(payload.get("fecha_vencimiento") or payload.get("due_date"))
-    
+
+    # Número temporal para satisfacer restricción NOT NULL; se reemplaza tras obtener el ot_id.
     temp_numero_ot = f"OT-TEMP-{uuid.uuid4().hex[:6]}"
 
     conn = None
@@ -1739,18 +1367,9 @@ async def create_work_order(request: Request):
         cursor.execute(
             """
             INSERT INTO orden_trabajo (
-                numero_ot,
-                maquina_id,
-                tecnico_id,
-                creado_por,
-                tipo,
-                descripcion_problema,
-                descripcion_reparacion,
-                resolution,
-                priority,
-                severity,
-                fecha_vencimiento,
-                estado
+                numero_ot, maquina_id, tecnico_id, creado_por, tipo,
+                descripcion_problema, descripcion_reparacion, resolution,
+                priority, severity, fecha_vencimiento, estado
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING ot_id
@@ -1772,10 +1391,13 @@ async def create_work_order(request: Request):
         )
         row = cursor.fetchone()
         ot_id = int(row["ot_id"])
-        
+
         clean_numero_ot = f"OT-{datetime.utcnow().year}-{ot_id:04d}"
-        cursor.execute("UPDATE orden_trabajo SET numero_ot = %s WHERE ot_id = %s", (clean_numero_ot, ot_id))
-        
+        cursor.execute(
+            "UPDATE orden_trabajo SET numero_ot = %s WHERE ot_id = %s",
+            (clean_numero_ot, ot_id),
+        )
+
         conn.commit()
         cursor.close()
         conn.close()
@@ -1813,21 +1435,25 @@ async def create_work_order(request: Request):
     return response_data
 
 
+# =============================================================================
+# ENDPOINTS — DOCUMENTOS
+# =============================================================================
+
+
 @app.post("/api/documents/upload")
 @app.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
     """
-    Descripción:
-    Facilita un túnel de carga para la ingesta de documentos instructivos perimetrando y garantizando únicamente tipos PDF aplicables en indexaciones vectoriales.
+    Acepta y persiste archivos PDF para su posterior indexación en el motor RAG.
 
-    Parámetros:
-    - file: UploadFile - Cadena fragmentada de archivo emitido por cliente HTTP.
+    ## Args:
+    file: Archivo recibido desde el cliente HTTP.
 
-    Retorno:
-    - dict - Información persistida de localización lógica del archivo.
+    ## Returns:
+    Metadatos de localización del archivo persistido.
 
-    Excepciones:
-    - HTTPException(415): Detención abrupta por inyección de tipo malicioso o improcedente diferente a Application/PDF.
+    ## Raises:
+    HTTPException(415): Si el archivo no es de tipo application/pdf.
     """
     content_type = (file.content_type or "").strip().lower()
     if content_type != "application/pdf":
@@ -1845,44 +1471,19 @@ async def upload_document(file: UploadFile = File(...)):
         "path": str(stored["stored_path"]),
     }
 
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
 
-"""
---------------------------------------------------
-SECCIÓN: Endpoints de Catálogos (Máquinas, Plantas, Disciplinas)
-OBJETIVO: Exponer diccionarios de datos maestros requeridos por la plataforma para alimentar el selector relacional.
-RESPONSABILIDADES:
-- Suministrar jerarquías taxonómicas maestras.
-- Integración resiliente mediante fallback programático frente a omisiones base de datos.
---------------------------------------------------
-"""
+# =============================================================================
+# ENDPOINTS — CATÁLOGOS (MÁQUINAS, PLANTAS, DISCIPLINAS, TÉCNICOS)
+# =============================================================================
+
 
 @app.get("/api/machines")
-<<<<<<< HEAD
-def list_machines():
-    query = """
-        SELECT 
-            maquina_id::text AS id, 
-            nombre AS name, 
-            disciplina_id::text AS "disciplinaId"
-        FROM MAQUINA
-        ORDER BY maquina_id ASC
-    """
-    return _query_all(query)
-=======
 def get_machines():
     """
-    Descripción:
-    Realiza provisión de la flotilla instrumental y máquinas listadas al interior del ecosistema.
+    Retorna el catálogo completo de máquinas registradas en el sistema.
 
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - list[dict] - Entidades de máquinas.
-
-    Excepciones:
-    - Ninguna. Posee fallback de emergencia.
+    ## Returns:
+    Lista de máquinas con id, nombre, discipline_id y plant_id.
     """
     try:
         rows = _query_all(
@@ -1904,27 +1505,15 @@ def get_machines():
     except Exception:
         return [{"id": 1, "name": "Planta Principal", "discipline_id": 1, "plant_id": 1}]
 
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
 
 @app.get("/api/disciplines")
 @lru_cache(maxsize=1)
 def get_disciplines():
-<<<<<<< HEAD
-    rows = _query_all("SELECT disciplina_id AS id, nombre AS label FROM disciplina ORDER BY nombre")
-    return [{"id": str(r["id"]), "label": r["label"]} for r in rows]
-=======
     """
-    Descripción:
-    Retorna tipologías profesionales estructuradas del servicio (Mecánica, Eléctrica, Preventiva).
+    Retorna las disciplinas de mantenimiento disponibles (mecánica, eléctrica, etc.).
 
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - list[dict] - Colecciones de disciplinas.
-
-    Excepciones:
-    - Ninguna. Posee fallback de emergencia.
+    ## Returns:
+    Lista de disciplinas con id y nombre.
     """
     try:
         rows = _query_all(
@@ -1943,17 +1532,10 @@ def get_disciplines():
 @app.get("/api/plantas")
 def get_plants():
     """
-    Descripción:
-    Provee el registro geográfico de clústeres operativos habilitados en sistema.
+    Retorna el registro geográfico de clústeres operativos habilitados.
 
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - list[dict] - Nodos físicos.
-
-    Excepciones:
-    - Ninguna. Incorpora un fallback explícito hacia nodo matriz.
+    ## Returns:
+    Lista de plantas con id, nombre y ubicación.
     """
     try:
         rows = _query_all(
@@ -1970,100 +1552,15 @@ def get_plants():
     except Exception:
         return [{"id": 1, "name": "Planta Central San Bernardo", "ubicacion": "San Bernardo, Región Metropolitana, Chile"}]
 
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
 
 @app.get("/api/technicians")
 @lru_cache(maxsize=1)
 def get_technicians():
-<<<<<<< HEAD
-    rows = _query_all("SELECT usuario_id AS id, nombre AS label FROM usuario WHERE lower(rol) IN ('tecnico', 'técnico') AND activo = true ORDER BY nombre")
-    return [{"id": str(r["id"]), "label": r["label"]} for r in rows]
-
-@app.get("/api/topologia")
-def get_topologia():
-    return {
-        "nodos": _query_all("SELECT * FROM topologia_nodo"),
-        "conexiones": _query_all("SELECT * FROM topologia_conexion")
-    }
-
-@app.get("/api/work-orders")
-def list_work_orders():
-    try:
-        query = """
-            SELECT 
-                ot.ot_id::text AS id, 
-                ot.numero_ot AS title, 
-                CASE 
-                    WHEN ot.estado IN ('pending', 'assigned', 'overdue') THEN 'open'
-                    WHEN ot.estado = 'in_progress' THEN 'in_progress'
-                    WHEN ot.estado IN ('completed', 'cancelled') THEN 'closed'
-                    ELSE 'open'
-                END AS status, 
-                ot.estado::text AS estado,
-                ot.priority::text AS priority, 
-                
-                -- Variables para el Dashboard (camelCase)
-                m.nombre AS "machineName", 
-                ot.maquina_id::text AS "machineId",
-                COALESCE(u.nombre, 'Sin asignar') AS technician, 
-                COALESCE(ot.descripcion_problema, 'Sin descripción') AS description,
-                TO_CHAR(ot.fecha_creacion, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "createdAt", 
-                TO_CHAR(COALESCE(ot.fecha_cierre, ot.fecha_creacion), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "closedAt",
-                d.nombre AS "disciplineName",
-                COALESCE(ot.costo_real, 0)::float AS cost,
-                COALESCE(ot.costo_estimado, 0)::float AS "estimatedCost",
-                
-                -- Variables para DocChat y Gráficos Profundos (snake_case)
-                m.nombre AS machine_name,
-                ot.maquina_id::text AS machine_id,
-                COALESCE(u.nombre, 'Sin asignar') AS tecnico_nombre,
-                d.nombre AS discipline_name,
-                TO_CHAR(ot.fecha_creacion, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
-                TO_CHAR(COALESCE(ot.fecha_cierre, ot.fecha_creacion), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS closed_at,
-                ot.tipo::text AS tipo,
-                COALESCE(ot.costo_estimado, 0)::float AS costo_estimado,
-                COALESCE(ot.costo_real, 0)::float AS costo_real,
-                ot.reporte_id,
-                ot.diagnostico_id,
-                ot.downtime_minutes,
-                EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ot.fecha_creacion))/60 AS age_minutes
-            FROM ORDEN_TRABAJO ot
-            LEFT JOIN MAQUINA m ON ot.maquina_id = m.maquina_id
-            LEFT JOIN USUARIO u ON ot.tecnico_id = u.usuario_id
-            LEFT JOIN DISCIPLINA d ON m.disciplina_id = d.disciplina_id
-            ORDER BY ot.ot_id DESC
-        """
-        return _query_all(query)
-    except Exception as e:
-        print(f"Error salvado en work-orders: {e}")
-        return []
-@app.post("/api/work-orders")
-def create_work_order(payload: WorkOrderCreate):
-    try:
-        from datetime import datetime
-        numero_unico = f"OT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
-        # 🔥 Traducción al vuelo para proteger la base de datos (ENUMs)
-        safe_priority = payload.priority.lower()
-        if safe_priority not in ['low', 'medium', 'high', 'urgent']:
-            safe_priority = 'medium'
-            
-        safe_status = payload.status.lower()
-        if safe_status not in ['pending', 'assigned', 'in_progress', 'completed', 'cancelled', 'overdue']:
-            safe_status = 'pending'
-=======
     """
-    Descripción:
-    Filtra los usuarios operacionales disponibles y habilitados para ejecución y delegación de órdenes de trabajo.
+    Retorna los técnicos activos disponibles para asignación de órdenes de trabajo.
 
-    Parámetros:
-    - Ninguno.
-
-    Retorno:
-    - list[dict] - Directorio purgado (solo usuarios de campo).
-
-    Excepciones:
-    - Ninguna. Retorna lista vacía ante el declive referencial.
+    ## Returns:
+    Lista de técnicos con id, nombre, email y rol.
     """
     try:
         rows = _query_all(
@@ -2079,270 +1576,82 @@ def create_work_order(payload: WorkOrderCreate):
         return []
 
 
-"""
---------------------------------------------------
-SECCIÓN: Endpoints de Inteligencia Artificial (DeepSeek)
-OBJETIVO: Encapsular el puente de acceso a modelos predictivos o RAG con implementaciones contra degradación.
-RESPONSABILIDADES:
-- Acondicionar consultas en colas asíncronas para el LLM.
-- Aplicar capa de caching para mitigar costos y latencias ante preguntas repetitivas.
-- Garantizar inyección de seguridad (API Keys).
---------------------------------------------------
-"""
+# =============================================================================
+# ENDPOINTS — INTELIGENCIA ARTIFICIAL (DeepSeek)
+# =============================================================================
+
 
 @app.post("/api/chat")
 @app.post("/chat")
 async def chat(payload: ChatRequest):
     """
-    Descripción:
-    Toma instrucciones originadas de interfaz RAG, somete validación de caché y delega procesamiento asíncrono avanzado con modelo en nube corporativo (DeepSeek).
+    Delega una consulta al motor DeepSeek con historial de conversación y caché por hash de mensaje.
 
-    Parámetros:
-    - payload: ChatRequest - Encapsulado contenedor del prompt y variables de entorno del usuario (ej: idioma).
+    La clave de caché incluye idioma y mensaje para evitar colisiones entre usuarios con distintos idiomas.
+    El historial se inyecta al contexto del LLM para mantener coherencia conversacional.
 
-    Retorno:
-    - dict - Contenedor con la estructura elaborada por el LLM con origen en la base de conocimientos.
+    ## Args:
+    payload: Prompt del usuario con idioma, historial y contexto de máquina opcional.
 
-    Excepciones:
-    - HTTPException(500): Detención crítica por variable oculta no instanciada.
-    - HTTPException(502): Pérdida de acuse de recibo con motor DeepSeek originado en red externa.
+    ## Returns:
+    Respuesta del LLM con fuentes de referencia.
+
+    ## Raises:
+    HTTPException(500): API Key de IA no configurada.
+    HTTPException(502): Error de comunicación con DeepSeek.
     """
+    if not DEEPSEEK_API_KEY:
+        raise HTTPException(status_code=500, detail="API Key de IA no configurada en el servidor.")
+
     cache_key = hashlib.sha256(
         f"chat:{payload.language}:{payload.message.strip()}".encode("utf-8")
     ).hexdigest()
-    
+
     cached = cache_get(cache_key)
     if cached:
         return cached
 
-    if not os.getenv("DEEPSEEK_API_KEY"):
-        raise HTTPException(status_code=500, detail="API Key de IA no configurada en el servidor.")
+    system_content = (
+        "Eres BARB, asistente experto en mantenimiento industrial. "
+        "Responde de forma clara, técnica y concisa. "
+        "Si el usuario menciona una máquina específica, orienta tu respuesta a ese equipo. "
+        f"Idioma de respuesta: {payload.language or 'es'}."
+    )
+    if payload.machine:
+        system_content += f" Máquina en contexto: {payload.machine}."
+
+    messages: list[dict] = [{"role": "system", "content": system_content}]
+
+    # Incluye el historial reciente para mantener coherencia conversacional.
+    for item in payload.history:
+        messages.append({"role": item.role, "content": item.content})
+
+    messages.append({"role": "user", "content": payload.message})
 
     try:
         response = await ia_client.chat.completions.create(
             model="deepseek-chat",
-            messages=[
-                {
-                    "role": "system", 
-                    "content": "Eres BARB, un asistente experto en mantenimiento industrial. Responde de manera clara y técnica."
-                },
-                {
-                    "role": "user", 
-                    "content": payload.message
-                },
-            ],
+            messages=messages,
             temperature=0.3,
-            max_tokens=800
+            max_tokens=1024,
         )
-        
+
         reply = response.choices[0].message.content
         result = {
-            "reply": reply, 
-            "sources": ["Base de Conocimiento BARB"], 
-            "language": payload.language
+            "reply": reply,
+            "sources": ["Base de Conocimiento BARB"],
+            "language": payload.language,
         }
-        
-        cache_set(cache_key, result, ttl_seconds=300)
+
+        # Solo cachea si no hay historial: respuestas contextuales no son reutilizables.
+        if not payload.history:
+            cache_set(cache_key, result, ttl_seconds=300)
+
         return result
-        
+
     except Exception as e:
-        print(f"Error DeepSeek: {e}")
-        raise HTTPException(status_code=502, detail="Error de comunicación con el motor de IA.")
->>>>>>> 15e4950ca68a6e823af35ceda3abf2f0a05c03a3
+        raise HTTPException(status_code=502, detail=f"Error de comunicación con el motor de IA: {type(e).__name__}")
 
-        query = """
-            INSERT INTO ORDEN_TRABAJO (
-                numero_ot, maquina_id, tecnico_id, creado_por, 
-                tipo, priority, estado, descripcion_problema, fecha_creacion
-            )
-            VALUES (
-                :numero_ot, :machine, :tecnicoId, 1, 
-                'corrective', :priority::prioridad_ot, :status::estado_ot, :description, CURRENT_TIMESTAMP
-            )
-            RETURNING ot_id
-        """
-        params = {
-            "numero_ot": numero_unico,
-            "machine": payload.maquina_id,
-            "tecnicoId": payload.tecnico_id,
-            "priority": safe_priority,
-            "status": safe_status,
-            "description": payload.description
-        }
-        _execute_write(query, params)
-        
-        get_financial_impact.cache_clear()
-        return {"status": "success"}
-    except Exception as e:
-        print(f"Error al crear OT: {e}")
-        # Si falla, devolvemos un error 500 elegante para que el frontend no explote
-        from fastapi import HTTPException
-        raise HTTPException(status_code=500, detail="Error de base de datos al crear OT")
-    
-    
-@app.put("/api/work-orders/{order_id}/status")
-def update_work_order_status(order_id: int, payload: WorkOrderStatusUpdate):
-    # Si se cierra, guardamos la fecha de cierre
-    cierre_sql = ", fecha_cierre = CURRENT_TIMESTAMP" if payload.status.lower() in ['closed', 'done'] else ""
-    _execute_write(f"UPDATE orden_trabajo SET estado = :status {cierre_sql} WHERE orden_id = :id", {"status": payload.status, "id": order_id})
-    get_financial_impact.cache_clear()
-    return {"status": "success"}
-
-# 🔥 ADIÓS HARDCODEO: Todo se calcula en vivo desde PostgreSQL
-@app.get("/api/stats/financial-impact")
-def get_financial_impact():
-    try:
-        stats = _query_one("""
-            SELECT 
-                COUNT(*) as total_ots,
-                SUM(CASE WHEN estado = 'completed' THEN 1 ELSE 0 END) as cerradas,
-                COALESCE(SUM(costo_real), 0) as costo_total
-            FROM ORDEN_TRABAJO
-        """) or {"total_ots": 0, "cerradas": 0, "costo_total": 0}
-
-        cerradas = int(stats["cerradas"] or 0)
-        total = int(stats["total_ots"] or 0)
-        costo_total = float(stats["costo_total"] or 0)
-        efficiency = (cerradas / total * 100) if total > 0 else 0
-
-        trend_query = """
-            SELECT TO_CHAR(fecha_creacion, 'YYYY-MM-DD') as date,
-                   COUNT(*) as abiertas,
-                   SUM(CASE WHEN estado = 'completed' THEN 1 ELSE 0 END) as cerradas
-            FROM ORDEN_TRABAJO
-            WHERE fecha_creacion >= CURRENT_DATE - INTERVAL '14 days'
-            GROUP BY TO_CHAR(fecha_creacion, 'YYYY-MM-DD')
-            ORDER BY date ASC
-        """
-        trends_raw = _query_all(trend_query)
-        
-        from datetime import datetime, timedelta
-        trend14Days = []
-        for i in range(14):
-            d_str = (datetime.now() - timedelta(days=13-i)).strftime('%Y-%m-%d')
-            found = next((t for t in trends_raw if t["date"] == d_str), {"abiertas": 0, "cerradas": 0})
-            trend14Days.append({
-                "date": d_str, 
-                "abiertas": int(found["abiertas"] or 0), 
-                "cerradas": int(found["cerradas"] or 0),
-                "opened": int(found["abiertas"] or 0), 
-                "closed": int(found["cerradas"] or 0),
-                "open": int(found["abiertas"] or 0)
-            })
-
-        top_machines = _query_all("""
-            SELECT 
-                m.nombre as name, 
-                COUNT(ot.ot_id)::int as value,
-                COUNT(ot.ot_id)::int as count
-            FROM MAQUINA m
-            JOIN ORDEN_TRABAJO ot ON m.maquina_id = ot.maquina_id
-            GROUP BY m.nombre
-            ORDER BY value DESC
-            LIMIT 5
-        """)
-        if not top_machines:
-            top_machines = [{"name": "Operando al 100%", "value": 1, "count": 1}]
-
-        return {
-            "financials": {
-                "ahorroGenerado": cerradas * 1500, 
-                "ahorro_generado": cerradas * 1500, 
-                "mttr": 45.5, 
-                "efficiency": round(efficiency, 1),
-                "costoTotalAcumulado": costo_total, 
-                "costo_total_acumulado": costo_total, 
-                "mtbfHours": 120
-            },
-            "trend14Days": trend14Days,
-            "machines": top_machines
-        }
-    except Exception as e:
-        print(f"Error salvado en financial-impact: {e}")
-        return {"financials": {"ahorroGenerado": 0, "ahorro_generado": 0, "mttr": 0, "efficiency": 0, "costoTotalAcumulado": 0, "costo_total_acumulado": 0, "mtbfHours": 0}, "trend14Days": [], "machines": [{"name": "Cargando...", "value": 1, "count": 1}]}
-# =============================================================================
-# 6. RAG (DOCUMENTOS Y CHAT)
-# =============================================================================
-@app.post("/api/documents/upload")
-def upload_document(file: UploadFile = File(...), discipline: str = Form(""), machine: str = Form("")):
-    # 🔥 Al quitar 'async def' y dejar solo 'def', FastAPI manda esta tarea pesada 
-    # a un hilo secundario, evitando que se congele el servidor.
-    if file.content_type != "application/pdf":
-        raise HTTPException(status_code=415, detail="Solo PDFs permitidos.")
-    
-    doc_dir = UPLOAD_DIR / "documents"
-    doc_dir.mkdir(parents=True, exist_ok=True)
-    stored = store_upload_file(file, doc_dir, "doc")
-
-    loader = PyPDFLoader(str(stored["stored_path"]))
-    chunks = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=150).split_documents(loader.load())
-
-    collection = get_vector_collection()
-    if not collection:
-        raise HTTPException(status_code=503, detail="Vector DB offline.")
-
-    for i, chunk in enumerate(chunks):
-        collection.add(
-            documents=[chunk.page_content],
-            metadatas=[{"source": stored["original_name"], "page": chunk.metadata.get("page", 0), "discipline": discipline, "machine": machine}],
-            ids=[f"{stored['file_id']}_{i}"]
-        )
-    return {"message": "Documento indexado", "chunks": len(chunks)}
-@app.post("/api/chat")
-async def chat(payload: ChatRequest):
-    collection = get_vector_collection()
-    contexto, fuentes_precisas = "", []
-    
-    if collection is not None:
-        machine_filter = str(payload.machine).lower().replace(" ", "_") if payload.machine else None
-        filtros = {"machine": machine_filter} if machine_filter else None
-        
-        try:
-            # 🔥 Aquí está la magia: Enviamos la búsqueda síncrona de Chroma a un hilo secundario
-            resultados = await run_in_threadpool(
-                collection.query,
-                query_texts=[payload.message],
-                n_results=5,
-                where=filtros
-            )
-            if resultados and resultados.get("documents") and resultados["documents"][0]:
-                contexto = "\n\n".join(resultados["documents"][0])
-                for meta in resultados["metadatas"][0]:
-                    doc_name = meta.get("source", "Manual Técnico").replace(".pdf", "").replace("_", " ").title()
-                    fuentes_precisas.append(f"{doc_name} (Pág. {meta.get('page', '?')})")
-        except Exception as exc:
-            print(f"Error en búsqueda ChromaDB: {exc}") # Agregué un print útil para debug
-            pass 
-    system_prompt = (
-        "Eres BARB, experto en mantenimiento industrial. "
-        "REGLA: Basa tu respuesta SÓLO en este contexto. Si no está, di que no encontraste información en los manuales y usa conocimiento general.\n\n"
-        f"--- CONTEXTO ---\n{contexto}\n----------------"
-    )
-    
-    messages_for_llm = [{"role": "system", "content": system_prompt}]
-    for msg in payload.history[-6:]:
-        messages_for_llm.append({"role": msg.role, "content": msg.content})
-    messages_for_llm.append({"role": "user", "content": payload.message})
-
-    async def generador_respuesta():
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                async with client.stream("POST", f"{LM_STUDIO_URL}/chat/completions", json={"model": "local-model", "messages": messages_for_llm, "temperature": 0.1, "stream": True}) as response:
-                    if response.status_code != 200:
-                        yield f"data: {json.dumps({'type': 'error', 'content': 'Error IA'})}\n\n"
-                        return
-                    async for line in response.aiter_lines():
-                        if line.startswith("data: ") and "[DONE]" not in line:
-                            try:
-                                chunk = json.loads(line[6:].strip())["choices"][0]["delta"].get("content", "")
-                                if chunk: yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-                            except Exception: continue
-            if fuentes_precisas:
-                yield f"data: {json.dumps({'type': 'sources', 'content': list(set(fuentes_precisas))})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'content': f'Falla de conexión con LLM Local: {str(e)}'})}\n\n"
-
-    return StreamingResponse(generador_respuesta(), media_type="text/event-stream")
 
 if __name__ == "__main__":
     import uvicorn
