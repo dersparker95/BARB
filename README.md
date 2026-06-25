@@ -1,172 +1,380 @@
-# TECHBOT — Sistema RAG Industrial para Reducción de MTR
-## Guía de instalación y uso
+# BARB
+
+Sistema web para gestión industrial con:
+
+- **Frontend:** React + Vite
+- **Backend:** FastAPI + Python
+- **Base de datos:** PostgreSQL
+- **Ejecución local:** Docker + Docker Compose
 
 ---
 
-## 🎯 Objetivo
-Sistema RAG (Retrieval-Augmented Generation) que permite a operadores de planta consultar
-manuales de maquinaria en lenguaje natural, vinculado a Órdenes de Trabajo (OT),
-para reducir el MTR y el costo de $2.000 USD/minuto de parada.
+## 1) Qué debes saber antes de empezar
+
+Este proyecto funciona con Docker, pero hay 3 puntos importantes detectados en la auditoría:
+
+1. **El servicio de PostgreSQL no está usando un volumen persistente real**
+   - En `docker-compose.yml` existe `postgres_data`, pero no está montado en el contenedor de `db`.
+   - Resultado: si destruyes el contenedor, la data puede perderse.
+
+2. **La app frontend usa variables de entorno en build time**
+   - El frontend se compila dentro de la imagen Docker.
+   - Si cambias `VITE_API_URL` o `VITE_LM_STUDIO_URL`, debes reconstruir la imagen del frontend.
 
 ---
 
-## 📁 Archivos del proyecto
+## 2) Estructura relevante del proyecto
 
+```text
+.
+├── docker-compose.yml
+├── frontend/
+│   └── dockerfile
+├── backend/
+│   ├── Dockerfile
+│   ├── rag_backend.py
+│   └── requirements.txt
+├── initScrips/
+│   └── 01_tablas.sql
+├── .env
+└── README.md
 ```
-techbot/
-├── rag_maquinaria.html    ← Interfaz web (funciona sola, modo demo o con backend)
-├── rag_backend.py         ← Backend Python con RAG real (LangChain + ChromaDB)
-└── README.md              ← Este archivo
-```
 
 ---
 
-## 🚀 Opción A: Solo HTML (demo rápido)
+## 3) Requisitos previos
 
-1. Abre `rag_maquinaria.html` en el navegador
-2. El sistema usa un manual de demo pre-cargado
-3. Sin LM Studio → respuestas mostrando el fragmento del manual
-4. Con LM Studio → respuestas inteligentes generadas por el LLM
+Instala lo siguiente:
 
----
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- Docker Compose v2
+- Opcional, si vas a usar el chat RAG:
+  - [LM Studio](https://lmstudio.ai)
 
-## 🛠 Opción B: Stack completo (producción)
-
-### 1. Instalar LM Studio
-- Descargar: https://lmstudio.ai
-- Cargar un modelo recomendado:
-  - **Mistral 7B Instruct** (buena relación velocidad/calidad)
-  - **LLaMA 3.1 8B Instruct** (mejor para español técnico)
-  - **Qwen2.5 7B Instruct** (excelente multilingüe)
-- Activar servidor local: ☰ → Local Server → Start Server (puerto 1234)
-
-### 2. Instalar dependencias Python
+Verifica que Docker esté activo:
 
 ```bash
-# Crear entorno virtual
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Instalar dependencias
-pip install fastapi uvicorn python-multipart
-pip install langchain langchain-community chromadb
-pip install sentence-transformers
-pip install pypdf python-docx
-pip install httpx
+docker --version
+docker compose version
 ```
 
-### 3. Correr el backend
+---
+
+## 4) Archivo `.env` inicial
+
+Crea o ajusta el archivo `.env` en la raíz del proyecto con valores locales.
+
+### Ejemplo recomendado para desarrollo local
+
+```env
+VITE_API_URL=http://localhost:9000/api
+VITE_LM_STUDIO_URL=http://host.docker.internal:1234/v1
+```
+
+### Notas
+
+- `VITE_API_URL` debe apuntar al backend local.
+- `VITE_LM_STUDIO_URL` solo se usa si vas a conectar el backend con LM Studio.
+- Si usas una URL remota o de túnel, el frontend se compilará contra esa URL.
+
+---
+
+## 5) Levantar el proyecto desde cero
+
+### Paso 1: clonar o ubicarse en el proyecto
 
 ```bash
-python rag_backend.py
-# o
-uvicorn rag_backend:app --host 0.0.0.0 --port 8000 --reload
+cd BARB-main
 ```
 
-### 4. Probar la API
+### Paso 2: preparar `.env`
+
+Asegúrate de que el archivo `.env` tenga al menos:
+
+```env
+VITE_API_URL=http://localhost:9000/api
+VITE_LM_STUDIO_URL=http://host.docker.internal:1234/v1
+```
+
+### Paso 3: revisar la carpeta de inicialización de PostgreSQL
+
+Confirma que el script SQL esté en la ruta que usa Docker Compose.
+
+Ejemplo esperado:
+
+```text
+init-scripts/01_tablas.sql
+```
+
+### Paso 4: construir y levantar los contenedores
 
 ```bash
-# Health check
-curl http://localhost:8000/health
-
-# Subir un manual
-curl -X POST http://localhost:8000/upload \
-  -F "file=@manual_compresor.pdf"
-
-# Consultar
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "¿Cómo solucionar el error E-041?",
-    "ot_number": "OT-2024-0847",
-    "ot_machine": "Compresor Atlas Copco GA55",
-    "ot_type": "Sobrecalentamiento"
-  }'
+docker compose up --build
 ```
 
-### 5. Conectar el frontend al backend
-
-En `rag_maquinaria.html`, la función `ragQuery()` hace la llamada al backend.
-Modifica la URL para apuntar a `http://localhost:8000/query` en vez de LM Studio directo.
-
----
-
-## ⚙️ Variables de entorno
+Si prefieres dejarlo en segundo plano:
 
 ```bash
-export LM_STUDIO_URL="http://localhost:1234/v1"
-export LM_STUDIO_MODEL="mistral-7b-instruct"
-export EMBEDDING_MODEL="nomic-ai/nomic-embed-text-v1.5"
-export CHROMA_PATH="./chroma_db"
+docker compose up --build -d
 ```
 
 ---
 
-## 🏗 Arquitectura del pipeline RAG
+## 6) URLs de acceso
 
-```
-Manual PDF/DOCX
-      ↓
-  Chunking (600 tokens, overlap 80)
-      ↓
-  Embeddings (nomic-embed-text)
-      ↓
-  ChromaDB (vector store local)
-      ↓
-  Consulta operador + OT
-      ↓
-  Búsqueda semántica (Top-K=4)
-      ↓
-  Prompt con contexto + OT
-      ↓
-  LM Studio (LLM local)
-      ↓
-  Respuesta al operador
+Una vez levantado el stack:
+
+- **Frontend:** http://localhost
+- **Backend:** http://localhost:9000
+- **Health check:** http://localhost:9000/health
+- **API base:** http://localhost:9000/api
+
+---
+
+## 7) Verificación rápida
+
+### Backend
+
+```bash
+curl http://localhost:9000/health
 ```
 
----
+Respuesta esperada:
 
-## 📊 Métricas de impacto esperadas
+```json
+{
+  "status": "online",
+  "work_orders": 4,
+  "machines": 5,
+  "documents": 3
+}
+```
 
-| Métrica | Antes | Después | Reducción |
-|---------|-------|---------|-----------|
-| Tiempo búsqueda en manual | 15-30 min | 30 seg | -97% |
-| MTR promedio | Línea base | -25 a -40% | $3.000-6.000/incidente |
-| Consultas sin escalar | ~40% | ~70% | +75% autonomía |
-| Errores de procedimiento | Variable | -60% | Seguridad mejorada |
+### Frontend
 
----
+Abre:
 
-## 🔒 Privacidad (datos 100% locales)
+```text
+http://localhost
+```
 
-- ✅ LM Studio corre offline — ningún dato sale de la red
-- ✅ ChromaDB almacena embeddings en disco local
-- ✅ Sin dependencia de APIs externas en producción
-- ✅ Compatible con redes aisladas (OT/IT segregadas)
+### Endpoints útiles
 
----
-
-## 🛣 Roadmap sugerido
-
-1. **Semana 1**: Deploy interfaz HTML + LM Studio + 1 manual piloto
-2. **Semana 2**: Backend Python, subir todos los manuales, ajustar chunk size
-3. **Semana 3**: Integrar con sistema de OT existente (SAP PM, MP2, etc.)
-4. **Mes 2**: Historial de consultas → dashboard de MTR
-5. **Mes 3**: Fine-tuning del LLM con Q&A propias del equipo
+```bash
+curl http://localhost:9000/api/disciplines
+curl http://localhost:9000/api/technicians
+curl http://localhost:9000/api/machines
+curl http://localhost:9000/api/work-orders
+```
 
 ---
 
-## 🆘 Soporte y troubleshooting
+## 8) Base de datos y scripts SQL
 
-**LM Studio no responde:**
-→ Verificar que el servidor local esté activo (ícono verde en LM Studio)
-→ Revisar puerto: `curl http://localhost:1234/v1/models`
+### Inicialización automática de PostgreSQL
 
-**Respuestas fuera de contexto:**
-→ Reducir temperatura a 0.05
-→ Aumentar TOP_K a 6
-→ Mejorar calidad de chunking (ajustar separadores)
+Docker ejecuta automáticamente los scripts que estén en:
 
-**Embeddings lentos:**
-→ Usar GPU si disponible: `CUDA_VISIBLE_DEVICES=0 python rag_backend.py`
-→ Modelo alternativo más liviano: `all-MiniLM-L6-v2`
+```text
+/docker-entrypoint-initdb.d
+```
+
+pero **solo la primera vez** que el volumen de datos está vacío.
+
+### Si cambias un script SQL
+
+Si modificas los archivos SQL y quieres que se vuelvan a ejecutar:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+### Importante sobre este proyecto
+
+El backend `rag_backend.py` crea algunas tablas con SQLAlchemy al arrancar:
+
+- `disciplines`
+- `technicians`
+- `machines`
+- `work_orders`
+
+Además, el proyecto incluye un script SQL más amplio en:
+
+```text
+initScrips/01_tablas.sql
+```
+
+Ese script está pensado para la estructura industrial completa.  
+Si quieres cargarlo manualmente, primero asegúrate de que esa carpeta esté montada dentro del contenedor de PostgreSQL.
+
+Ejemplo de ejecución manual dentro del contenedor:
+
+```bash
+docker compose exec db psql -U barb_admin -d barb_database -f /docker-entrypoint-initdb.d/01_tablas.sql
+```
+
+---
+
+## 9) LM Studio y chat RAG
+
+El backend intenta conectarse a LM Studio en:
+
+```text
+http://host.docker.internal:1234/v1
+```
+
+### Si quieres usar el chat
+
+1. Instala LM Studio
+2. Carga un modelo local
+3. Inicia el servidor local en el puerto `1234`
+4. Verifica que responda
+
+```bash
+curl http://localhost:1234/v1/models
+```
+
+### Si no vas a usar LM Studio
+
+El resto del sistema funciona igual, pero los endpoints de chat devolverán error si intentan usar el modelo local y no está activo.
+
+---
+
+## 10) Comandos útiles de operación
+
+### Ver logs
+
+```bash
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f db
+```
+
+### Detener el stack
+
+```bash
+docker compose down
+```
+
+### Detener y borrar volúmenes
+
+```bash
+docker compose down -v
+```
+
+### Reconstruir una sola imagen
+
+```bash
+docker compose build backend
+docker compose build frontend
+```
+
+---
+
+## 11) Auditoría resumida de Docker
+
+### docker-compose.yml
+
+- El backend y el frontend están correctamente definidos para Docker Compose.
+- El backend expone el puerto `9000`.
+- El frontend expone el puerto `80`.
+- **Problemas detectados:**
+  - falta persistencia real para PostgreSQL porque `postgres_data` no está montado en `db`
+  - la ruta de init scripts no coincide con la carpeta real del repo
+  - las credenciales de PostgreSQL están hardcodeadas
+
+### backend/Dockerfile
+
+- La imagen base es correcta para FastAPI.
+- Instala dependencias del sistema necesarias para compilación.
+- Usa `uvicorn --reload`, útil para desarrollo.
+- **Observación:** para producción, lo normal sería quitar `--reload`.
+
+### frontend/dockerfile
+
+- El build multietapa con Node + Nginx está bien planteado.
+- Sirve el build estático en Nginx.
+- **Observación:** cualquier cambio en variables `VITE_*` exige rebuild.
+
+### backend/requirements.txt
+
+- Las dependencias están alineadas con FastAPI, SQLAlchemy, PostgreSQL y RAG.
+- No se detectó error de sintaxis en el archivo.
+
+### `.env`
+
+- Está orientado al frontend y contiene variables `VITE_*`.
+- **Recomendación:** usar valores locales para Docker, no túneles remotos, salvo que ese sea el objetivo.
+
+---
+
+## 12) Troubleshooting
+
+### El frontend abre, pero no carga datos
+
+Revisa que `VITE_API_URL` apunte al backend correcto:
+
+```env
+VITE_API_URL=http://localhost:9000/api
+```
+
+Luego reconstruye:
+
+```bash
+docker compose up --build
+```
+
+### PostgreSQL no ejecuta el SQL inicial
+
+Revisa:
+
+- que la carpeta montada exista
+- que el archivo esté dentro de `/docker-entrypoint-initdb.d`
+- que el volumen no tenga datos previos
+
+Si ya habías levantado el stack:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+### LM Studio falla desde el backend
+
+Comprueba que el backend pueda alcanzar el host:
+
+- `host.docker.internal:1234`
+
+Si LM Studio no está activo, el endpoint `/api/chat` devolverá error de disponibilidad.
+
+---
+
+## 13) Flujo recomendado de trabajo
+
+1. Ajustar `.env`
+2. Levantar el stack con `docker compose up --build`
+3. Probar `http://localhost:9000/health`
+4. Abrir el frontend en `http://localhost`
+5. Ejecutar scripts SQL extra si necesitas la estructura industrial completa
+6. Revisar logs si algo falla
+
+---
+
+## 14) Resumen corto
+
+```bash
+docker compose up --build
+```
+
+Luego:
+
+- frontend: `http://localhost`
+- backend: `http://localhost:9000`
+- health: `http://localhost:9000/health`
+
+Si necesitas reiniciar todo desde cero:
+
+```bash
+docker compose down -v
+docker compose up --build
