@@ -6,8 +6,8 @@ import { createApiService } from '../services/api'
 import { getTranslations } from '../utils/i18n'
 
 type TopologyNode = {
-  nodo_id: number
-  maquina_id: number
+  nodo_id: number | string
+  maquina_id: number | string
   nombre_visual: string
   pos_x: number
   pos_y: number
@@ -17,15 +17,34 @@ type TopologyNode = {
 }
 
 type TopologyEdge = {
-  conexion_id: number
-  origen_nodo_id: number
-  destino_nodo_id: number
+  conexion_id: number | string
+  origen_nodo_id: number | string
+  destino_nodo_id: number | string
   tipo_relacion: string
 }
 
 const INITIAL_VB = { x: -100, y: -50, w: 1200, h: 800 }
 const NODE_W = 130
 const NODE_H = 85
+
+// NORMALIZADORES DEFENSIVOS (A prueba de cambios en la API)
+const mapApiNode = (n: any): TopologyNode => ({
+  nodo_id: n.nodo_id ?? n.id,
+  maquina_id: n.maquina_id ?? n.machine_id ?? n.machineId ?? '',
+  nombre_visual: n.nombre_visual ?? n.name ?? n.nombre ?? 'Sin nombre',
+  pos_x: Number(n.pos_x ?? n.x ?? 0),
+  pos_y: Number(n.pos_y ?? n.y ?? 0),
+  icono: n.icono ?? n.icon ?? '⚙️',
+  tipo: n.tipo ?? n.type ?? 'Componente',
+  estado_actual: n.estado_actual ?? n.status ?? n.estado ?? 'ok'
+})
+
+const mapApiEdge = (e: any): TopologyEdge => ({
+  conexion_id: e.conexion_id ?? e.id,
+  origen_nodo_id: e.origen_nodo_id ?? e.source_id ?? e.source,
+  destino_nodo_id: e.destino_nodo_id ?? e.target_id ?? e.target,
+  tipo_relacion: e.tipo_relacion ?? e.relation_type ?? e.type ?? 'default'
+})
 
 const PlantTopology: React.FC = () => {
   const svgRef = useRef<SVGSVGElement | null>(null)
@@ -38,7 +57,7 @@ const PlantTopology: React.FC = () => {
   const [viewBox, setViewBox] = useState(INITIAL_VB)
   const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; node?: TopologyNode }>({ visible: false, x: 0, y: 0 })
   
-  // 👇 NUEVOS ESTADOS PARA EL ARRASTRE (PANNING)
+  // ESTADOS PARA EL ARRASTRE (PANNING)
   const [isPanning, setIsPanning] = useState(false)
   const [startPan, setStartPan] = useState({ x: 0, y: 0 })
   
@@ -54,8 +73,12 @@ const PlantTopology: React.FC = () => {
         const api = createApiService()
         const data = await api.topologia() 
         if (!controller.signal.aborted && data) {
-          setNodes(Array.isArray(data.nodos) ? data.nodos : [])
-          setEdges(Array.isArray(data.conexiones) ? data.conexiones : [])
+          // Aplicamos el mapeo defensivo a los arreglos que vienen de la API
+          const rawNodes = Array.isArray(data.nodos) ? data.nodos : (Array.isArray(data.nodes) ? data.nodes : [])
+          const rawEdges = Array.isArray(data.conexiones) ? data.conexiones : (Array.isArray(data.edges) ? data.edges : [])
+          
+          setNodes(rawNodes.map(mapApiNode))
+          setEdges(rawEdges.map(mapApiEdge))
         }
       } catch (error: any) {
         if (error.name !== 'AbortError') console.error("Error cargando topología:", error)
@@ -69,9 +92,9 @@ const PlantTopology: React.FC = () => {
   }, [])
 
   const nodesDict = useMemo(() => {
-    const dict = new Map<number, {x: number, y: number}>()
+    const dict = new Map<string, {x: number, y: number}>()
     nodes.forEach(n => {
-      dict.set(n.nodo_id, {
+      dict.set(String(n.nodo_id), {
         x: (n.pos_x || 0) + NODE_W / 2,
         y: (n.pos_y || 0) + NODE_H / 2
       })
@@ -79,7 +102,7 @@ const PlantTopology: React.FC = () => {
     return dict
   }, [nodes])
 
-  // 👇 NUEVAS FUNCIONES PARA MANEJAR EL MOUSE (ARRASRE)
+  // FUNCIONES PARA MANEJAR EL MOUSE (ARRASTRE)
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.topo-node')) return;
     setIsPanning(true);
@@ -110,14 +133,14 @@ const PlantTopology: React.FC = () => {
   };
 
   const handleNodeClick = (node: TopologyNode, e: React.MouseEvent) => {
-    e.stopPropagation(); // 👈 EVITA QUE EL CLICK SE CONFUNDA CON ARRASTRE
+    e.stopPropagation(); // EVITA QUE EL CLICK SE CONFUNDA CON ARRASTRE
     const rect = containerRef.current?.getBoundingClientRect()
     const cx = e.clientX - (rect?.left || 0)
     const cy = e.clientY - (rect?.top || 0)
     setTooltip({ visible: true, x: cx, y: cy, node })
   }
 
-  const goToDebug = (machineId?: number) => {
+  const goToDebug = (machineId?: number | string) => {
     if (machineId) {
       setSelectedMachine(String(machineId))
       navigate('/debug', { state: { machineId: String(machineId) } })
@@ -138,9 +161,9 @@ const PlantTopology: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     const s = String(status || '').toLowerCase()
-    if (s.includes('operativo') || s.includes('ok') || s === 'open') return '#10B981'
+    if (s.includes('operativo') || s.includes('ok') || s === 'open' || s === 'activo') return '#10B981'
     if (s.includes('alerta') || s.includes('warning') || s.includes('mantenimiento')) return '#F59E0B'
-    if (s.includes('falla') || s.includes('error') || s.includes('closed')) return '#ef4444'
+    if (s.includes('falla') || s.includes('error') || s.includes('closed') || s.includes('crítico')) return '#ef4444'
     return '#64748B'
   }
 
@@ -168,9 +191,9 @@ const PlantTopology: React.FC = () => {
           style={{ 
             width: '100%', 
             height: '100%',
-            cursor: isPanning ? 'grabbing' : 'grab' // 👈 CAMBIA EL CURSOR
+            cursor: isPanning ? 'grabbing' : 'grab' 
           }}
-          onMouseDown={handleMouseDown}       // 👈 EVENTOS DE MOUSE PARA ARRASTRAR
+          onMouseDown={handleMouseDown}       
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUpOrLeave}
           onMouseLeave={handleMouseUpOrLeave}
@@ -178,15 +201,15 @@ const PlantTopology: React.FC = () => {
           
           <g id="topo-lines" stroke="currentColor" className="text-[var(--ink3)] opacity-40" strokeWidth={2} fill="none">
             {edges.map(edge => {
-              const start = nodesDict.get(edge.origen_nodo_id)
-              const end = nodesDict.get(edge.destino_nodo_id)
+              const start = nodesDict.get(String(edge.origen_nodo_id))
+              const end = nodesDict.get(String(edge.destino_nodo_id))
               
               if (!start || !end) return null
 
               const strokeDash = edge.tipo_relacion === 'energia' ? "6,3" : ""
               return (
                 <line 
-                  key={edge.conexion_id} 
+                  key={String(edge.conexion_id)} 
                   x1={start.x} y1={start.y} 
                   x2={end.x} y2={end.y} 
                   strokeDasharray={strokeDash} 
@@ -199,13 +222,12 @@ const PlantTopology: React.FC = () => {
           {nodes.map(n => {
             const nodeColor = getStatusColor(n.estado_actual)
             return (
-              <g key={n.nodo_id} transform={`translate(${n.pos_x || 0},${n.pos_y || 0})`} className="topo-node transition-transform" style={{ cursor: 'pointer' }} onClick={(e) => handleNodeClick(n, e)}>
+              <g key={String(n.nodo_id)} transform={`translate(${n.pos_x || 0},${n.pos_y || 0})`} className="topo-node transition-transform" style={{ cursor: 'pointer' }} onClick={(e) => handleNodeClick(n, e)}>
                 <rect x={0} y={0} width={NODE_W} height={NODE_H} rx={12} fill="var(--surface2)" stroke={nodeColor} strokeWidth={2} />
                 <text x={NODE_W / 2} y={28} textAnchor="middle" fontSize={22}>{n.icono}</text>
                 
-                {/* Textos con el color corregido para modo oscuro */}
-                <text x={NODE_W / 2} y={50} textAnchor="middle" fontSize={11} className="text-[var(--ink)]" fill="currentColor" fontWeight={600}>{n.nombre_visual || 'Sin nombre'}</text>
-                <text x={NODE_W / 2} y={65} textAnchor="middle" fontSize={10} className="text-[var(--ink3)]" fill="currentColor">{n.tipo || 'Desconocido'}</text>
+                <text x={NODE_W / 2} y={50} textAnchor="middle" fontSize={11} className="text-[var(--ink)]" fill="currentColor" fontWeight={600}>{n.nombre_visual}</text>
+                <text x={NODE_W / 2} y={65} textAnchor="middle" fontSize={10} className="text-[var(--ink3)]" fill="currentColor">{n.tipo}</text>
                 
                 <circle cx={NODE_W - 14} cy={14} r={7} fill={nodeColor} />
               </g>
