@@ -1,5 +1,5 @@
 -- ==========================================
--- BARB DATABASE — Schema unificado v2.1 (Full Seed)
+-- BARB DATABASE — Schema unificado v3.0 (Multi-tenant + Auditoría + DocChat)
 -- ==========================================
 
 -- 1. Limpieza total (DROP de tablas y tipos si existen para evitar conflictos)
@@ -24,29 +24,70 @@ CREATE TYPE prioridad_mant    AS ENUM ('low', 'medium', 'high');
 CREATE TYPE estado_programa   AS ENUM ('active', 'paused', 'inactive');
 CREATE TYPE estado_ejecucion  AS ENUM ('scheduled', 'completed', 'skipped', 'overdue');
 CREATE TYPE estado_lectura    AS ENUM ('normal', 'warning', 'critical');
+-- Nuevos ENUMs v3.0
+CREATE TYPE plan_empresa      AS ENUM ('trial', 'starter', 'professional', 'enterprise');
+CREATE TYPE estado_empresa    AS ENUM ('active', 'suspended', 'cancelled', 'demo');
+CREATE TYPE accion_audit      AS ENUM (
+    'login', 'logout', 'create', 'update', 'delete', 'view',
+    'export', 'import', 'approve', 'reject', 'assign', 'upload',
+    'download', 'chat_query', 'chat_save', 'report_generate'
+);
 
 -- ==========================================
 -- 2. TABLAS MAESTRAS
 -- ==========================================
+
+-- ------------------------------------------
+-- EMPRESA  (tabla raíz multi-tenant)
+-- Cada cliente compra una licencia de BARB.
+-- Todos los datos están aislados por empresa_id.
+-- ------------------------------------------
+CREATE TABLE EMPRESA (
+    empresa_id        SERIAL PRIMARY KEY,
+    nombre            VARCHAR(150) NOT NULL,
+    rut               VARCHAR(20)  UNIQUE,          -- RUT/NIT/RFC según país
+    pais              VARCHAR(60)  NOT NULL DEFAULT 'Chile',
+    industria         VARCHAR(100),                 -- 'Minería', 'Manufactura', etc.
+    contacto_nombre   VARCHAR(100),
+    contacto_email    VARCHAR(100),
+    contacto_telefono VARCHAR(30),
+    logo_url          VARCHAR(500),
+    plan              plan_empresa  NOT NULL DEFAULT 'trial',
+    estado            estado_empresa NOT NULL DEFAULT 'active',
+    max_usuarios      INT           NOT NULL DEFAULT 10,
+    max_plantas       INT           NOT NULL DEFAULT 1,
+    licencia_inicio   DATE,
+    licencia_fin      DATE,
+    notas             TEXT,
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE USUARIO (
     usuario_id    SERIAL PRIMARY KEY,
+    empresa_id    INT          NOT NULL,
     nombre        VARCHAR(100) NOT NULL,
     email         VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     rol           VARCHAR(50)  NOT NULL,
     activo        BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ultimo_login  TIMESTAMP,
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_usuario_empresa FOREIGN KEY (empresa_id) REFERENCES EMPRESA(empresa_id)
 );
 
 CREATE TABLE PLANTA (
     planta_id  SERIAL PRIMARY KEY,
+    empresa_id INT          NOT NULL,
     nombre     VARCHAR(120) NOT NULL,
-    ubicacion  VARCHAR(255)
+    ubicacion  VARCHAR(255),
+    CONSTRAINT fk_planta_empresa FOREIGN KEY (empresa_id) REFERENCES EMPRESA(empresa_id)
 );
 
 CREATE TABLE REPUESTO (
     repuesto_id      SERIAL PRIMARY KEY,
-    codigo           VARCHAR(50)  UNIQUE NOT NULL,
+    empresa_id       INT          NOT NULL,
+    codigo           VARCHAR(50)  NOT NULL,
     part_number      VARCHAR(80),
     nombre           VARCHAR(150) NOT NULL,
     descripcion      TEXT,
@@ -62,7 +103,9 @@ CREATE TABLE REPUESTO (
     imagen_url       VARCHAR(255),
     estado           estado_repuesto NOT NULL DEFAULT 'active',
     created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (empresa_id, codigo),
+    CONSTRAINT fk_repuesto_empresa FOREIGN KEY (empresa_id) REFERENCES EMPRESA(empresa_id)
 );
 
 -- ==========================================
@@ -70,8 +113,11 @@ CREATE TABLE REPUESTO (
 -- ==========================================
 CREATE TABLE DISCIPLINA (
     disciplina_id SERIAL PRIMARY KEY,
-    nombre        VARCHAR(50) UNIQUE NOT NULL,
-    color         VARCHAR(20)
+    empresa_id    INT         NOT NULL,
+    nombre        VARCHAR(50) NOT NULL,
+    color         VARCHAR(20),
+    UNIQUE (empresa_id, nombre),
+    CONSTRAINT fk_disciplina_empresa FOREIGN KEY (empresa_id) REFERENCES EMPRESA(empresa_id)
 );
 
 CREATE TABLE MAQUINA (
@@ -79,7 +125,8 @@ CREATE TABLE MAQUINA (
     planta_id     INT NOT NULL,
     disciplina_id INT,
     nombre        VARCHAR(100) NOT NULL,
-    codigo        VARCHAR(50)  UNIQUE NOT NULL,
+    codigo        VARCHAR(50)  NOT NULL,
+    UNIQUE (planta_id, codigo),
     CONSTRAINT fk_maquina_planta      FOREIGN KEY (planta_id)     REFERENCES PLANTA(planta_id),
     CONSTRAINT fk_maquina_disciplina  FOREIGN KEY (disciplina_id) REFERENCES DISCIPLINA(disciplina_id)
 );
@@ -147,12 +194,19 @@ CREATE TABLE TOPOLOGIA_CONEXION (
 -- ==========================================
 -- 5. DIAGNÓSTICO
 -- ==========================================
+
+-- SESION_DEBUG: sesiones de diagnóstico manual (herramienta Debug de BARB)
 CREATE TABLE SESION_DEBUG (
-    sesion_id  SERIAL PRIMARY KEY,
-    maquina_id INT NOT NULL,
-    tecnico_id INT NOT NULL,
-    CONSTRAINT fk_sesion_maquina FOREIGN KEY (maquina_id) REFERENCES MAQUINA(maquina_id),
-    CONSTRAINT fk_sesion_tecnico FOREIGN KEY (tecnico_id) REFERENCES USUARIO(usuario_id)
+    sesion_id    SERIAL PRIMARY KEY,
+    empresa_id   INT         NOT NULL,
+    maquina_id   INT         NOT NULL,
+    tecnico_id   INT         NOT NULL,
+    titulo       VARCHAR(200),
+    observaciones TEXT,
+    created_at   TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_sesion_empresa  FOREIGN KEY (empresa_id) REFERENCES EMPRESA(empresa_id),
+    CONSTRAINT fk_sesion_maquina  FOREIGN KEY (maquina_id) REFERENCES MAQUINA(maquina_id),
+    CONSTRAINT fk_sesion_tecnico  FOREIGN KEY (tecnico_id) REFERENCES USUARIO(usuario_id)
 );
 
 CREATE TABLE DIAGNOSTICO (
@@ -162,6 +216,72 @@ CREATE TABLE DIAGNOSTICO (
     severidad      nivel_severidad NOT NULL,
     CONSTRAINT fk_diagnostico_sesion FOREIGN KEY (sesion_id) REFERENCES SESION_DEBUG(sesion_id)
 );
+
+-- ------------------------------------------
+-- CHAT_SESSION: conversaciones del DocChat guardadas
+-- Permite auditar, revisar y reutilizar como RAG
+-- ------------------------------------------
+CREATE TABLE CHAT_SESSION (
+    session_id    UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id    INT          NOT NULL,
+    titulo        VARCHAR(200) NOT NULL,
+    saved_by      VARCHAR(100),                    -- nombre del usuario (desnormalizado para velocidad)
+    usuario_id    INT,                             -- FK opcional (puede ser null si usuario fue eliminado)
+    discipline    VARCHAR(100),
+    plant_id      VARCHAR(40),
+    plant_name    VARCHAR(120),
+    machine_id    VARCHAR(40),
+    machine_name  VARCHAR(120),
+    active_manual VARCHAR(255),
+    messages      JSONB        NOT NULL,           -- [{role, content, timestamp}]
+    metadata      JSONB,                           -- {lang, message_count, ot_context, ...}
+    saved_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT fk_chat_session_empresa  FOREIGN KEY (empresa_id) REFERENCES EMPRESA(empresa_id),
+    CONSTRAINT fk_chat_session_usuario  FOREIGN KEY (usuario_id) REFERENCES USUARIO(usuario_id) ON DELETE SET NULL
+);
+
+-- Índices para búsquedas frecuentes en la sección Debug
+CREATE INDEX idx_chat_session_empresa     ON CHAT_SESSION(empresa_id);
+CREATE INDEX idx_chat_session_discipline  ON CHAT_SESSION(empresa_id, discipline);
+CREATE INDEX idx_chat_session_machine     ON CHAT_SESSION(empresa_id, machine_id);
+CREATE INDEX idx_chat_session_saved_at    ON CHAT_SESSION(saved_at DESC);
+CREATE INDEX idx_chat_session_usuario     ON CHAT_SESSION(usuario_id);
+
+-- ------------------------------------------
+-- SYSTEM_AUDIT_LOG: auditoría completa de todas las acciones del sistema
+-- Quién hizo qué, cuándo, desde dónde y sobre qué entidad
+-- ------------------------------------------
+CREATE TABLE SYSTEM_AUDIT_LOG (
+    audit_id      BIGSERIAL    PRIMARY KEY,
+    empresa_id    INT          NOT NULL,
+    usuario_id    INT,                             -- NULL si acción de sistema/anónima
+    usuario_nombre VARCHAR(100),                   -- desnormalizado para historial inmutable
+    usuario_rol   VARCHAR(50),
+    accion        accion_audit NOT NULL,
+    modulo        VARCHAR(60)  NOT NULL,           -- 'OT', 'DocChat', 'Reporte', 'Usuario', etc.
+    entidad_tipo  VARCHAR(60),                     -- nombre de la tabla/recurso afectado
+    entidad_id    VARCHAR(80),                     -- ID del registro afectado (string para flexibilidad)
+    descripcion   TEXT,                            -- resumen legible de la acción
+    datos_antes   JSONB,                           -- snapshot del registro antes del cambio
+    datos_despues JSONB,                           -- snapshot del registro después del cambio
+    ip_address    VARCHAR(45),                     -- IPv4 o IPv6
+    user_agent    TEXT,
+    endpoint      VARCHAR(255),                    -- ruta del API llamada
+    duracion_ms   INT,                             -- tiempo de respuesta
+    exitoso       BOOLEAN      NOT NULL DEFAULT TRUE,
+    error_detalle TEXT,                            -- mensaje de error si exitoso=false
+    timestamp     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT fk_audit_empresa  FOREIGN KEY (empresa_id) REFERENCES EMPRESA(empresa_id),
+    CONSTRAINT fk_audit_usuario  FOREIGN KEY (usuario_id) REFERENCES USUARIO(usuario_id) ON DELETE SET NULL
+);
+
+-- Índices para consultas de auditoría (panel Debug)
+CREATE INDEX idx_audit_empresa_ts       ON SYSTEM_AUDIT_LOG(empresa_id, timestamp DESC);
+CREATE INDEX idx_audit_usuario          ON SYSTEM_AUDIT_LOG(usuario_id, timestamp DESC);
+CREATE INDEX idx_audit_accion           ON SYSTEM_AUDIT_LOG(empresa_id, accion);
+CREATE INDEX idx_audit_modulo           ON SYSTEM_AUDIT_LOG(empresa_id, modulo);
+CREATE INDEX idx_audit_entidad          ON SYSTEM_AUDIT_LOG(entidad_tipo, entidad_id);
+CREATE INDEX idx_audit_timestamp        ON SYSTEM_AUDIT_LOG(timestamp DESC);
 
 -- ==========================================
 -- 6. GESTIÓN Y OPERACIÓN
@@ -312,39 +432,45 @@ CREATE TABLE LECTURA_SENSOR (
 -- 9. SEED DATA (Masivo > 10 por tabla)
 -- ==========================================
 
+-- 9.0 Empresa demo (cliente base para todos los datos de ejemplo)
+INSERT INTO EMPRESA (nombre, rut, pais, industria, contacto_nombre, contacto_email, plan, estado, max_usuarios, max_plantas, licencia_inicio, licencia_fin) VALUES
+('Planta Demo BARB', '76.000.001-K', 'Chile', 'Manufactura', 'Administrador BARB', 'admin@barb.com', 'professional', 'active', 50, 5, CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year'),
+('Minera Norte S.A.', '76.000.002-1', 'Chile', 'Minería', 'Juan Pérez', 'jperez@mineranorte.cl', 'enterprise', 'active', 100, 10, CURRENT_DATE, CURRENT_DATE + INTERVAL '2 years'),
+('Demo Trial Corp', NULL, 'Chile', 'Manufactura', NULL, NULL, 'trial', 'demo', 5, 1, CURRENT_DATE, CURRENT_DATE + INTERVAL '14 days');
+
 -- 9.1 Plantas
-INSERT INTO PLANTA (nombre, ubicacion) VALUES
-('Planta Central San Bernardo', 'San Bernardo, Región Metropolitana, Chile'),
-('Planta Norte Antofagasta', 'Antofagasta, Chile'),
-('Planta Sur Concepción', 'Concepción, Chile');
+INSERT INTO PLANTA (empresa_id, nombre, ubicacion) VALUES
+(1, 'Planta Central San Bernardo', 'San Bernardo, Región Metropolitana, Chile'),
+(1, 'Planta Norte Antofagasta', 'Antofagasta, Chile'),
+(1, 'Planta Sur Concepción', 'Concepción, Chile');
 
 -- 9.2 Usuarios (12 usuarios)
-INSERT INTO USUARIO (nombre, email, password_hash, rol) VALUES
-('Administrador BARB', 'admin@barb.com', 'admin123', 'admin'),
-('Director Mantenimiento','gerente1@planta.com', 'gerente123', 'gerente'),
-('Subgerente Operaciones','gerente2@planta.com', 'gerente123', 'gerente'),
-('Carlos Mendoza', 'carlos@planta.com', 'tecnico123', 'tecnico'),
-('Ana Silva', 'ana@planta.com', 'tecnico123', 'tecnico'),
-('Roberto Tapia', 'roberto@planta.com', 'tecnico123', 'tecnico'),
-('Luisa Martínez', 'luisa@planta.com', 'tecnico123', 'tecnico'),
-('Jorge Soto', 'jorge@planta.com', 'tecnico123', 'tecnico'),
-('Ingeniero de Procesos', 'engineer1@planta.com', 'engineer123', 'engineer'),
-('Supervisor Turno A', 'supervisor1@planta.com', 'super123', 'supervisor'),
-('Operador Molino', 'operador1@planta.com', 'operador123', 'operador'),
-('Operador Grúa', 'operador2@planta.com', 'operador123', 'operador');
+INSERT INTO USUARIO (empresa_id, nombre, email, password_hash, rol) VALUES
+(1, 'Administrador BARB',     'admin@barb.com',         'admin123',    'admin'),
+(1, 'Director Mantenimiento', 'gerente1@planta.com',    'gerente123',  'gerente'),
+(1, 'Subgerente Operaciones', 'gerente2@planta.com',    'gerente123',  'gerente'),
+(1, 'Carlos Mendoza',         'carlos@planta.com',      'tecnico123',  'tecnico'),
+(1, 'Ana Silva',              'ana@planta.com',         'tecnico123',  'tecnico'),
+(1, 'Roberto Tapia',          'roberto@planta.com',     'tecnico123',  'tecnico'),
+(1, 'Luisa Martínez',         'luisa@planta.com',       'tecnico123',  'tecnico'),
+(1, 'Jorge Soto',             'jorge@planta.com',       'tecnico123',  'tecnico'),
+(1, 'Ingeniero de Procesos',  'engineer1@planta.com',   'engineer123', 'engineer'),
+(1, 'Supervisor Turno A',     'supervisor1@planta.com', 'super123',    'supervisor'),
+(1, 'Operador Molino',        'operador1@planta.com',   'operador123', 'operador'),
+(1, 'Operador Grúa',          'operador2@planta.com',   'operador123', 'operador');
 
 -- 9.3 Disciplinas (10 disciplinas)
-INSERT INTO DISCIPLINA (nombre, color) VALUES
-('Mecánica', 'blue'),
-('Eléctrica', 'yellow'),
-('Hidráulica', 'cyan'),
-('Neumática', 'purple'),
-('Automatización', 'green'),
-('Estructural', 'gray'),
-('HVAC', 'orange'),
-('Instrumentación', 'teal'),
-('Lubricación', 'indigo'),
-('Robótica', 'pink');
+INSERT INTO DISCIPLINA (empresa_id, nombre, color) VALUES
+(1, 'Mecánica',        'blue'),
+(1, 'Eléctrica',       'yellow'),
+(1, 'Hidráulica',      'cyan'),
+(1, 'Neumática',       'purple'),
+(1, 'Automatización',  'green'),
+(1, 'Estructural',     'gray'),
+(1, 'HVAC',            'orange'),
+(1, 'Instrumentación', 'teal'),
+(1, 'Lubricación',     'indigo'),
+(1, 'Robótica',        'pink');
 
 -- 9.4 Máquinas (12 máquinas)
 INSERT INTO MAQUINA (planta_id, disciplina_id, nombre, codigo) VALUES
@@ -362,19 +488,19 @@ INSERT INTO MAQUINA (planta_id, disciplina_id, nombre, codigo) VALUES
 (1, 8, 'Analizador de Gases', 'GAS-001');
 
 -- 9.5 Repuestos (12 repuestos)
-INSERT INTO REPUESTO (codigo, part_number, nombre, descripcion, tipo, categoria, unidad, stock_actual, stock_minimo, costo_unitario, estado) VALUES
-('REP-001', 'FIL-1029', 'Filtro Hidráulico', 'Filtro de 10 micrones', 'Consumible', 'Hidráulica', 'Unidad', 15, 5, 45.00, 'active'),
-('REP-002', 'VAL-9921', 'Válvula Proporcional', 'Válvula 24V DC', 'Componente', 'Automatización', 'Unidad', 2, 1, 350.00, 'active'),
-('REP-003', 'SENS-011', 'Sensor Vibración', 'Sensor piezoeléctrico', 'Sensor', 'Instrumentación', 'Unidad', 8, 3, 120.00, 'active'),
-('REP-004', 'BELT-44', 'Correa Transmisión', 'Correa de caucho', 'Consumible', 'Mecánica', 'Unidad', 20, 10, 25.00, 'active'),
-('REP-005', 'PLC-MOD', 'Módulo E/S PLC', '16 entradas', 'Electrónica', 'Automatización', 'Unidad', 4, 2, 450.00, 'active'),
-('REP-006', 'BRG-608', 'Rodamiento 608ZZ', 'Acero inox', 'Consumible', 'Mecánica', 'Unidad', 50, 20, 5.00, 'active'),
-('REP-007', 'LUB-001', 'Aceite Sintético', 'Tambor 20L', 'Consumible', 'Lubricación', 'Litro', 100, 40, 12.00, 'active'),
-('REP-008', 'FUS-10A', 'Fusible 10A', 'Cerámico', 'Consumible', 'Eléctrica', 'Unidad', 200, 50, 1.50, 'active'),
-('REP-009', 'MOT-3HP', 'Motor 3HP', 'Trifásico', 'Componente', 'Eléctrica', 'Unidad', 3, 1, 600.00, 'active'),
-('REP-010', 'CYL-PN', 'Cilindro Neumático', 'Doble efecto', 'Componente', 'Neumática', 'Unidad', 5, 2, 180.00, 'active'),
-('REP-011', 'TER-01', 'Termocupla Tipo K', 'Alta temp', 'Sensor', 'Instrumentación', 'Unidad', 12, 5, 35.00, 'active'),
-('REP-012', 'BOM-AG', 'Bomba Centrífuga', 'Acero Inox', 'Componente', 'Hidráulica', 'Unidad', 2, 1, 850.00, 'active');
+INSERT INTO REPUESTO (empresa_id, codigo, part_number, nombre, descripcion, tipo, categoria, unidad, stock_actual, stock_minimo, costo_unitario, estado) VALUES
+(1, 'REP-001', 'FIL-1029', 'Filtro Hidráulico',     'Filtro de 10 micrones',     'Consumible', 'Hidráulica',      'Unidad', 15,  5,  45.00,  'active'),
+(1, 'REP-002', 'VAL-9921', 'Válvula Proporcional',  'Válvula 24V DC',            'Componente', 'Automatización',  'Unidad', 2,   1,  350.00, 'active'),
+(1, 'REP-003', 'SENS-011', 'Sensor Vibración',      'Sensor piezoeléctrico',     'Sensor',     'Instrumentación', 'Unidad', 8,   3,  120.00, 'active'),
+(1, 'REP-004', 'BELT-44',  'Correa Transmisión',    'Correa de caucho',          'Consumible', 'Mecánica',        'Unidad', 20,  10, 25.00,  'active'),
+(1, 'REP-005', 'PLC-MOD',  'Módulo E/S PLC',        '16 entradas',               'Electrónica','Automatización',  'Unidad', 4,   2,  450.00, 'active'),
+(1, 'REP-006', 'BRG-608',  'Rodamiento 608ZZ',      'Acero inox',                'Consumible', 'Mecánica',        'Unidad', 50,  20, 5.00,   'active'),
+(1, 'REP-007', 'LUB-001',  'Aceite Sintético',      'Tambor 20L',                'Consumible', 'Lubricación',     'Litro',  100, 40, 12.00,  'active'),
+(1, 'REP-008', 'FUS-10A',  'Fusible 10A',           'Cerámico',                  'Consumible', 'Eléctrica',       'Unidad', 200, 50, 1.50,   'active'),
+(1, 'REP-009', 'MOT-3HP',  'Motor 3HP',             'Trifásico',                 'Componente', 'Eléctrica',       'Unidad', 3,   1,  600.00, 'active'),
+(1, 'REP-010', 'CYL-PN',   'Cilindro Neumático',    'Doble efecto',              'Componente', 'Neumática',       'Unidad', 5,   2,  180.00, 'active'),
+(1, 'REP-011', 'TER-01',   'Termocupla Tipo K',     'Alta temp',                 'Sensor',     'Instrumentación', 'Unidad', 12,  5,  35.00,  'active'),
+(1, 'REP-012', 'BOM-AG',   'Bomba Centrífuga',      'Acero Inox',                'Componente', 'Hidráulica',      'Unidad', 2,   1,  850.00, 'active');
 
 -- 9.6 Sensores (10 sensores)
 INSERT INTO SENSOR (maquina_id, nombre, codigo) VALUES
@@ -476,8 +602,17 @@ INSERT INTO OT_REPUESTO (ot_id, repuesto_id, cantidad, costo_unitario) VALUES
 (14, 4, 2, 25.00), (16, 2, 1, 350.00), (19, 7, 5, 12.00), (4, 3, 1, 120.00), (7, 2, 1, 350.00);
 
 -- 9.13 Sesiones Debug y Diagnóstico de IA (10 sesiones)
-INSERT INTO SESION_DEBUG (maquina_id, tecnico_id) VALUES
-(3, 4), (3, 6), (1, 4), (8, 5), (6, 5), (7, 4), (10, 4), (2, 5), (4, 6), (9, 5);
+INSERT INTO SESION_DEBUG (empresa_id, maquina_id, tecnico_id, titulo) VALUES
+(1, 3, 4, 'Diagnóstico fuga hidráulica prensa'),
+(1, 3, 6, 'Análisis vibración eje Z'),
+(1, 1, 4, 'Revisión botón parada'),
+(1, 8, 5, 'Inspección cinta transportadora'),
+(1, 6, 5, 'Calibración encoder brazo robótico'),
+(1, 7, 4, 'Revisión firmware PLC'),
+(1, 10, 4, 'Prueba válvula presión'),
+(1, 2, 5, 'Diagnóstico ruido motor'),
+(1, 4, 6, 'Análisis rodamiento bomba'),
+(1, 9, 5, 'Test carga generador');
 
 INSERT INTO DIAGNOSTICO (sesion_id, descripcion, severidad) VALUES
 (1, 'IA: Fuga detectada en manguera P2. Rápida caída de presión analizada.', 'critical'),
@@ -523,7 +658,7 @@ UPDATE ORDEN_TRABAJO SET reporte_id = 2 WHERE numero_ot = 'OT-2026-017';
 UPDATE ORDEN_TRABAJO SET reporte_id = 3 WHERE numero_ot = 'OT-2026-005';
 UPDATE ORDEN_TRABAJO SET reporte_id = 4 WHERE numero_ot = 'OT-2026-009';
 
--- 9.16 Audit Log (10 logs)
+-- 9.16 OT Audit Log (10 logs de estados de OTs)
 INSERT INTO OT_AUDIT_LOG (ot_id, usuario_id, estado_anterior, estado_nuevo, comentario) VALUES
 (1, 2, NULL, 'pending', 'Creada por sistema'),
 (1, 2, 'pending', 'assigned', 'Asignada a Ana'),
@@ -535,3 +670,73 @@ INSERT INTO OT_AUDIT_LOG (ot_id, usuario_id, estado_anterior, estado_nuevo, come
 (2, 4, 'in_progress', 'completed', 'Reparación exitosa'),
 (5, 2, NULL, 'pending', 'Botón trabado'),
 (5, 4, 'pending', 'cancelled', 'Cancelada, operario lo destrabó manualmente');
+
+-- 9.17 Chat Sessions — conversaciones guardadas desde DocChat (10 ejemplos)
+INSERT INTO CHAT_SESSION (empresa_id, titulo, saved_by, usuario_id, discipline, plant_id, plant_name, machine_id, machine_name, active_manual, messages, metadata, saved_at) VALUES
+(1, 'Diagnóstico fuga hidráulica prensa B3', 'Carlos Mendoza', 4,
+ 'Hidráulica', '1', 'Planta Central San Bernardo', '3', 'Hydraulic Press B3', NULL,
+ '[{"role":"user","content":"La prensa B3 muestra una caída de presión de 50 bar en 30 segundos. ¿Cuál es el procedimiento?","timestamp":1748000000000},{"role":"assistant","content":"⚠️ Esto indica una fuga activa. Pasos: 1) Despresurizar el sistema. 2) Inspeccionar mangueras de alta presión. 3) Revisar sellos del cilindro principal.","timestamp":1748000010000}]'::jsonb,
+ '{"lang":"es","message_count":2}'::jsonb, NOW() - INTERVAL '5 days'),
+
+(1, 'Procedimiento cambio rodamiento motor D1', 'Ana Silva', 5,
+ 'Mecánica', '1', 'Planta Central San Bernardo', '2', 'Motor Drive D1', 'manual_motor_d1.pdf',
+ '[{"role":"user","content":"¿Cuál es el torque de apriete para el rodamiento FAG 6308 en el motor D1?","timestamp":1748100000000},{"role":"assistant","content":"Según el manual (p.47), el torque de apriete es 85 Nm. Use llave dinamométrica calibrada.","timestamp":1748100008000}]'::jsonb,
+ '{"lang":"es","message_count":2,"ot_context":"OT-2026-003"}'::jsonb, NOW() - INTERVAL '4 days'),
+
+(1, 'Calibración PLC Siemens S7 tras actualización', 'Carlos Mendoza', 4,
+ 'Automatización', '1', 'Planta Central San Bernardo', '7', 'PLC Siemens S7 Principal', NULL,
+ '[{"role":"user","content":"Tras flashear el firmware el PLC muestra error E-041. ¿Cómo reseteo la configuración?","timestamp":1748200000000},{"role":"assistant","content":"Error E-041 = parámetro DB fuera de rango. Pasos: 1) STOP el PLC. 2) Restaurar DB desde respaldo. 3) START y verificar I/O.","timestamp":1748200012000}]'::jsonb,
+ '{"lang":"es","message_count":2}'::jsonb, NOW() - INTERVAL '3 days'),
+
+(1, 'Análisis vibración brazo robótico KUKA', 'Roberto Tapia', 6,
+ 'Robótica', '1', 'Planta Central San Bernardo', '6', 'Brazo Robótico KUKA 1', NULL,
+ '[{"role":"user","content":"El brazo KUKA muestra vibración en eje X a 800 RPM. ¿Es normal?","timestamp":1748300000000},{"role":"assistant","content":"No es normal para ese rango. Posibles causas: encoder sucio, juego en reductor, o desbalance. Recomiendo termografía y análisis espectral.","timestamp":1748300009000}]'::jsonb,
+ '{"lang":"es","message_count":2}'::jsonb, NOW() - INTERVAL '2 days'),
+
+(1, 'Mantenimiento preventivo compresor A1', 'Ana Silva', 5,
+ 'Neumática', '1', 'Planta Central San Bernardo', '1', 'Compressor A1', 'manual_compresor.pdf',
+ '[{"role":"user","content":"¿Qué incluye el mantenimiento mensual del compresor A1?","timestamp":1748400000000},{"role":"assistant","content":"Según manual p.23: 1) Cambio filtro de aire. 2) Verificar nivel aceite. 3) Drenar condensado. 4) Inspección visual correas. 5) Registro de presión de trabajo.","timestamp":1748400007000}]'::jsonb,
+ '{"lang":"es","message_count":2}'::jsonb, NOW() - INTERVAL '1 day'),
+
+(1, 'Falla cinta transportadora C1', 'Jorge Soto', 8,
+ 'Mecánica', '1', 'Planta Central San Bernardo', '8', 'Cinta Transportadora C1', NULL,
+ '[{"role":"user","content":"La cinta C1 se detuvo con alarma de sobrecarga. ¿Qué reviso primero?","timestamp":1748500000000},{"role":"assistant","content":"⚠️ Secuencia: 1) Verificar que no haya material atascado. 2) Revisar tensión de banda. 3) Inspeccionar rodillos de retorno. 4) Medir corriente del motor con pinza amperimétrica.","timestamp":1748500011000}]'::jsonb,
+ '{"lang":"es","message_count":2}'::jsonb, NOW() - INTERVAL '12 hours'),
+
+(1, 'Consulta repuestos válvula V8', 'Carlos Mendoza', 4,
+ 'Hidráulica', '1', 'Planta Central San Bernardo', '10', 'Válvula de Presión V8', NULL,
+ '[{"role":"user","content":"¿Qué sellos necesito para la válvula V8 modelo Parker D3W020BNKF?","timestamp":1748600000000},{"role":"assistant","content":"Para Parker D3W020BNKF se requiere kit de sellos P/N 023768, incluye: 2x O-ring Viton 18x2.5 y 1x sello PTFE 22x3.","timestamp":1748600006000}]'::jsonb,
+ '{"lang":"es","message_count":2}'::jsonb, NOW() - INTERVAL '6 hours'),
+
+(1, 'Inspección generador G1 carga parcial', 'Ana Silva', 5,
+ 'Eléctrica', '1', 'Planta Central San Bernardo', '9', 'Generador de Respaldo G1', 'manual_generador.pdf',
+ '[{"role":"user","content":"El generador G1 no estabiliza la frecuencia en 50Hz bajo carga parcial. ¿Causa probable?","timestamp":1748700000000},{"role":"assistant","content":"Posibles causas: 1) Regulador AVR descalibrado. 2) Inyectores sucios. 3) Gobernador de velocidad con desgaste. Revisar en ese orden según manual p.88.","timestamp":1748700010000}]'::jsonb,
+ '{"lang":"es","message_count":2}'::jsonb, NOW() - INTERVAL '3 hours'),
+
+(1, 'Consulta lubricación sistema chiller', 'Luisa Martínez', 7,
+ 'HVAC', '1', 'Planta Central San Bernardo', '11', 'Sistema Chiller Central', NULL,
+ '[{"role":"user","content":"¿Cada cuánto se cambia el aceite del compresor en el chiller Carrier 30XA?","timestamp":1748800000000},{"role":"assistant","content":"Según Carrier, el aceite POE Suniso 3GS debe cambiarse cada 3000 horas de operación o 2 años, lo que ocurra primero. Verificar acidez con kit colorimétrico antes.","timestamp":1748800008000}]'::jsonb,
+ '{"lang":"es","message_count":2}'::jsonb, NOW() - INTERVAL '1 hour'),
+
+(1, 'Diagnóstico analizador de gases sin señal', 'Roberto Tapia', 6,
+ 'Instrumentación', '1', 'Planta Central San Bernardo', '12', 'Analizador de Gases', 'manual_analizador.pdf',
+ '[{"role":"user","content":"El analizador GAS-001 muestra señal 0mA en salida 4-20mA. ¿Loop abierto o falla interna?","timestamp":1748900000000},{"role":"assistant","content":"⚠️ Señal 0mA indica loop abierto o falla de alimentación. Verificar: 1) Tensión 24VDC en bornes. 2) Continuidad del cable. 3) Si alimentación OK, posible falla del transmisor interno.","timestamp":1748900009000}]'::jsonb,
+ '{"lang":"es","message_count":2}'::jsonb, NOW() - INTERVAL '30 minutes');
+
+-- 9.18 System Audit Log — historial de acciones del sistema (15 registros ejemplo)
+INSERT INTO SYSTEM_AUDIT_LOG (empresa_id, usuario_id, usuario_nombre, usuario_rol, accion, modulo, entidad_tipo, entidad_id, descripcion, exitoso, ip_address, endpoint) VALUES
+(1, 2, 'Director Mantenimiento', 'gerente',  'login',           'Auth',     NULL,             NULL,   'Inicio de sesión exitoso',                          TRUE,  '192.168.1.10', '/api/auth/login'),
+(1, 4, 'Carlos Mendoza',         'tecnico',  'login',           'Auth',     NULL,             NULL,   'Inicio de sesión exitoso',                          TRUE,  '192.168.1.21', '/api/auth/login'),
+(1, 4, 'Carlos Mendoza',         'tecnico',  'create',          'OT',       'ORDEN_TRABAJO',  '1',    'Creó OT-2026-001 para Compressor A1',               TRUE,  '192.168.1.21', '/api/work-orders'),
+(1, 4, 'Carlos Mendoza',         'tecnico',  'update',          'OT',       'ORDEN_TRABAJO',  '1',    'Cambió estado de pending a in_progress',            TRUE,  '192.168.1.21', '/api/work-orders/1'),
+(1, 5, 'Ana Silva',              'tecnico',  'login',           'Auth',     NULL,             NULL,   'Inicio de sesión exitoso',                          TRUE,  '192.168.1.22', '/api/auth/login'),
+(1, 5, 'Ana Silva',              'tecnico',  'chat_query',      'DocChat',  'CHAT_SESSION',   NULL,   'Consulta IA: diagnóstico prensa hidráulica',        TRUE,  '192.168.1.22', '/api/chat'),
+(1, 5, 'Ana Silva',              'tecnico',  'chat_save',       'DocChat',  'CHAT_SESSION',   '1',    'Guardó sesión DocChat: Diagnóstico prensa B3',      TRUE,  '192.168.1.22', '/api/chat-sessions'),
+(1, 6, 'Roberto Tapia',          'tecnico',  'upload',          'Reporte',  'REPORTE',        '1',    'Subió RPT-2026-001 al repositorio',                 TRUE,  '192.168.1.23', '/api/reports/1/upload'),
+(1, 2, 'Director Mantenimiento', 'gerente',  'approve',         'Reporte',  'REPORTE',        '1',    'Aprobó reporte RPT-2026-001',                       TRUE,  '192.168.1.10', '/api/reports/1/approve'),
+(1, 4, 'Carlos Mendoza',         'tecnico',  'report_generate', 'Reporte',  'REPORTE',        '2',    'Generó PDF para RPT-2026-002',                      TRUE,  '192.168.1.21', '/api/reports/2/generate'),
+(1, 1, 'Administrador BARB',     'admin',    'create',          'Usuario',  'USUARIO',        '12',   'Creó usuario Operador Grúa',                        TRUE,  '192.168.1.1',  '/api/users'),
+(1, 1, 'Administrador BARB',     'admin',    'update',          'Empresa',  'EMPRESA',        '1',    'Actualizó licencia empresa Planta Demo BARB',       TRUE,  '192.168.1.1',  '/api/companies/1'),
+(1, 7, 'Luisa Martínez',         'tecnico',  'view',            'DocChat',  'CHAT_SESSION',   '9',    'Consultó sesión guardada: lubricación chiller',     TRUE,  '192.168.1.24', '/api/chat-sessions/9'),
+(1, 4, 'Carlos Mendoza',         'tecnico',  'export',          'OT',       'ORDEN_TRABAJO',  NULL,   'Exportó listado de OTs a CSV',                      TRUE,  '192.168.1.21', '/api/work-orders/export'),
+(1, 3, 'Subgerente Operaciones', 'gerente',  'login',           'Auth',     NULL,             NULL,   'Intento de login fallido — contraseña incorrecta', FALSE, '192.168.1.11', '/api/auth/login');

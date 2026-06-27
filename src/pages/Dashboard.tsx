@@ -14,16 +14,28 @@ import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
 import { BARB_BUSINESS } from '../hooks/useFinancialStats'
 
+// Interfaz flexibilizada para soportar las nuevas llaves de FastAPI
 interface ApiWorkOrder {
-  id: string; title: string; machine_id?: string | number; priority: string;
-  status: string; estado: string; age_minutes: number; description?: string;
-  created_at?: string; closed_at?: string | null; tecnico_nombre?: string;
-  discipline_name?: string; tipo?: string; costo_estimado?: number; costo_real?: number;
-  reporte_id?: number | null; diagnostico_id?: number | null; downtime_minutes?: number | null;
-  machine_name?: string;
+  id?: string | number; ot_id?: string | number;
+  title?: string; numero_ot?: string;
+  machine_id?: string | number; maquina_id?: string | number;
+  machineId?: string | number; maquinaId?: string | number;
+  priority?: string; prioridad?: string;
+  status?: string; estado?: string;
+  age_minutes?: number;
+  description?: string; descripcion_problema?: string;
+  created_at?: string; fecha_creacion?: string;
+  closed_at?: string | null; fecha_cierre?: string | null;
+  tecnico_nombre?: string; creado_por?: string;
+  discipline_name?: string; disciplina?: string;
+  tipo?: string; maintenance_type?: string;
+  costo_estimado?: number; costo_real?: number;
+  reporte_id?: number | null; diagnostico_id?: number | null; 
+  downtime_minutes?: number | null;
+  machine_name?: string; maquina_nombre?: string;
 }
 
-interface ApiMachine { id: number; name: string; discipline_id: number }
+interface ApiMachine { id: number; name: string; discipline_id: number; plant_id?: number }
 
 const API_URL = 'https://barb-2ih8.onrender.com/api'
 const CHART_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#84cc16']
@@ -31,19 +43,32 @@ const CHART_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#
 const ensureUTC = (d?: string | null) => { if (!d) return undefined; return d.endsWith('Z') || d.includes('+') ? d : d + 'Z' }
 
 const mapApiWorkOrder = (o: ApiWorkOrder): WorkOrder => {
-  const createdAt = ensureUTC(o.created_at) ?? new Date(Date.now() - (o.age_minutes || 0) * 60000).toISOString()
-  const closedAt = ensureUTC(o.closed_at)
+  const createdAt = ensureUTC(o.created_at ?? o.fecha_creacion) ?? new Date(Date.now() - (o.age_minutes || 0) * 60000).toISOString()
+  const closedAt = ensureUTC(o.closed_at ?? o.fecha_cierre)
   let duration = 0
+  
   if (o.downtime_minutes != null) duration = Number(o.downtime_minutes)
   else if (closedAt) duration = Math.max(1, Math.round((new Date(closedAt).getTime() - new Date(createdAt).getTime()) / 60000))
+  else duration = Math.max(1, Math.round((Date.now() - new Date(createdAt).getTime()) / 60000))
+
+  const machineId = String(o.machine_id ?? o.maquina_id ?? o.machineId ?? o.maquinaId ?? '')
 
   return {
-    id: o.id, title: o.title, description: o.description ?? o.title, machineId: String(o.machine_id || ''),
-    machineName: o.machine_name || `Máquina ${o.machine_id}`,
-    status: o.estado?.toLowerCase() || 'pending', priority: (o.priority || 'medium').toLowerCase() as any,
-    createdAt, closedAt, durationReal: duration,
-    createdBy: o.tecnico_nombre || 'Operador', discipline: o.discipline_name || 'General',
-    maintenanceType: o.tipo || 'corrective', costoEstimado: Number(o.costo_estimado) || 0, costoReal: Number(o.costo_real) || 0,
+    id: String(o.id ?? o.ot_id), 
+    title: o.title ?? o.numero_ot ?? `OT-${o.id}`, 
+    description: o.description ?? o.descripcion_problema ?? o.title ?? 'Sin descripción', 
+    machineId,
+    machineName: o.machine_name ?? o.maquina_nombre ?? `Máquina ${machineId}`,
+    status: (o.status ?? o.estado ?? 'pending').toLowerCase(), 
+    priority: (o.priority ?? o.prioridad ?? 'medium').toLowerCase() as any,
+    createdAt, 
+    closedAt, 
+    durationReal: duration,
+    createdBy: o.tecnico_nombre ?? o.creado_por ?? 'Operador', 
+    discipline: o.discipline_name ?? o.disciplina ?? 'General',
+    maintenanceType: o.tipo ?? o.maintenance_type ?? 'corrective', 
+    costoEstimado: Number(o.costo_estimado) || 0, 
+    costoReal: Number(o.costo_real) || 0,
     hasBarbAi: !!(o.reporte_id || o.diagnostico_id)
   }
 }
@@ -132,6 +157,17 @@ export default function Dashboard() {
     })
   }, [tickets, statusFilter, machineFilter, typeFilter, search, timeRange, machineLabel])
 
+  // SMART NOTIFICATION: Calculamos OTs vencidas en el frontend
+  const overdueTickets = useMemo(() => {
+    return filtered.filter(tk => {
+      const isClosed = tk.status === 'closed' || tk.status === 'cerrado' || tk.status === 'resolved';
+      if (isClosed) return false;
+      // Lógica de SLA: Críticas/Altas > 2 hrs. Normales > 24 hrs.
+      const ageHours = tk.durationReal / 60;
+      return (tk.priority === 'high' || tk.priority === 'critical' ? ageHours > 2 : ageHours > 24);
+    });
+  }, [filtered]);
+
   const paginatedTickets = useMemo(() => filtered.slice((currentPage - 1) * 10, currentPage * 10), [filtered, currentPage])
 
   const resolutionData = useMemo(() => filtered.filter(tk => tk.closedAt).slice(0, 15).map(tk => ({
@@ -181,6 +217,17 @@ export default function Dashboard() {
           <option value="all">{t.dashboard?.allTime || 'Histórico Completo'}</option>
         </select>
       </div>
+
+      {/* BANNER DE ALERTAS INTELIGENTES */}
+      {overdueTickets.length > 0 && (
+        <div style={{ background: 'var(--red-bg, #fee2e2)', color: 'var(--red, #dc2626)', padding: '16px 20px', borderRadius: 12, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16, border: '1px solid #f87171' }}>
+          <span style={{ fontSize: 24 }}>🚨</span>
+          <div>
+            <strong style={{ display: 'block', fontSize: 15, marginBottom: 4 }}>Atención: Tienes {overdueTickets.length} Órdenes de Trabajo estancadas o críticas.</strong>
+            <span style={{ fontSize: 13, opacity: 0.9 }}>Revisa el listado inferior para gestionar las intervenciones y evitar tiempos muertos en la planta.</span>
+          </div>
+        </div>
+      )}
 
       <FinancialDashboard timeRange={timeRange} />
 
