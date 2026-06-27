@@ -453,25 +453,29 @@ export default function DocChat() {
       docMachine && docMachine !== 'all' ? normalizeId(docMachine) : ''
 
     return workOrders.filter(workOrder => {
+      // 1. Extraer ID de la máquina a prueba de fallos
       const machineId = normalizeId(
-        workOrder.maquina_id ?? workOrder.maquinaId ?? workOrder.machine_id ?? workOrder.machineId,
+        workOrder.machine_id ?? workOrder.maquina_id ?? workOrder.machineId ?? workOrder.maquinaId
       )
       const machine = machinesById.get(machineId)
 
+      // 2. Filtro de Máquina
       if (targetMachineId && machineId !== targetMachineId) return false
 
+      // 3. Filtro de Planta (Busca en la OT primero, y si no, en la Máquina)
       if (targetPlantId) {
-        const machinePlantId = normalizeId(
-          machine?.planta_id ?? machine?.plantaId ?? machine?.plant_id,
+        const otPlantId = normalizeId(
+          workOrder.plant_id ?? workOrder.planta_id ?? machine?.plant_id ?? machine?.planta_id
         )
-        if (machinePlantId !== targetPlantId) return false
+        if (otPlantId !== targetPlantId) return false
       }
 
+      // 4. Filtro de Disciplina (Busca en la Máquina asociada)
       if (targetDisciplineId) {
-        const machineDisciplineId = normalizeId(
-          machine?.disciplina_id ?? machine?.disciplinaId ?? machine?.discipline_id,
+        const otDiscId = normalizeId(
+          machine?.discipline_id ?? machine?.disciplina_id ?? workOrder.discipline_id ?? workOrder.disciplina_id
         )
-        if (machineDisciplineId !== targetDisciplineId) return false
+        if (otDiscId !== targetDisciplineId) return false
       }
 
       return true
@@ -1000,6 +1004,41 @@ ${context}
         </div>
 
       </div>
+              {/*BOTÓN GUARDAR SESIÓN (Integrado al panel izquierdo) */}
+        {docMessages.length > 0 && (
+          <div className="panel-section" style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+            <button
+              type="button"
+              disabled={saveStatus === 'saving'}
+              className="w-full rounded-lg px-3 py-2 text-[13px] font-medium transition shadow-sm outline-none"
+              style={{
+                background: saveStatus === 'saved' ? 'var(--green-bg, #d1fae5)' : saveStatus === 'error' ? 'var(--red-bg, #fee2e2)' : 'var(--blue)',
+                color: saveStatus === 'saved' ? 'var(--green, #059669)' : saveStatus === 'error' ? 'var(--red, #dc2626)' : '#fff',
+                cursor: saveStatus === 'saving' ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                border: 'none',
+              }}
+              onClick={openSaveModal}
+            >
+              {saveStatus === 'saving' && '⏳ Guardando...'}
+              {saveStatus === 'saved' && '✅ Sesión guardada'}
+              {saveStatus === 'error' && '❌ Error'}
+              {saveStatus === 'idle' && (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                  </svg>
+                  {t.docChat?.saveSession ?? 'Guardar Sesión'}
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
       {/* -----------------------------------------------------------------------
        * Panel derecho
@@ -1064,63 +1103,6 @@ ${context}
                   ⚙ {selectedMachineRecord.name ?? selectedMachineRecord.nombre ?? selectedMachineRecord.id}
                 </span>
               )}
-
-              {/* Botón guardar sesión */}
-              {docMessages.length > 0 && (
-                <button
-                  type="button"
-                  className="ctx-tag"
-                  disabled={saveStatus === 'saving'}
-                  style={{
-                    background:
-                      saveStatus === 'saved'
-                        ? 'var(--green-bg, #d1fae5)'
-                        : saveStatus === 'error'
-                          ? 'var(--red-bg, #fee2e2)'
-                          : 'var(--surface)',
-                    color:
-                      saveStatus === 'saved'
-                        ? 'var(--green, #059669)'
-                        : saveStatus === 'error'
-                          ? 'var(--red, #dc2626)'
-                          : 'var(--ink2)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 6,
-                    cursor: saveStatus === 'saving' ? 'not-allowed' : 'pointer',
-                    fontSize: 12,
-                    padding: '2px 10px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    transition: 'all 0.2s',
-                  }}
-                  title={
-                    saveStatus === 'saving'
-                      ? 'Guardando...'
-                      : saveStatus === 'saved'
-                        ? 'Sesión guardada'
-                        : saveStatus === 'error'
-                          ? 'Error al guardar'
-                          : 'Guardar conversación'
-                  }
-                  onClick={openSaveModal}
-                >
-                  {saveStatus === 'saving' && '⏳'}
-                  {saveStatus === 'saved' && '✅'}
-                  {saveStatus === 'error' && '❌'}
-                  {saveStatus === 'idle' && '💾'}
-                  {saveStatus === 'saving'
-                    ? ' Guardando...'
-                    : saveStatus === 'saved'
-                      ? ' Guardado'
-                      : saveStatus === 'error'
-                        ? ' Error'
-                        : ` ${t.docChat?.saveSession ?? 'Guardar sesión'}`}
-                </button>
-              )}
-            </>
-          )}
-        </div>
 
         {/* Modal guardar sesión */}
         {saveModalOpen && (
