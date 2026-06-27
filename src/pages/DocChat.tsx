@@ -1061,6 +1061,75 @@ export default function DocChat() {
        * -------------------------------------------------------------------- */}
 
       <div className="panel-right">
+
+        {/* ── Header móvil con botón hamburguesa ── solo visible en móvil ── */}
+        <div
+          className="md:hidden"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '8px 12px',
+            borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
+            gap: 10,
+          }}
+        >
+          {/* Botón hamburguesa — abre/cierra el panel lateral de filtros */}
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(prev => !prev)}
+            aria-expanded={isSidebarOpen}
+            aria-label={isSidebarOpen ? 'Cerrar filtros' : 'Abrir filtros'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: isSidebarOpen ? 'var(--blue-bg, #eff6ff)' : 'var(--surface)',
+              color: isSidebarOpen ? 'var(--blue)' : 'var(--ink)',
+              cursor: 'pointer',
+              flexShrink: 0,
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            {isSidebarOpen ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            )}
+          </button>
+
+          {/* Contexto resumido en el header móvil */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, flex: 1, overflow: 'hidden' }}>
+            {discipline ? (
+              <>
+                <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 99, background: 'var(--blue-bg, #eff6ff)', color: 'var(--blue)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  ◉ {discipline}
+                </span>
+                {selectedMachineRecord && (
+                  <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 99, background: 'var(--surface)', color: 'var(--ink2)', border: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                    ⚙ {selectedMachineRecord.name ?? selectedMachineRecord.nombre ?? selectedMachineRecord.id}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--ink3)' }}>
+                Sin disciplina seleccionada
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Barra manual activo */}
         {activeManual && (
           <div className="manual-active-bar">
@@ -1087,33 +1156,8 @@ export default function DocChat() {
           </div>
         )}
 
-        {/* Contexto y Botón Menú Móvil */}
-        <div className="context-tags" style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-          
-          {/* Botón Hamburguesa — toggle abre/cierra el panel en móvil */}
-          <button
-            type="button"
-            className="md:hidden flex items-center justify-center p-1.5 mr-2 rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] transition-colors active:bg-[var(--blue-bg)]"
-            onClick={() => setIsSidebarOpen(prev => !prev)}
-            title={isSidebarOpen ? 'Cerrar panel' : 'Mostrar Filtros y OTs'}
-            aria-expanded={isSidebarOpen}
-          >
-            {isSidebarOpen ? (
-              /* X cuando está abierto */
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            ) : (
-              /* Hamburguesa cuando está cerrado */
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="3" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <line x1="3" y1="18" x2="21" y2="18" />
-              </svg>
-            )}
-          </button>
-
+        {/* Contexto desktop — tags de planta/disciplina/máquina — solo desktop */}
+        <div className="context-tags hidden md:flex" style={{ flexShrink: 0, alignItems: 'center' }}>
           {!discipline ? (
             <span className="ctx-empty">
               {t.docChat?.emptyContext ?? 'Selecciona una disciplina para comenzar.'}
