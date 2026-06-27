@@ -374,8 +374,12 @@ export default function DocChat() {
     [lmBase],
   )
 
+  /* -----------------------------------------------------------------------------
+   * Estado derivado
+   * -------------------------------------------------------------------------- */
+
   const activeManual = useMemo(
-    () => manuals.find(m => m.id === activeManualId) ?? null,
+    () => manuals.find(manual => manual.id === activeManualId) ?? null,
     [manuals, activeManualId],
   )
 
@@ -387,7 +391,7 @@ export default function DocChat() {
   const selectedPlantRecord = useMemo(
     () =>
       normalizedPlants.find(
-        p => normalizeId(p.id) === normalizeId(plant),
+        plantRecord => String(plantRecord.id) === String(plant),
       ) ??
       normalizedPlants[0] ??
       null,
@@ -399,18 +403,20 @@ export default function DocChat() {
 
     return (
       disciplines.find(
-        d => normalizeCatalogName(d) === discipline,
+        disciplineRecord =>
+          normalizeCatalogName(disciplineRecord) === discipline,
       ) ?? null
     )
   }, [discipline, disciplines])
 
+  /* ---------------------------------------------------------------------------
+   * Índice de máquinas (O(1))
+   * -------------------------------------------------------------------------- */
+
   const machinesById = useMemo(
     () =>
       new Map(
-        machines.map(machine => [
-          normalizeId(machine.id),
-          machine,
-        ]),
+        machines.map(machine => [String(machine.id), machine]),
       ),
     [machines],
   )
@@ -421,9 +427,9 @@ export default function DocChat() {
     }
 
     return (
-      machinesById.get(normalizeId(docMachine)) ??
+      machinesById.get(String(docMachine)) ??
       machines.find(
-        m => normalizeMachineLabel(m) === docMachine,
+        machine => normalizeMachineLabel(machine) === docMachine,
       ) ??
       null
     )
@@ -434,332 +440,249 @@ export default function DocChat() {
       return machines
     }
 
+    const disciplineId = String(selectedDisciplineRecord.id)
+
     return machines.filter(machine => {
-      const disciplineId =
+      const machineDisciplineId =
         machine.discipline_id ??
         machine.disciplineId ??
         machine.disciplina_id ??
         machine.disciplinaId
 
       return (
-        normalizeId(disciplineId) ===
-        normalizeId(selectedDisciplineRecord.id)
+        machineDisciplineId !== null &&
+        machineDisciplineId !== undefined &&
+        machineDisciplineId !== '' &&
+        String(machineDisciplineId) === disciplineId
       )
     })
   }, [machines, selectedDisciplineRecord])
-  /* -----------------------------------------------------------------------------
- * Estado derivado
- * -------------------------------------------------------------------------- */
 
-const activeManual = useMemo(
-  () => manuals.find(manual => manual.id === activeManualId) ?? null,
-  [manuals, activeManualId],
-)
+  /* ---------------------------------------------------------------------------
+   * Efectos
+   * -------------------------------------------------------------------------- */
 
-const normalizedPlants = useMemo(
-  () => (plants.length ? plants : PLANTS_FALLBACK),
-  [plants],
-)
-
-const selectedPlantRecord = useMemo(
-  () =>
-    normalizedPlants.find(
-      plantRecord => String(plantRecord.id) === String(plant),
-    ) ??
-    normalizedPlants[0] ??
-    null,
-  [normalizedPlants, plant],
-)
-
-const selectedDisciplineRecord = useMemo(() => {
-  if (!discipline) return null
-
-  return (
-    disciplines.find(
-      disciplineRecord =>
-        normalizeCatalogName(disciplineRecord) === discipline,
-    ) ?? null
-  )
-}, [discipline, disciplines])
-
-/* -----------------------------------------------------------------------------
- * Índice de máquinas (O(1))
- * -------------------------------------------------------------------------- */
-
-const machinesById = useMemo(
-  () =>
-    new Map(
-      machines.map(machine => [String(machine.id), machine]),
-    ),
-  [machines],
-)
-
-const selectedMachineRecord = useMemo(() => {
-  if (!docMachine || docMachine === 'all') {
-    return null
-  }
-
-  return (
-    machinesById.get(String(docMachine)) ??
-    machines.find(
-      machine => normalizeMachineLabel(machine) === docMachine,
-    ) ??
-    null
-  )
-}, [docMachine, machines, machinesById])
-
-const availableMachines = useMemo(() => {
-  if (!selectedDisciplineRecord) {
-    return machines
-  }
-
-  const disciplineId = String(selectedDisciplineRecord.id)
-
-  return machines.filter(machine => {
-    const machineDisciplineId = machine.discipline_id ??
-      machine.disciplineId ??
-      machine.disciplina_id ??
-      machine.disciplinaId
-
-    return (
-      machineDisciplineId !== null &&
-      machineDisciplineId !== undefined &&
-      machineDisciplineId !== '' &&
-      String(machineDisciplineId) === disciplineId
-    )
-  })
-}, [machines, selectedDisciplineRecord])
-
-/* -----------------------------------------------------------------------------
- * Efectos
- * -------------------------------------------------------------------------- */
-
-useEffect(() => {
-  if (
-    location.state &&
-    typeof location.state === 'object'
-  ) {
-    const state = location.state as {
-      discipline?: string
-      plant?: string
-    }
-
-    if (state.discipline) {
-      setDiscipline(state.discipline)
-    }
-
-    if (state.plant) {
-      setPlant(state.plant)
-    }
-  }
-}, [location.state, setDiscipline, setPlant])
-
-useEffect(() => {
-  const disciplineChanged =
-    prevDisciplineRef.current !== discipline
-
-  const machineChanged =
-    prevDocMachineRef.current !== docMachine
-
-  if (disciplineChanged) {
-    prevDisciplineRef.current = discipline
-  }
-
-  if (machineChanged) {
-    prevDocMachineRef.current = docMachine
-  }
-
-  if (disciplineChanged || machineChanged) {
-    clearDocMessages()
-  }
-}, [
-  discipline,
-  docMachine,
-  clearDocMessages,
-])
-
-useEffect(() => {
-  areaRef.current?.scrollTo({
-    top: areaRef.current.scrollHeight,
-    behavior: 'smooth',
-  })
-}, [docMessages.length])
-
-useEffect(() => {
-  if (!plant && normalizedPlants.length > 0) {
-    setPlant(String(normalizedPlants[0].id))
-  }
-}, [plant, normalizedPlants, setPlant])
-
-useEffect(() => {
-  const controller = new AbortController()
-
-  const loadCatalogs = async () => {
-    setCatalogsLoading(true)
-
-    try {
-      const [
-        plantsRes,
-        disciplinesRes,
-        machinesRes,
-        workOrdersRes,
-      ] = await Promise.all([
-        fetch(`${apiRoot}/plants`, {
-          signal: controller.signal,
-        }),
-        fetch(`${apiRoot}/disciplines`, {
-          signal: controller.signal,
-        }),
-        fetch(`${apiRoot}/machines`, {
-          signal: controller.signal,
-        }),
-        fetch(`${apiRoot}/work-orders`, {
-          signal: controller.signal,
-        }),
-      ])
-
-      if (controller.signal.aborted) return
-
-      const [
-        plantsData,
-        disciplinesData,
-        machinesData,
-        workOrdersData,
-      ] = await Promise.all([
-        plantsRes.ok ? plantsRes.json() : [],
-        disciplinesRes.ok ? disciplinesRes.json() : [],
-        machinesRes.ok ? machinesRes.json() : [],
-        workOrdersRes.ok
-          ? workOrdersRes.json()
-          : [],
-      ])
-
-      if (controller.signal.aborted) return
-
-      setPlants(
-        Array.isArray(plantsData)
-          ? plantsData
-          : [],
-      )
-
-      setDisciplines(
-        Array.isArray(disciplinesData)
-          ? disciplinesData
-          : [],
-      )
-
-      setMachines(
-        Array.isArray(machinesData)
-          ? machinesData
-          : [],
-      )
-
-      setWorkOrders(
-        Array.isArray(workOrdersData)
-          ? workOrdersData
-          : workOrdersData?.data ?? [],
-      )
-    } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        setPlants([])
-        setDisciplines([])
-        setMachines([])
-        setWorkOrders([])
-      }
-    } finally {
-      if (!controller.signal.aborted) {
-        setCatalogsLoading(false)
-      }
-    }
-  }
-
-  void loadCatalogs()
-
-  return () => controller.abort()
-}, [apiRoot])
-
-/* -----------------------------------------------------------------------------
- * Filtrado de OTs
- * -------------------------------------------------------------------------- */
-
-const filteredOTs = useMemo(() => {
-  const normalizeId = (
-    value: unknown,
-  ): string =>
-    value == null ? '' : String(value)
-
-  const targetPlantId = normalizeId(plant)
-
-  const targetDisciplineId = normalizeId(
-    selectedDisciplineRecord?.id,
-  )
-
-  const targetMachineId =
-    docMachine && docMachine !== 'all'
-      ? normalizeId(docMachine)
-      : ''
-
-  return workOrders.filter(workOrder => {
-    const machineId = normalizeId(
-      workOrder.maquina_id ??
-        workOrder.maquinaId ??
-        workOrder.machine_id ??
-        workOrder.machineId,
-    )
-
-    const machine =
-      machinesById.get(machineId)
-
+  useEffect(() => {
     if (
-      targetMachineId &&
-      machineId !== targetMachineId
+      location.state &&
+      typeof location.state === 'object'
     ) {
-      return false
-    }
+      const state = location.state as {
+        discipline?: string
+        plant?: string
+      }
 
-    if (targetPlantId) {
-      const machinePlantId = normalizeId(
-        machine?.planta_id ??
-          machine?.plantaId ??
-          machine?.plant_id,
-      )
+      if (state.discipline) {
+        setDiscipline(state.discipline)
+      }
 
-      if (machinePlantId !== targetPlantId) {
-        return false
+      if (state.plant) {
+        setPlant(state.plant)
       }
     }
+  }, [location.state, setDiscipline, setPlant])
 
-    if (targetDisciplineId) {
-      const machineDisciplineId =
-        normalizeId(
-          machine?.disciplina_id ??
-            machine?.disciplinaId ??
-            machine?.discipline_id,
+  useEffect(() => {
+    const disciplineChanged =
+      prevDisciplineRef.current !== discipline
+
+    const machineChanged =
+      prevDocMachineRef.current !== docMachine
+
+    if (disciplineChanged) {
+      prevDisciplineRef.current = discipline
+    }
+
+    if (machineChanged) {
+      prevDocMachineRef.current = docMachine
+    }
+
+    if (disciplineChanged || machineChanged) {
+      clearDocMessages()
+    }
+  }, [
+    discipline,
+    docMachine,
+    clearDocMessages,
+  ])
+
+  useEffect(() => {
+    areaRef.current?.scrollTo({
+      top: areaRef.current.scrollHeight,
+      behavior: 'smooth',
+    })
+  }, [docMessages.length])
+
+  useEffect(() => {
+    if (!plant && normalizedPlants.length > 0) {
+      setPlant(String(normalizedPlants[0].id))
+    }
+  }, [plant, normalizedPlants, setPlant])
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    const loadCatalogs = async () => {
+      setCatalogsLoading(true)
+
+      try {
+        const [
+          plantsRes,
+          disciplinesRes,
+          machinesRes,
+          workOrdersRes,
+        ] = await Promise.all([
+          fetch(`${apiRoot}/plants`, {
+            signal: controller.signal,
+          }),
+          fetch(`${apiRoot}/disciplines`, {
+            signal: controller.signal,
+          }),
+          fetch(`${apiRoot}/machines`, {
+            signal: controller.signal,
+          }),
+          fetch(`${apiRoot}/work-orders`, {
+            signal: controller.signal,
+          }),
+        ])
+
+        if (controller.signal.aborted) return
+
+        const [
+          plantsData,
+          disciplinesData,
+          machinesData,
+          workOrdersData,
+        ] = await Promise.all([
+          plantsRes.ok ? plantsRes.json() : [],
+          disciplinesRes.ok ? disciplinesRes.json() : [],
+          machinesRes.ok ? machinesRes.json() : [],
+          workOrdersRes.ok
+            ? workOrdersRes.json()
+            : [],
+        ])
+
+        if (controller.signal.aborted) return
+
+        setPlants(
+          Array.isArray(plantsData)
+            ? plantsData
+            : [],
         )
 
+        setDisciplines(
+          Array.isArray(disciplinesData)
+            ? disciplinesData
+            : [],
+        )
+
+        setMachines(
+          Array.isArray(machinesData)
+            ? machinesData
+            : [],
+        )
+
+        setWorkOrders(
+          Array.isArray(workOrdersData)
+            ? workOrdersData
+            : workOrdersData?.data ?? [],
+        )
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          setPlants([])
+          setDisciplines([])
+          setMachines([])
+          setWorkOrders([])
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setCatalogsLoading(false)
+        }
+      }
+    }
+
+    void loadCatalogs()
+
+    return () => controller.abort()
+  }, [apiRoot])
+
+  /* ---------------------------------------------------------------------------
+   * Filtrado de OTs
+   * -------------------------------------------------------------------------- */
+
+  const filteredOTs = useMemo(() => {
+    const targetPlantId = normalizeId(plant)
+
+    const targetDisciplineId = normalizeId(
+      selectedDisciplineRecord?.id,
+    )
+
+    const targetMachineId =
+      docMachine && docMachine !== 'all'
+        ? normalizeId(docMachine)
+        : ''
+
+    return workOrders.filter(workOrder => {
+      const machineId = normalizeId(
+        workOrder.maquina_id ??
+          workOrder.maquinaId ??
+          workOrder.machine_id ??
+          workOrder.machineId,
+      )
+
+      const machine =
+        machinesById.get(machineId)
+
       if (
-        machineDisciplineId !==
-        targetDisciplineId
+        targetMachineId &&
+        machineId !== targetMachineId
       ) {
         return false
       }
-    }
 
-    return true
-  })
-}, [
-  workOrders,
-  machinesById,
-  plant,
-  docMachine,
-  selectedDisciplineRecord,
-])
+      if (targetPlantId) {
+        const machinePlantId = normalizeId(
+          machine?.planta_id ??
+            machine?.plantaId ??
+            machine?.plant_id,
+        )
 
-/* -----------------------------------------------------------------------------
- * Procesamiento de archivos
- * -------------------------------------------------------------------------- */
+        if (machinePlantId !== targetPlantId) {
+          return false
+        }
+      }
 
-const processFile = useCallback(
+      if (targetDisciplineId) {
+        const machineDisciplineId =
+          normalizeId(
+            machine?.disciplina_id ??
+              machine?.disciplinaId ??
+              machine?.discipline_id,
+          )
+
+        if (
+          machineDisciplineId !==
+          targetDisciplineId
+        ) {
+          return false
+        }
+      }
+
+      return true
+    })
+  }, [
+    workOrders,
+    machinesById,
+    plant,
+    docMachine,
+    selectedDisciplineRecord,
+  ])
+
+  /* ---------------------------------------------------------------------------
+   * Procesamiento de archivos
+   * -------------------------------------------------------------------------- */
+
+  const processFile = useCallback(
   async (file: File) => {
     setUploading(true)
     setUploadPct(10)
@@ -901,7 +824,6 @@ const processFile = useCallback(
 )
 
   const handleFiles = useCallback(
-  async (files: FileList | null) => {
     if (!files) return
 
     for (const file of Array.from(files)) {
@@ -911,28 +833,28 @@ const processFile = useCallback(
   [processFile],
 )
 
-/* -----------------------------------------------------------------------------
- * Eliminar manual
- * -------------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------------
+   * Eliminar manual
+   * -------------------------------------------------------------------------- */
 
-const removeManual = useCallback(
-  (id: string) => {
-    setManuals(previous =>
-      previous.filter(manual => manual.id !== id),
-    )
+  const removeManual = useCallback(
+    (id: string) => {
+      setManuals(previous =>
+        previous.filter(manual => manual.id !== id),
+      )
 
-    if (activeManualId === id) {
-      setActiveManualId('')
-    }
-  },
-  [activeManualId],
-)
+      if (activeManualId === id) {
+        setActiveManualId('')
+      }
+    },
+    [activeManualId],
+  )
 
-/* -----------------------------------------------------------------------------
- * Envío de consulta
- * -------------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------------
+   * Envío de consulta
+   * -------------------------------------------------------------------------- */
 
-const send = useCallback(async () => {
+  const send = useCallback(async () => {
   const query = input.trim()
 
   if (!query || loading || !discipline) {
@@ -1161,7 +1083,6 @@ Inicia LM Studio o FastAPI para obtener respuestas inteligentes.`
   setLoading,
 ])
   const handleKeyDown = useCallback(
-  (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       void send()
