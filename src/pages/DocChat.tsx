@@ -812,76 +812,81 @@ export default function DocChat() {
     <div className="two-panel w-full h-full relative">
       
       {/* -----------------------------------------------------------------------
-       * Panel izquierdo — en desktop siempre visible, en móvil colapsable
+       * Panel izquierdo — colapsable en cualquier vista
+       * Cuando está cerrado: solo queda el botón (44px de ancho)
+       * Cuando está abierto: ancho completo del panel
        * -------------------------------------------------------------------- */}
       <div
         className="panel-left"
         style={{
           display: 'flex',
           flexDirection: 'column',
-          // En móvil: si está cerrado, solo mostramos la franja del botón hamburguesa
-          // En desktop: siempre ancho completo
+          width: isSidebarOpen ? undefined : 44,
+          minWidth: isSidebarOpen ? undefined : 44,
+          overflow: 'hidden',
+          transition: 'width 0.25s ease, min-width 0.25s ease',
+          flexShrink: 0,
         }}
       >
-        {/* ── Cabecera del panel: título + botón hamburguesa (solo móvil) ── */}
+        {/* ── Botón toggle — siempre visible, alineado al borde ── */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '10px 12px',
+            justifyContent: isSidebarOpen ? 'space-between' : 'center',
+            padding: isSidebarOpen ? '10px 12px' : '10px 0',
             borderBottom: '1px solid var(--border)',
             flexShrink: 0,
           }}
         >
-          {/* Título — solo visible cuando el panel está expandido o en desktop */}
-          {(isSidebarOpen || true) && (
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+          {isSidebarOpen && (
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
               Filtros y OTs
             </span>
           )}
 
-          {/* Botón hamburguesa — solo en móvil */}
           <button
             type="button"
-            className="md:hidden"
             onClick={() => setIsSidebarOpen(prev => !prev)}
             aria-expanded={isSidebarOpen}
-            aria-label={isSidebarOpen ? 'Colapsar filtros' : 'Expandir filtros'}
+            aria-label={isSidebarOpen ? 'Colapsar panel' : 'Expandir panel'}
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 32,
-              height: 32,
-              borderRadius: 7,
+              width: 28,
+              height: 28,
+              borderRadius: 6,
               border: '1px solid var(--border)',
               background: isSidebarOpen ? 'var(--blue-bg, #eff6ff)' : 'var(--surface)',
               color: isSidebarOpen ? 'var(--blue)' : 'var(--ink2)',
               cursor: 'pointer',
               flexShrink: 0,
-              marginLeft: 'auto',
               transition: 'background 0.15s, color 0.15s',
             }}
           >
             {isSidebarOpen ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
+              /* Flecha apuntando a la izquierda — colapsar */
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
               </svg>
             ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <line x1="3" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="18" x2="21" y2="18" />
+              /* Flecha apuntando a la derecha — expandir */
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
               </svg>
             )}
           </button>
         </div>
 
-        {/* ── Contenido colapsable: oculto en móvil cuando isSidebarOpen=false ── */}
+        {/* ── Contenido — se oculta cuando el panel está colapsado ── */}
         <div
-          className={isSidebarOpen ? 'flex flex-col flex-1 overflow-y-auto md:flex md:flex-col md:flex-1 md:overflow-y-auto' : 'hidden md:flex md:flex-col md:flex-1 md:overflow-y-auto'}
+          style={{
+            display: isSidebarOpen ? 'flex' : 'none',
+            flexDirection: 'column',
+            flex: 1,
+            overflowY: 'auto',
+          }}
         >
 
         {/* Órdenes de Trabajo */}
