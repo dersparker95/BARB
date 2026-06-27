@@ -239,7 +239,6 @@ const getWorkOrderPriority = (ot: WorkOrderRecord): string =>
 export default function DocChat() {
   const {
     apiBase,
-    lmBase,
     discipline,
     plant,
     docMachine,
@@ -295,10 +294,6 @@ export default function DocChat() {
     [apiBase],
   )
 
-  const lmRoot = useMemo(
-    () => (lmBase || 'http://localhost:1234/v1').replace(/\/$/, ''),
-    [lmBase],
-  )
 
   /* ---------------------------------------------------------------------------
    * Estado derivado
@@ -448,35 +443,39 @@ export default function DocChat() {
    * -------------------------------------------------------------------------- */
 
   const filteredOTs = useMemo(() => {
-    const targetPlantId = normalizeId(plant)
-    const targetDisciplineId = normalizeId(selectedDisciplineRecord?.id)
-    const targetMachineId =
-      docMachine && docMachine !== 'all' ? normalizeId(docMachine) : ''
+    // Sin ningún filtro activo → mostrar todas
+    const hasPlant = Boolean(plant)
+    const hasMachine = Boolean(docMachine && docMachine !== 'all')
+
+    // Si no hay ningún filtro activo, devolver todas las OTs
+    if (!hasPlant && !hasMachine) return workOrders
 
     return workOrders.filter(workOrder => {
-      const machineId = normalizeId(
+      const otMachineId = normalizeId(
         workOrder.machine_id ?? workOrder.maquina_id ?? workOrder.machineId ?? workOrder.maquinaId
       )
-      const machine = machinesById.get(machineId)
+      const machine = machinesById.get(otMachineId)
 
-      // 1. Filtro de Máquina (Si el usuario eligió una, DEBE coincidir)
-      if (targetMachineId && machineId !== targetMachineId) return false
+      // Filtro de Máquina — prioridad máxima: si hay máquina activa, solo OTs de esa máquina
+      if (hasMachine) {
+        return otMachineId === normalizeId(docMachine)
+      }
 
-      // 2. Filtro de Planta (Solo ocultamos si la OT TIENE planta y es DISTINTA)
-      const otPlantId = normalizeId(
-        workOrder.plant_id ?? workOrder.planta_id ?? machine?.plant_id ?? machine?.planta_id
-      )
-      if (targetPlantId && otPlantId && otPlantId !== targetPlantId) return false
-
-      // 3. Filtro de Disciplina (Solo ocultamos si la OT TIENE disciplina y es DISTINTA)
-      const otDiscId = normalizeId(
-        machine?.discipline_id ?? machine?.disciplina_id ?? workOrder.discipline_id ?? workOrder.disciplina_id
-      )
-      if (targetDisciplineId && otDiscId && otDiscId !== targetDisciplineId) return false
+      // Filtro de Planta — si hay planta activa, incluir OTs cuya planta coincida
+      // o cuya planta sea desconocida (para no perder OTs sin planta asignada)
+      if (hasPlant) {
+        const otPlantId = normalizeId(
+          workOrder.plant_id ?? workOrder.planta_id ?? machine?.plant_id ?? machine?.planta_id
+        )
+        // Si la OT no tiene planta asignada, la mostramos igual
+        if (!otPlantId) return true
+        // Si tiene planta, solo mostrar si coincide
+        return otPlantId === normalizeId(plant)
+      }
 
       return true
     })
-  }, [workOrders, machinesById, plant, docMachine, selectedDisciplineRecord])
+  }, [workOrders, machinesById, plant, docMachine])
 
   /* ---------------------------------------------------------------------------
    * Procesamiento de archivos
@@ -696,6 +695,7 @@ export default function DocChat() {
           language: nLang,
           machine: chatMachine,
           history: recentHistory,
+          active_manual: activeManual?.name ?? null,
         }),
       })
 
@@ -710,8 +710,8 @@ export default function DocChat() {
         pushDocMessage({
           role: 'assistant',
           content:
-            t.docChat?.lmStudioOffline ??
-            'El asistente está desconectado temporalmente. Revisa LM Studio.',
+            t.docChat?.serviceUnavailable ??
+            'El servicio de IA no está disponible temporalmente. Inténtalo de nuevo en unos minutos.',
           timestamp: Date.now(),
         })
         setLoading(false) // <-- CORRECCIÓN APLICADA AQUI
@@ -727,70 +727,12 @@ export default function DocChat() {
       setLoading(false) // <-- CORRECCIÓN APLICADA AQUI
       return
     } catch {
-      console.warn('FastAPI no disponible. Activando modo local.')
-    }
-
-    const chunks = retrieveFromManual(query, activeManual?.chunks ?? [])
-
-    const context = chunks.length
-      ? chunks
-          .map(
-            (chunk, index) =>
-              `[FRAGMENTO ${index + 1} — ${chunk.doc} p.${chunk.page}]\n${chunk.text}`,
-          )
-          .join('\n\n')
-      : '[Sin manual cargado — responde usando conocimiento general de mantenimiento industrial.]'
-
-    const systemPrompt = `
-Eres BARB, asistente experto en mantenimiento industrial.
-
-Disciplina: ${discipline}
-${selectedMachineRecord?.name ? `Equipo: ${selectedMachineRecord.name}` : ''}
-${activeManual ? `Manual activo: ${activeManual.name}` : ''}
-
-Responde en ${nLang === 'en' ? 'inglés' : 'español'}.
-
-Prioridades:
-- Explicar paso a paso.
-- Priorizar seguridad.
-- Citar la página del manual cuando exista.
-- Utilizar ⚠️ para advertencias.
-
-CONTEXTO:
-
-${context}
-`.trim()
-
-    try {
-      const response = await fetch(`${lmRoot}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'local-model',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: query },
-          ],
-        }),
+      // FastAPI no disponible — mostrar error claro al usuario
+      pushDocMessage({
+        role: 'assistant',
+        content: '⚠️ No se pudo conectar con el servidor. Verifica tu conexión o contacta al administrador.',
+        timestamp: Date.now(),
       })
-
-      if (response.ok) {
-        const data = await response.json()
-        const answer = data.choices?.[0]?.message?.content ?? data.result ?? ''
-        pushDocMessage({
-          role: 'assistant',
-          content: `*(Modo Fallback)*\n\n${answer}`,
-          timestamp: Date.now(),
-        })
-        return
-      }
-    } catch {
-      const demoResponse = chunks.length
-        ? `**[DEMO — Sin backend]**\n\nBasado en el manual:\n\n${chunks[0].text}\n\nInicia LM Studio o FastAPI para obtener respuestas inteligentes.`
-        : '**[Modo Local]** No existe conexión al backend y tampoco hay manuales cargados.'
-
-      pushDocMessage({ role: 'assistant', content: demoResponse, timestamp: Date.now() })
-    } finally {
       setLoading(false)
     }
   }, [
@@ -804,8 +746,6 @@ ${context}
     nLang,
     pushDocMessage,
     activeManual,
-    selectedMachineRecord,
-    lmRoot,
     t,
     setLoading,
   ])
@@ -841,16 +781,17 @@ ${context}
       <div
         className={`panel-left transition-transform duration-300 ${
           isSidebarOpen
-            ? 'flex absolute left-0 top-0 z-50 h-full w-[280px] bg-[var(--bg)] shadow-2xl translate-x-0'
-            : 'hidden md:flex'
+            ? 'flex flex-col absolute left-0 top-0 z-50 h-full w-[280px] bg-[var(--bg)] shadow-2xl translate-x-0 overflow-y-auto'
+            : 'hidden md:flex md:flex-col'
         }`}
       >
         {/* ENCABEZADO MOVIL DEL PANEL */}
-        <div className="md:hidden flex justify-between items-center mb-4 border-b border-[var(--border)] pb-2">
+        <div className="md:hidden flex justify-between items-center px-4 pt-4 pb-2 mb-2 border-b border-[var(--border)] shrink-0">
           <span className="font-bold text-[var(--ink)]">Filtros y OTs</span>
           <button
             onClick={() => setIsSidebarOpen(false)}
             className="text-[var(--ink2)] p-1 hover:text-[var(--red)] transition"
+            aria-label="Cerrar panel"
           >
             ✕
           </button>
@@ -1328,7 +1269,7 @@ ${context}
             {t.docChat?.inputHint ?? 'Enter para enviar · Shift+Enter nueva línea · '}
             {activeManual
               ? `📖 ${activeManual.name.slice(0, 30)}`
-              : 'Powered by FastAPI + LM Studio'}
+              : 'Powered by API externa'}
           </div>
 
           <input
