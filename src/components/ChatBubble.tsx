@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React from 'react'
+import React, { useState } from 'react'
 import { Message, SourceHit } from '../types'
 
 export const Thinking: React.FC = () => (
@@ -58,7 +58,14 @@ const SafeMarkdown: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-const ChatBubble: React.FC<{ msg: Message; side?: 'user' | 'bot'; sources?: SourceHit[]; elapsed?: string; fromAPI?: boolean }> = ({ msg, side = 'bot', sources, elapsed, fromAPI }) => {
+const ChatBubble: React.FC<{ 
+  msg: Message; 
+  side?: 'user' | 'bot'; 
+  sources?: SourceHit[]; 
+  elapsed?: string; 
+  fromAPI?: boolean;
+  onFeedback?: (msg: Message, rating: 'good' | 'bad') => void;
+}> = ({ msg, side = 'bot', sources, elapsed, fromAPI, onFeedback }) => {
   const isUser = side === 'user'
   
   // Leemos las fuentes desde msg.sources (RAG Backend) o desde el prop
@@ -67,17 +74,62 @@ const ChatBubble: React.FC<{ msg: Message; side?: 'user' | 'bot'; sources?: Sour
   // Validación de fecha segura
   const timeString = new Date(msg.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
+  // Estado local para manejar el feedback visualmente de inmediato
+  const [feedback, setFeedback] = useState<'good' | 'bad' | null>(null)
+
+  const handleFeedback = (type: 'good' | 'bad') => {
+    if (feedback) return; // Solo permite votar una vez
+    setFeedback(type);
+    if (onFeedback) {
+      onFeedback(msg, type);
+    }
+  }
+
   return (
     <div className={`msg ${side}`}>
       <div className={`msg-avatar ${side}`}>{isUser ? 'OP' : '🤖'}</div>
-      <div>
+      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minWidth: 0 }}>
         <div className="msg-bubble">
           {/* Usamos el parser seguro en lugar del HTML crudo */}
           <SafeMarkdown text={msg.content || ''} />
           
           {finalSources.length > 0 && <Sources sources={finalSources} elapsed={elapsed} fromAPI={fromAPI} />}
         </div>
-        <div className="msg-time">{timeString}</div>
+        
+        <div className="msg-time" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', padding: '0 4px' }}>
+          <span>{timeString}</span>
+          
+          {/* Botones de Feedback (Solo visibles en los mensajes de BARB) */}
+          {!isUser && (
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              {feedback === 'good' && <span style={{ fontSize: '10px', color: 'var(--green, #059669)', fontWeight: 600 }}>¡Gracias por el feedback!</span>}
+              {feedback === 'bad' && <span style={{ fontSize: '10px', color: 'var(--ink3)' }}>Registrado para mejorar.</span>}
+              
+              {!feedback && (
+                <>
+                  <button 
+                    onClick={() => handleFeedback('good')}
+                    title="Buena respuesta"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '14px', opacity: 0.6, filter: 'grayscale(100%)', transition: 'all 0.2s ease' }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.filter = 'grayscale(0%)'; e.currentTarget.style.transform = 'scale(1.1)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.filter = 'grayscale(100%)'; e.currentTarget.style.transform = 'scale(1)'; }}
+                  >
+                    👍
+                  </button>
+                  <button 
+                    onClick={() => handleFeedback('bad')}
+                    title="Mala respuesta"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '14px', opacity: 0.6, filter: 'grayscale(100%)', transition: 'all 0.2s ease' }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.filter = 'grayscale(0%)'; e.currentTarget.style.transform = 'scale(1.1)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.filter = 'grayscale(100%)'; e.currentTarget.style.transform = 'scale(1)'; }}
+                  >
+                    👎
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
