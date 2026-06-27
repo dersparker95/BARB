@@ -811,35 +811,78 @@ export default function DocChat() {
   return (
     <div className="two-panel w-full h-full relative">
       
-      {/* OVERLAY FONDO OSCURO PARA MOVIL */}
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/40 z-40 md:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
-
       {/* -----------------------------------------------------------------------
-       * Panel izquierdo (AHORA RESPONSIVO)
+       * Panel izquierdo — en desktop siempre visible, en móvil colapsable
        * -------------------------------------------------------------------- */}
       <div
-        className={`panel-left transition-transform duration-300 ${
-          isSidebarOpen
-            ? 'flex flex-col absolute left-0 top-0 z-50 h-full w-[280px] bg-[var(--bg)] shadow-2xl translate-x-0 overflow-y-auto'
-            : 'hidden md:flex md:flex-col'
-        }`}
+        className="panel-left"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          // En móvil: si está cerrado, solo mostramos la franja del botón hamburguesa
+          // En desktop: siempre ancho completo
+        }}
       >
-        {/* ENCABEZADO MOVIL DEL PANEL */}
-        <div className="md:hidden flex justify-between items-center px-4 pt-4 pb-2 mb-2 border-b border-[var(--border)] shrink-0">
-          <span className="font-bold text-[var(--ink)]">Filtros y OTs</span>
+        {/* ── Cabecera del panel: título + botón hamburguesa (solo móvil) ── */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 12px',
+            borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
+          }}
+        >
+          {/* Título — solo visible cuando el panel está expandido o en desktop */}
+          {(isSidebarOpen || true) && (
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              Filtros y OTs
+            </span>
+          )}
+
+          {/* Botón hamburguesa — solo en móvil */}
           <button
-            onClick={() => setIsSidebarOpen(false)}
-            className="text-[var(--ink2)] p-1 hover:text-[var(--red)] transition"
-            aria-label="Cerrar panel"
+            type="button"
+            className="md:hidden"
+            onClick={() => setIsSidebarOpen(prev => !prev)}
+            aria-expanded={isSidebarOpen}
+            aria-label={isSidebarOpen ? 'Colapsar filtros' : 'Expandir filtros'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+              borderRadius: 7,
+              border: '1px solid var(--border)',
+              background: isSidebarOpen ? 'var(--blue-bg, #eff6ff)' : 'var(--surface)',
+              color: isSidebarOpen ? 'var(--blue)' : 'var(--ink2)',
+              cursor: 'pointer',
+              flexShrink: 0,
+              marginLeft: 'auto',
+              transition: 'background 0.15s, color 0.15s',
+            }}
           >
-            ✕
+            {isSidebarOpen ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            )}
           </button>
         </div>
+
+        {/* ── Contenido colapsable: oculto en móvil cuando isSidebarOpen=false ── */}
+        <div
+          className={isSidebarOpen ? 'flex flex-col flex-1 overflow-y-auto md:flex md:flex-col md:flex-1 md:overflow-y-auto' : 'hidden md:flex md:flex-col md:flex-1 md:overflow-y-auto'}
+        >
 
         {/* Órdenes de Trabajo */}
         <div className="panel-section">
@@ -1054,81 +1097,14 @@ export default function DocChat() {
             </button>
           </div>
         )}
-      </div>
+        </div>{/* fin contenido colapsable */}
+      </div>{/* fin panel-left */}
 
       {/* -----------------------------------------------------------------------
        * Panel derecho
        * -------------------------------------------------------------------- */}
 
       <div className="panel-right">
-
-        {/* ── Header móvil con botón hamburguesa ── solo visible en móvil ── */}
-        <div
-          className="md:hidden"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            padding: '8px 12px',
-            borderBottom: '1px solid var(--border)',
-            flexShrink: 0,
-            gap: 10,
-          }}
-        >
-          {/* Botón hamburguesa — abre/cierra el panel lateral de filtros */}
-          <button
-            type="button"
-            onClick={() => setIsSidebarOpen(prev => !prev)}
-            aria-expanded={isSidebarOpen}
-            aria-label={isSidebarOpen ? 'Cerrar filtros' : 'Abrir filtros'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              border: '1px solid var(--border)',
-              background: isSidebarOpen ? 'var(--blue-bg, #eff6ff)' : 'var(--surface)',
-              color: isSidebarOpen ? 'var(--blue)' : 'var(--ink)',
-              cursor: 'pointer',
-              flexShrink: 0,
-              transition: 'background 0.15s, color 0.15s',
-            }}
-          >
-            {isSidebarOpen ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <line x1="3" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="18" x2="21" y2="18" />
-              </svg>
-            )}
-          </button>
-
-          {/* Contexto resumido en el header móvil */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, flex: 1, overflow: 'hidden' }}>
-            {discipline ? (
-              <>
-                <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 99, background: 'var(--blue-bg, #eff6ff)', color: 'var(--blue)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  ◉ {discipline}
-                </span>
-                {selectedMachineRecord && (
-                  <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 99, background: 'var(--surface)', color: 'var(--ink2)', border: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
-                    ⚙ {selectedMachineRecord.name ?? selectedMachineRecord.nombre ?? selectedMachineRecord.id}
-                  </span>
-                )}
-              </>
-            ) : (
-              <span style={{ fontSize: 12, color: 'var(--ink3)' }}>
-                Sin disciplina seleccionada
-              </span>
-            )}
-          </div>
-        </div>
 
         {/* Barra manual activo */}
         {activeManual && (
@@ -1157,7 +1133,7 @@ export default function DocChat() {
         )}
 
         {/* Contexto desktop — tags de planta/disciplina/máquina — solo desktop */}
-        <div className="context-tags hidden md:flex" style={{ flexShrink: 0, alignItems: 'center' }}>
+        <div className="context-tags" style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
           {!discipline ? (
             <span className="ctx-empty">
               {t.docChat?.emptyContext ?? 'Selecciona una disciplina para comenzar.'}
