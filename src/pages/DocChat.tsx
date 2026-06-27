@@ -267,6 +267,7 @@ export default function DocChat() {
   const [uploadPct, setUploadPct] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false) // ESTADO PARA MOVIL
+  const [pendingImages, setPendingImages] = useState<Array<{ id: string; dataUrl: string; name: string }>>([])
 
   const [plants, setPlants] = useState<PlantRecord[]>([])
   const [disciplines, setDisciplines] = useState<DisciplineRecord[]>([])
@@ -280,6 +281,7 @@ export default function DocChat() {
 
   const areaRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevDisciplineRef = useRef<string | null>(discipline)
   const prevDocMachineRef = useRef(docMachine)
@@ -443,12 +445,9 @@ export default function DocChat() {
    * -------------------------------------------------------------------------- */
 
   const filteredOTs = useMemo(() => {
-    // Sin ningún filtro activo → mostrar todas
-    const hasPlant = Boolean(plant)
-    const hasMachine = Boolean(docMachine && docMachine !== 'all')
-
-    // Si no hay ningún filtro activo, devolver todas las OTs
-    if (!hasPlant && !hasMachine) return workOrders
+    const hasPlant      = Boolean(plant)
+    const hasDiscipline = Boolean(discipline)
+    const hasMachine    = Boolean(docMachine && docMachine !== 'all')
 
     return workOrders.filter(workOrder => {
       const otMachineId = normalizeId(
@@ -456,26 +455,38 @@ export default function DocChat() {
       )
       const machine = machinesById.get(otMachineId)
 
-      // Filtro de Máquina — prioridad máxima: si hay máquina activa, solo OTs de esa máquina
-      if (hasMachine) {
-        return otMachineId === normalizeId(docMachine)
-      }
+      // ── 1. MÁQUINA (filtro más específico) ──────────────────────
+      // Si hay máquina seleccionada, SOLO mostramos OTs de esa máquina
+      if (hasMachine && otMachineId !== normalizeId(docMachine)) return false
 
-      // Filtro de Planta — si hay planta activa, incluir OTs cuya planta coincida
-      // o cuya planta sea desconocida (para no perder OTs sin planta asignada)
+      // ── 2. PLANTA ────────────────────────────────────────────────
+      // Si hay planta seleccionada, excluimos solo las OTs que tengan
+      // una planta asignada DISTINTA (las sin planta siempre pasan)
       if (hasPlant) {
         const otPlantId = normalizeId(
           workOrder.plant_id ?? workOrder.planta_id ?? machine?.plant_id ?? machine?.planta_id
         )
-        // Si la OT no tiene planta asignada, la mostramos igual
-        if (!otPlantId) return true
-        // Si tiene planta, solo mostrar si coincide
-        return otPlantId === normalizeId(plant)
+        if (otPlantId && otPlantId !== normalizeId(plant)) return false
+      }
+
+      // ── 3. DISCIPLINA ────────────────────────────────────────────
+      // Si hay disciplina seleccionada, excluimos solo las OTs que
+      // tengan una disciplina asignada DISTINTA (las sin disciplina pasan)
+      if (hasDiscipline && selectedDisciplineRecord) {
+        const targetDiscId = normalizeId(selectedDisciplineRecord.id)
+        const otDiscId = normalizeId(
+          workOrder.discipline_id ??
+          workOrder.disciplina_id ??
+          machine?.discipline_id ??
+          machine?.disciplina_id ??
+          machine?.disciplineId
+        )
+        if (otDiscId && otDiscId !== targetDiscId) return false
       }
 
       return true
     })
-  }, [workOrders, machinesById, plant, docMachine])
+  }, [workOrders, machinesById, plant, discipline, docMachine, selectedDisciplineRecord])
 
   /* ---------------------------------------------------------------------------
    * Procesamiento de archivos
@@ -677,7 +688,17 @@ export default function DocChat() {
     const inputElement = document.getElementById('doc-input') as HTMLTextAreaElement | null
     inputElement?.style.setProperty('height', 'auto')
 
-    pushDocMessage({ role: 'user', content: query, timestamp: Date.now() })
+    // Construir el contenido del mensaje: texto + imágenes adjuntas
+    const userContent = pendingImages.length > 0
+      ? `${query}\n\n[${pendingImages.length} imagen(es) adjunta(s)]`
+      : query
+    pushDocMessage({
+      role: 'user',
+      content: userContent,
+      timestamp: Date.now(),
+      images: pendingImages.map(img => img.dataUrl),
+    })
+    setPendingImages([])
 
     const recentHistory = docMessages
       .slice(-6)
@@ -696,6 +717,7 @@ export default function DocChat() {
           machine: chatMachine,
           history: recentHistory,
           active_manual: activeManual?.name ?? null,
+          images: pendingImages.map(img => img.dataUrl),
         }),
       })
 
@@ -745,10 +767,32 @@ export default function DocChat() {
     apiRoot,
     nLang,
     pushDocMessage,
+    pendingImages,
     activeManual,
     t,
     setLoading,
   ])
+
+  const handleCameraCapture = useCallback((files: FileList | null) => {
+    if (!files) return
+    Array.from(files).forEach(file => {
+      if (!file.type.startsWith('image/')) return
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string
+        if (!dataUrl) return
+        setPendingImages(prev => [
+          ...prev,
+          { id: `img-${Date.now()}-${Math.random().toString(36).slice(2)}`, dataUrl, name: file.name },
+        ])
+      }
+      reader.readAsDataURL(file)
+    })
+  }, [])
+
+  const removePendingImage = useCallback((id: string) => {
+    setPendingImages(prev => prev.filter(img => img.id !== id))
+  }, [])
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1046,18 +1090,28 @@ export default function DocChat() {
         {/* Contexto y Botón Menú Móvil */}
         <div className="context-tags" style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
           
-          {/* NUEVO: Botón Hamburguesa para Móviles */}
+          {/* Botón Hamburguesa — toggle abre/cierra el panel en móvil */}
           <button
             type="button"
-            className="md:hidden flex items-center justify-center p-1.5 mr-2 rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)]"
-            onClick={() => setIsSidebarOpen(true)}
-            title="Mostrar Filtros y OTs"
+            className="md:hidden flex items-center justify-center p-1.5 mr-2 rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] transition-colors active:bg-[var(--blue-bg)]"
+            onClick={() => setIsSidebarOpen(prev => !prev)}
+            title={isSidebarOpen ? 'Cerrar panel' : 'Mostrar Filtros y OTs'}
+            aria-expanded={isSidebarOpen}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
+            {isSidebarOpen ? (
+              /* X cuando está abierto */
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            ) : (
+              /* Hamburguesa cuando está cerrado */
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            )}
           </button>
 
           {!discipline ? (
@@ -1250,6 +1304,34 @@ export default function DocChat() {
               onKeyDown={handleKeyDown}
             />
 
+            {/* Botón cámara — abre selector de foto en móvil (capture=environment) */}
+            <button
+              type="button"
+              title="Tomar foto"
+              aria-label="Tomar foto"
+              disabled={!discipline || loading}
+              onClick={() => cameraInputRef.current?.click()}
+              style={{
+                flexShrink: 0,
+                background: 'none',
+                border: 'none',
+                padding: '4px 6px',
+                cursor: 'pointer',
+                color: 'var(--ink3)',
+                display: 'flex',
+                alignItems: 'center',
+                opacity: (!discipline || loading) ? 0.4 : 1,
+                transition: 'color 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--blue)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--ink3)' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </button>
+
             <button
               type="button"
               className="send-btn"
@@ -1284,6 +1366,77 @@ export default function DocChat() {
               event.currentTarget.value = ''
             }}
           />
+
+          {/* Input oculto de cámara — capture=environment usa cámara trasera en móvil */}
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            title="Tomar foto"
+            aria-label="Tomar foto"
+            onChange={event => {
+              handleCameraCapture(event.target.files)
+              event.currentTarget.value = ''
+            }}
+          />
+
+          {/* Preview de imágenes pendientes antes de enviar */}
+          {pendingImages.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 8,
+                marginTop: 8,
+              }}
+            >
+              {pendingImages.map(img => (
+                <div
+                  key={img.id}
+                  style={{ position: 'relative', display: 'inline-block' }}
+                >
+                  <img
+                    src={img.dataUrl}
+                    alt={img.name}
+                    style={{
+                      width: 72,
+                      height: 72,
+                      objectFit: 'cover',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removePendingImage(img.id)}
+                    aria-label="Quitar imagen"
+                    style={{
+                      position: 'absolute',
+                      top: -6,
+                      right: -6,
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      background: 'var(--red, #dc2626)',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      lineHeight: 1,
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {uploading && (
             <div className="mt-2 text-xs text-[var(--ink3)]">
