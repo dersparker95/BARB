@@ -835,13 +835,11 @@ ${context}
 
   return (
     <div className="two-panel w-full h-full">
-
       {/* -----------------------------------------------------------------------
        * Panel izquierdo
        * -------------------------------------------------------------------- */}
 
       <div className="panel-left">
-
         {/* Órdenes de Trabajo */}
         <div className="panel-section">
           <span className="panel-label">
@@ -928,9 +926,7 @@ ${context}
 
         {/* Planta */}
         <div className="panel-section">
-          <span className="panel-label">
-            {t.common?.plant ?? 'Planta / Ubicación'}
-          </span>
+          <span className="panel-label">{t.common?.plant ?? 'Planta / Ubicación'}</span>
           <select
             className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60"
             value={String(plant ?? '')}
@@ -947,9 +943,7 @@ ${context}
 
         {/* Disciplina */}
         <div className="panel-section">
-          <span className="panel-label">
-            {t.common?.discipline ?? 'Disciplina'}
-          </span>
+          <span className="panel-label">{t.common?.discipline ?? 'Disciplina'}</span>
           <select
             className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60"
             value={discipline ?? ''}
@@ -961,9 +955,7 @@ ${context}
               clearDocMessages()
             }}
           >
-            <option value="">
-              {t.docChat?.selectDiscipline ?? 'Seleccionar disciplina...'}
-            </option>
+            <option value="">{t.docChat?.selectDiscipline ?? 'Seleccionar disciplina...'}</option>
             {disciplines.map((disciplineRecord, index) => {
               const name = normalizeCatalogName(disciplineRecord)
               const id = disciplineRecord.id ?? disciplineRecord.disciplina_id ?? index
@@ -992,9 +984,7 @@ ${context}
               clearDocMessages()
             }}
           >
-            <option value="">
-              {t.docChat?.selectMachine ?? 'Seleccionar máquina...'}
-            </option>
+            <option value="">{t.docChat?.selectMachine ?? 'Seleccionar máquina...'}</option>
             {availableMachines.map(machine => (
               <option key={String(machine.id)} value={String(machine.id)}>
                 {normalizeMachineLabel(machine) || String(machine.id)}
@@ -1003,17 +993,29 @@ ${context}
           </select>
         </div>
 
-      </div>
-              {/*BOTÓN GUARDAR SESIÓN (Integrado al panel izquierdo) */}
+        {/* BOTÓN GUARDAR SESIÓN (Integrado al panel izquierdo) */}
         {docMessages.length > 0 && (
-          <div className="panel-section" style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+          <div
+            className="panel-section"
+            style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border)' }}
+          >
             <button
               type="button"
               disabled={saveStatus === 'saving'}
               className="w-full rounded-lg px-3 py-2 text-[13px] font-medium transition shadow-sm outline-none"
               style={{
-                background: saveStatus === 'saved' ? 'var(--green-bg, #d1fae5)' : saveStatus === 'error' ? 'var(--red-bg, #fee2e2)' : 'var(--blue)',
-                color: saveStatus === 'saved' ? 'var(--green, #059669)' : saveStatus === 'error' ? 'var(--red, #dc2626)' : '#fff',
+                background:
+                  saveStatus === 'saved'
+                    ? 'var(--green-bg, #d1fae5)'
+                    : saveStatus === 'error'
+                      ? 'var(--red-bg, #fee2e2)'
+                      : 'var(--blue)',
+                color:
+                  saveStatus === 'saved'
+                    ? 'var(--green, #059669)'
+                    : saveStatus === 'error'
+                      ? 'var(--red, #dc2626)'
+                      : '#fff',
                 cursor: saveStatus === 'saving' ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1028,7 +1030,16 @@ ${context}
               {saveStatus === 'error' && '❌ Error'}
               {saveStatus === 'idle' && (
                 <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                     <polyline points="17 21 17 13 7 13 7 21"></polyline>
                     <polyline points="7 3 7 8 15 8"></polyline>
@@ -1039,13 +1050,13 @@ ${context}
             </button>
           </div>
         )}
+      </div>
 
       {/* -----------------------------------------------------------------------
        * Panel derecho
        * -------------------------------------------------------------------- */}
 
       <div className="panel-right">
-
         {/* Barra manual activo */}
         {activeManual && (
           <div className="manual-active-bar">
@@ -1085,10 +1096,7 @@ ${context}
               </span>
 
               {activeManual && (
-                <span
-                  className="ctx-tag"
-                  style={{ background: 'var(--blue-bg)', color: 'var(--blue)' }}
-                >
+                <span className="ctx-tag" style={{ background: 'var(--blue-bg)', color: 'var(--blue)' }}>
                   📖{' '}
                   {activeManual.name.length > 26
                     ? `${activeManual.name.slice(0, 24)}…`
@@ -1103,6 +1111,9 @@ ${context}
                   ⚙ {selectedMachineRecord.name ?? selectedMachineRecord.nombre ?? selectedMachineRecord.id}
                 </span>
               )}
+            </>
+          )}
+        </div>
 
         {/* Modal guardar sesión */}
         {saveModalOpen && (
@@ -1135,8 +1146,7 @@ ${context}
                 💾 {t.docChat?.saveSession ?? 'Guardar sesión'}
               </h3>
               <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--ink3)' }}>
-                {docMessages.length} mensajes ·{' '}
-                {discipline ?? '—'} ·{' '}
+                {docMessages.length} mensajes · {discipline ?? '—'} ·{' '}
                 {normalizePlantLabel(selectedPlantRecord) || '—'}
               </p>
 
@@ -1215,11 +1225,7 @@ ${context}
             <div className="chat-empty" style={{ background: 'transparent' }} />
           ) : (
             docMessages.map((message, index) => (
-              <ChatBubble
-                key={index}
-                msg={message}
-                side={message.role === 'user' ? 'user' : 'bot'}
-              />
+              <ChatBubble key={index} msg={message} side={message.role === 'user' ? 'user' : 'bot'} />
             ))
           )}
 
@@ -1285,8 +1291,7 @@ ${context}
           </div>
 
           <div className="input-hint">
-            {t.docChat?.inputHint ??
-              'Enter para enviar · Shift+Enter nueva línea · '}
+            {t.docChat?.inputHint ?? 'Enter para enviar · Shift+Enter nueva línea · '}
             {activeManual
               ? `📖 ${activeManual.name.slice(0, 30)}`
               : 'Powered by FastAPI + LM Studio'}
@@ -1339,7 +1344,6 @@ ${context}
             </div>
           )}
         </div>
-
       </div>
     </div>
   )
