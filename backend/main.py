@@ -1776,7 +1776,98 @@ async def save_chat_feedback(payload: ChatFeedbackRequest):
         raise HTTPException(status_code=500, detail=f"Error al guardar feedback: {str(e)}")
     finally:
         if conn: release_db_connection(conn)
+# =============================================================================
+# ENDPOINTS — TOPOLOGÍA AUTOMÁTICA
+# =============================================================================
 
+@app.get("/api/topologia")
+@app.get("/api/topology")
+def get_topologia():
+    """
+    Genera un mapa topológico dinámico leyendo las tablas maquina, planta y disciplina.
+    No requiere tablas de coordenadas manuales.
+    """
+    try:
+        # Extraemos los datos básicos de la BD
+        plantas = _query_all("SELECT planta_id, nombre FROM planta")
+        disciplinas = _query_all("SELECT disciplina_id, nombre FROM disciplina")
+        maquinas = _query_all("SELECT maquina_id, nombre, planta_id, disciplina_id FROM maquina")
+        
+        nodos = []
+        conexiones = []
+        
+        # 1. Nivel Superior: Plantas (Y = 100)
+        x_offset_planta = 500
+        for p in plantas:
+            nodos.append({
+                "nodo_id": f"p_{p['planta_id']}",
+                "nombre_visual": p["nombre"],
+                "tipo": "Planta",
+                "icono": "🏭",
+                "pos_x": x_offset_planta,
+                "pos_y": 100,
+                "estado_actual": "operativo"
+            })
+            x_offset_planta += 300
+            
+        # 2. Nivel Medio: Disciplinas (Y = 300)
+        x_offset_disc = 200
+        for d in disciplinas:
+            n_id = f"d_{d['disciplina_id']}"
+            nodos.append({
+                "nodo_id": n_id,
+                "nombre_visual": d["nombre"],
+                "tipo": "Disciplina",
+                "icono": "⚙️",
+                "pos_x": x_offset_disc,
+                "pos_y": 300,
+                "estado_actual": "operativo"
+            })
+            # Conectamos cada disciplina a la primera planta disponible (raíz)
+            if plantas:
+                conexiones.append({
+                    "conexion_id": f"conn_p{plantas[0]['planta_id']}_{n_id}",
+                    "origen_nodo_id": f"p_{plantas[0]['planta_id']}",
+                    "destino_nodo_id": n_id,
+                    "tipo_relacion": "jerarquia"
+                })
+            x_offset_disc += 250
+            
+        # 3. Nivel Inferior: Máquinas (Y = 500)
+        x_offset_maq = 50
+        for m in maquinas:
+            n_id = f"m_{m['maquina_id']}"
+            nodos.append({
+                "nodo_id": n_id,
+                "maquina_id": m["maquina_id"],
+                "nombre_visual": m["nombre"],
+                "tipo": "Máquina",
+                "icono": "🤖",
+                "pos_x": x_offset_maq,
+                "pos_y": 500,
+                "estado_actual": "operativo"
+            })
+            
+            # Conectamos la máquina a su disciplina correspondiente
+            if m.get("disciplina_id"):
+                conexiones.append({
+                    "conexion_id": f"conn_d{m['disciplina_id']}_{n_id}",
+                    "origen_nodo_id": f"d_{m['disciplina_id']}",
+                    "destino_nodo_id": n_id,
+                    "tipo_relacion": "pertenece"
+                })
+            x_offset_maq += 180
+
+        return {
+            "nodos": nodos,
+            "conexiones": conexiones
+        }
+        
+    except Exception as e:
+        print(f"Error generando topología automática: {e}")
+        # Fallback de seguridad en caso de que fallen las tablas
+        return {"nodos": [], "conexiones": []}
+    
 if __name__ == "__main__":
     import uvicorn
     import os
