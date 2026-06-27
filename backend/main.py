@@ -746,6 +746,21 @@ class ChatRequest(BaseModel):
     # Limita el historial a las últimas 10 interacciones para evitar exceder el contexto del LLM.
     history: list[MessageItem] = Field(default_factory=list, max_length=10)
 
+class ChatSessionRequest(BaseModel):
+    title: str
+    saved_by: Optional[str] = "operador"
+    discipline: Optional[str] = None
+    plant_id: Optional[str] = None
+    plant_name: Optional[str] = None
+    machine_id: Optional[str] = None
+    machine_name: Optional[str] = None
+    active_manual: Optional[str] = None
+    messages: list[dict] = Field(default_factory=list)
+    metadata_info: dict = Field(default_factory=dict, alias="metadata")
+
+class ChatFeedbackRequest(BaseModel):
+    message_content: str
+    rating: str
 
 class UserCreateRequest(BaseModel):
     nombre: str
@@ -791,14 +806,41 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_checks():
-    """Valida dependencias críticas al iniciar el servidor."""
+    """Valida dependencias críticas y asegura las tablas necesarias al iniciar el servidor."""
     if not DEEPSEEK_API_KEY:
         print("⚠️  ADVERTENCIA: DEEPSEEK_API_KEY no configurada. El endpoint /api/chat estará degradado.")
     try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # Auto-creación de tablas para el Chat y Feedback (si no existen)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS chat_session (
+                    session_id SERIAL PRIMARY KEY,
+                    title VARCHAR(255),
+                    saved_by VARCHAR(100),
+                    discipline VARCHAR(100),
+                    plant_id VARCHAR(50),
+                    plant_name VARCHAR(255),
+                    machine_id VARCHAR(50),
+                    machine_name VARCHAR(255),
+                    active_manual VARCHAR(255),
+                    messages JSONB,
+                    metadata JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS chat_feedback (
+                    feedback_id SERIAL PRIMARY KEY,
+                    message_content TEXT,
+                    rating VARCHAR(10),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            conn.commit()
     except Exception as e:
-        print(f"⚠️  ADVERTENCIA: No se pudo conectar a PostgreSQL al iniciar: {e}")
+        print(f"⚠️  ADVERTENCIA: No se pudo conectar a PostgreSQL o crear tablas al iniciar: {e}")
+    finally:
+        if 'conn' in locals() and conn:
+            release_db_connection(conn)
 
 
 @app.on_event("shutdown")
@@ -1668,7 +1710,72 @@ async def chat(payload: ChatRequest):
 
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error de comunicación con el motor de IA: {type(e).__name__}")
+# =============================================================================
+# ENDPOINTS — HISTORIAL DE CHAT Y FEEDBACK
+# =============================================================================
 
+@app.post("/api/chat-sessions")
+@app.post("/chat-sessions")
+async def save_chat_session(payload: ChatSessionRequest):
+    """Guarda una sesión completa de chat (memoria RAG) en PostgreSQL."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                INSERT INTO chat_session (
+                    title, saved_by, discipline, plant_id, plant_name, 
+                    machine_id, machine_name, active_manual, messages, metadata
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING session_id;
+                """,
+                (
+                    payload.title, payload.saved_by, payload.discipline, 
+                    payload.plant_id, payload.plant_name, payload.machine_id, 
+                    payload.machine_name, payload.active_manual, 
+                    json.dumps(payload.messages), json.dumps(payload.metadata_info)
+                )
+            )
+            row = cursor.fetchone()
+            conn.commit()
+            return {"status": "success", "session_id": row["session_id"]}
+    except Exception as e:
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al guardar sesión: {str(e)}")
+    finally:
+        if conn: release_db_connection(conn)
+
+@app.get("/api/chat-sessions")
+async def get_chat_sessions():
+    """Recupera el historial de todas las sesiones de chat guardadas."""
+    try:
+        rows = _query_all("SELECT * FROM chat_session ORDER BY created_at DESC LIMIT 50")
+        for row in rows:
+            if isinstance(row.get("created_at"), datetime):
+                row["created_at"] = row["created_at"].isoformat()
+        return rows
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener sesiones: {str(e)}")
+
+@app.post("/api/chat-feedback")
+async def save_chat_feedback(payload: ChatFeedbackRequest):
+    """Guarda la calificación (👍 / 👎) de una respuesta de BARB."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO chat_feedback (message_content, rating) VALUES (%s, %s)",
+                (payload.message_content, payload.rating)
+            )
+            conn.commit()
+            return {"status": "success"}
+    except Exception as e:
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al guardar feedback: {str(e)}")
+    finally:
+        if conn: release_db_connection(conn)
 
 if __name__ == "__main__":
     import uvicorn

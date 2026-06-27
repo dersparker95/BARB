@@ -1279,7 +1279,18 @@ export default function DocChat() {
             <div className="chat-empty" style={{ background: 'transparent' }} />
           ) : (
             docMessages.map((message, index) => (
-              <ChatBubble key={index} msg={message} side={message.role === 'user' ? 'user' : 'bot'} />
+              <ChatBubble 
+                key={index} 
+                msg={message} 
+                side={message.role === 'user' ? 'user' : 'bot'} 
+                onFeedback={(msg, rating) => {
+                  fetch(`${apiRoot}/chat-feedback`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message_content: msg.content, rating })
+                  }).catch(err => console.error("Error enviando feedback:", err));
+                }}
+              />
             ))
           )}
 
@@ -1289,7 +1300,6 @@ export default function DocChat() {
             </div>
           )}
         </div>
-
         {/* Zona de entrada */}
         <div className="input-zone" style={{ flexShrink: 0 }}>
           <div
