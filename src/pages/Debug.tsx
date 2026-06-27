@@ -16,6 +16,7 @@ export default function DebugChat() {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false) // ESTADO PARA RESPONSIVIDAD
   
   // Datos del backend
   const [machines, setMachines] = useState([])
@@ -106,13 +107,40 @@ export default function DebugChat() {
     const prompt = `Analiza el siguiente historial de fallas del equipo "${selectedMachine.name || selectedMachine.nombre}":\n\n${historyText}\n\n¿Ves algún patrón de falla repetitiva? ¿Qué componente deberíamos inspeccionar a fondo para evitar que vuelva a ocurrir?`;
     
     setInput(prompt);
+    // En móviles, cerramos el menú automáticamente al inyectar
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
   }
 
   return (
-    <div className="two-panel w-full h-full">
+    <div className="two-panel w-full h-full relative">
       
-      {/* PANEL IZQUIERDO: Selector de Máquinas y Ficha Histórica */}
-      <div className="panel-left flex flex-col gap-4">
+      {/* OVERLAY FONDO OSCURO PARA MOVIL */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* PANEL IZQUIERDO: Selector de Máquinas y Ficha Histórica (RESPONSIVO) */}
+      <div 
+        className={`panel-left flex flex-col gap-4 transition-transform duration-300 ${
+          isSidebarOpen
+            ? 'flex absolute left-0 top-0 z-50 h-full w-[280px] bg-[var(--bg)] shadow-2xl translate-x-0'
+            : 'hidden md:flex'
+        }`}
+      >
+        {/* ENCABEZADO MOVIL DEL PANEL */}
+        <div className="md:hidden flex justify-between items-center mb-2 border-b border-[var(--border)] pb-2">
+          <span className="font-bold text-[var(--ink)]">Equipos</span>
+          <button
+            onClick={() => setIsSidebarOpen(false)}
+            className="text-[var(--ink2)] p-1 hover:text-[var(--red)] transition"
+          >
+            ✕
+          </button>
+        </div>
+
         <div className="panel-section">
           <span className="panel-label">🛠️ Diagnóstico de Equipos</span>
           <p className="text-xs text-[var(--ink3)] mb-4">Selecciona una máquina para analizar su patrón de fallas con IA.</p>
@@ -164,17 +192,32 @@ export default function DebugChat() {
 
       {/* PANEL DERECHO: El Chat */}
       <div className="panel-right flex flex-col h-full bg-[var(--surface)]">
-        <div className="p-4 border-b border-[var(--border)] bg-[var(--surface)] flex justify-between items-center shrink-0">
+        <div className="p-4 border-b border-[var(--border)] bg-[var(--surface)] flex items-center shrink-0">
+          
+          {/* BOTÓN HAMBURGUESA MÓVIL */}
+          <button
+            type="button"
+            className="md:hidden flex items-center justify-center p-1.5 mr-3 rounded-md border border-[var(--border)] bg-[var(--bg-body)] text-[var(--ink)]"
+            onClick={() => setIsSidebarOpen(true)}
+            title="Seleccionar Equipo"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+
           <div>
             <h2 className="text-base font-black text-[var(--ink1)]">Debug & Análisis Predictivo</h2>
-            <p className="text-xs text-[var(--ink3)]">Analiza causas raíz y solicita sugerencias de mantenimiento.</p>
+            <p className="text-xs text-[var(--ink3)] hidden sm:block">Analiza causas raíz y solicita sugerencias de mantenimiento.</p>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={areaRef}>
           {messages.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-[var(--ink3)] text-sm italic">
-              Selecciona un equipo e inyecta su historial, o haz una pregunta directa.
+            <div className="h-full flex items-center justify-center text-[var(--ink3)] text-sm italic text-center px-4">
+              Selecciona un equipo en el panel lateral e inyecta su historial, o haz una pregunta directa.
             </div>
           ) : (
             messages.map((msg, idx) => (
