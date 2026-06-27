@@ -10,12 +10,12 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null) // 🔥 Ahora el error es un string descriptivo
 
   const { setUser, apiBase, setLoading, loading, dark, setDark, lang } = useAppContext()
   const navigate = useNavigate()
 
-  // 🔥 OPTIMIZACIÓN: Memorizamos la instancia de la API para que no se recree al teclear
+  // OPTIMIZACIÓN: Memorizamos la instancia de la API
   const api = useMemo(() => createApiService((apiBase || 'http://localhost:9000/api').replace(/\/$/, '')), [apiBase])
   const t = useMemo(() => getTranslations(lang), [lang])
 
@@ -32,13 +32,23 @@ const Login: React.FC = () => {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (loading || !email || !password) return
+    // 🔥 BLINDAJE FRONTEND 1: Limpieza de espacios y validación de longitud
+    const cleanUser = email.trim()
+    const cleanPassword = password.trim()
+
+    if (loading || !cleanUser || !cleanPassword) return
+
+    if (cleanUser.length > 100 || cleanPassword.length > 100) {
+      setError('Las credenciales exceden la longitud permitida.')
+      return
+    }
 
     setLoading(true)
-    setError(false)
+    setError(null)
 
     try {
-      const resp = await api.auth.login(email, password)
+      // 🔥 Enviamos el usuario limpio (sin espacios accidentales al inicio o final)
+      const resp = await api.auth.login(cleanUser, cleanPassword)
       if (!resp?.user) throw new Error('Respuesta de login inválida')
 
       const destByRole: Record<string, string> = {
@@ -56,18 +66,18 @@ const Login: React.FC = () => {
         token: resp.token,
       })
 
-      // 🔥 BLINDAJE: Fallback seguro si el rol no existe en el diccionario
+      // BLINDAJE FRONTEND 2: Fallback seguro si el rol no existe
       const destination = destByRole[String(resp.user.role).toLowerCase()] || '/menu'
       navigate(destination, { replace: true })
     } catch {
       setUser(null)
-      setError(true)
+      setError(t.login?.incorrectCredentials || 'Credenciales incorrectas. Verifica tu usuario y contraseña.')
     } finally {
       setLoading(false)
     }
   }
 
-  const isSubmitDisabled = loading || !email || !password
+  const isSubmitDisabled = loading || !email.trim() || !password.trim()
   
   // Variables seguras para internacionalización
   const connectingText = t.common?.connecting || 'Conectando...'
@@ -75,7 +85,6 @@ const Login: React.FC = () => {
   const showPassText = t.login?.showPassword || 'Mostrar contraseña'
 
   return (
-    // 🔥 FIX MÓVIL: Aseguramos el comportamiento del viewport dinámico
     <div className="login-screen min-h-[100dvh] flex flex-col items-center justify-center">
       <div className="login-theme-toggle absolute top-4 right-4">
         <button
@@ -103,9 +112,10 @@ const Login: React.FC = () => {
             <input
               id="emailInput"
               value={email}
+              maxLength={100} // 🔥 PREVENCIÓN: Limita payloads inmensos
               onChange={(e) => {
                 setEmail(e.target.value)
-                if (error) setError(false)
+                if (error) setError(null)
               }}
               className="form-input"
               placeholder={t.login?.usernamePlaceholder || 'Usuario o correo electrónico'}
@@ -120,9 +130,10 @@ const Login: React.FC = () => {
               <input
                 id="passwordInput"
                 value={password}
+                maxLength={100} // 🔥 PREVENCIÓN: Limita payloads inmensos
                 onChange={(e) => {
                   setPassword(e.target.value)
-                  if (error) setError(false)
+                  if (error) setError(null)
                 }}
                 type={showPassword ? 'text' : 'password'}
                 className="form-input login-password-input"
@@ -154,13 +165,14 @@ const Login: React.FC = () => {
             </div>
           </div>
 
+          {/* 🔥 Ahora el mensaje de error es dinámico */}
           {error && (
-            <div className="login-error" role="alert">
-              {t.login?.incorrectCredentials || 'Credenciales incorrectas. Verifica tu usuario y contraseña.'}
+            <div className="login-error" role="alert" style={{ color: 'var(--red)', fontSize: '13px', marginTop: '8px', textAlign: 'center' }}>
+              {error}
             </div>
           )}
 
-          <button type="submit" className="btn btn-primary btn-lg" disabled={isSubmitDisabled}>
+          <button type="submit" className="btn btn-primary btn-lg" disabled={isSubmitDisabled} style={{ marginTop: '16px' }}>
             <span className="login-button-content">
               {loading ? <Spinner label={connectingText} /> : null}
               <span>{loading ? connectingText : (t.login?.loginButton || 'Ingresar')}</span>
