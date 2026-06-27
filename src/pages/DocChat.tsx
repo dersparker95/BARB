@@ -267,6 +267,7 @@ export default function DocChat() {
   const [uploading, setUploading] = useState(false)
   const [uploadPct, setUploadPct] = useState(0)
   const [dragOver, setDragOver] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false) // ESTADO PARA MOVIL
 
   const [plants, setPlants] = useState<PlantRecord[]>([])
   const [disciplines, setDisciplines] = useState<DisciplineRecord[]>([])
@@ -443,7 +444,7 @@ export default function DocChat() {
   }, [apiRoot])
 
   /* ---------------------------------------------------------------------------
-   * Filtrado de OTs
+   * Filtrado de OTs (Ahora MÁS PERMISIVO para que siempre aparezcan)
    * -------------------------------------------------------------------------- */
 
   const filteredOTs = useMemo(() => {
@@ -453,30 +454,25 @@ export default function DocChat() {
       docMachine && docMachine !== 'all' ? normalizeId(docMachine) : ''
 
     return workOrders.filter(workOrder => {
-      // 1. Extraer ID de la máquina a prueba de fallos
       const machineId = normalizeId(
         workOrder.machine_id ?? workOrder.maquina_id ?? workOrder.machineId ?? workOrder.maquinaId
       )
       const machine = machinesById.get(machineId)
 
-      // 2. Filtro de Máquina
+      // 1. Filtro de Máquina (Si el usuario eligió una, DEBE coincidir)
       if (targetMachineId && machineId !== targetMachineId) return false
 
-      // 3. Filtro de Planta (Busca en la OT primero, y si no, en la Máquina)
-      if (targetPlantId) {
-        const otPlantId = normalizeId(
-          workOrder.plant_id ?? workOrder.planta_id ?? machine?.plant_id ?? machine?.planta_id
-        )
-        if (otPlantId !== targetPlantId) return false
-      }
+      // 2. Filtro de Planta (Solo ocultamos si la OT TIENE planta y es DISTINTA)
+      const otPlantId = normalizeId(
+        workOrder.plant_id ?? workOrder.planta_id ?? machine?.plant_id ?? machine?.planta_id
+      )
+      if (targetPlantId && otPlantId && otPlantId !== targetPlantId) return false
 
-      // 4. Filtro de Disciplina (Busca en la Máquina asociada)
-      if (targetDisciplineId) {
-        const otDiscId = normalizeId(
-          machine?.discipline_id ?? machine?.disciplina_id ?? workOrder.discipline_id ?? workOrder.disciplina_id
-        )
-        if (otDiscId !== targetDisciplineId) return false
-      }
+      // 3. Filtro de Disciplina (Solo ocultamos si la OT TIENE disciplina y es DISTINTA)
+      const otDiscId = normalizeId(
+        machine?.discipline_id ?? machine?.disciplina_id ?? workOrder.discipline_id ?? workOrder.disciplina_id
+      )
+      if (targetDisciplineId && otDiscId && otDiscId !== targetDisciplineId) return false
 
       return true
     })
@@ -582,10 +578,6 @@ export default function DocChat() {
     }
   }, [processFile])
 
-  /* ---------------------------------------------------------------------------
-   * Eliminar manual
-   * -------------------------------------------------------------------------- */
-
   const removeManual = useCallback((id: string) => {
     setManuals(previous => previous.filter(manual => manual.id !== id))
     if (activeManualId === id) setActiveManualId('')
@@ -660,10 +652,6 @@ export default function DocChat() {
     apiRoot,
   ])
 
-  /* ---------------------------------------------------------------------------
-   * Abrir modal con título auto-generado
-   * -------------------------------------------------------------------------- */
-
   const openSaveModal = useCallback(() => {
     if (!docMessages.length) return
     const firstUserMsg = docMessages.find(m => m.role === 'user')
@@ -675,7 +663,7 @@ export default function DocChat() {
   }, [docMessages])
 
   /* ---------------------------------------------------------------------------
-   * Envío de consulta
+   * Envío de consulta (CON BUG DE LOADING CORREGIDO)
    * -------------------------------------------------------------------------- */
 
   const send = useCallback(async () => {
@@ -714,6 +702,7 @@ export default function DocChat() {
       if (response.ok) {
         const data = (await response.json()) as ChatApiResponse
         pushDocMessage({ role: 'assistant', content: data.reply, timestamp: Date.now() })
+        setLoading(false) // <-- CORRECCIÓN APLICADA AQUI
         return
       }
 
@@ -725,6 +714,7 @@ export default function DocChat() {
             'El asistente está desconectado temporalmente. Revisa LM Studio.',
           timestamp: Date.now(),
         })
+        setLoading(false) // <-- CORRECCIÓN APLICADA AQUI
         return
       }
 
@@ -734,6 +724,7 @@ export default function DocChat() {
         content: `⚠️ Falla en la IA en la nube: ${errorData.detail ?? `Error ${response.status}`}`,
         timestamp: Date.now(),
       })
+      setLoading(false) // <-- CORRECCIÓN APLICADA AQUI
       return
     } catch {
       console.warn('FastAPI no disponible. Activando modo local.')
@@ -834,12 +825,37 @@ ${context}
    * -------------------------------------------------------------------------- */
 
   return (
-    <div className="two-panel w-full h-full">
-      {/* -----------------------------------------------------------------------
-       * Panel izquierdo
-       * -------------------------------------------------------------------- */}
+    <div className="two-panel w-full h-full relative">
+      
+      {/* OVERLAY FONDO OSCURO PARA MOVIL */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
 
-      <div className="panel-left">
+      {/* -----------------------------------------------------------------------
+       * Panel izquierdo (AHORA RESPONSIVO)
+       * -------------------------------------------------------------------- */}
+      <div
+        className={`panel-left transition-transform duration-300 ${
+          isSidebarOpen
+            ? 'flex absolute left-0 top-0 z-50 h-full w-[280px] bg-[var(--bg)] shadow-2xl translate-x-0'
+            : 'hidden md:flex'
+        }`}
+      >
+        {/* ENCABEZADO MOVIL DEL PANEL */}
+        <div className="md:hidden flex justify-between items-center mb-4 border-b border-[var(--border)] pb-2">
+          <span className="font-bold text-[var(--ink)]">Filtros y OTs</span>
+          <button
+            onClick={() => setIsSidebarOpen(false)}
+            className="text-[var(--ink2)] p-1 hover:text-[var(--red)] transition"
+          >
+            ✕
+          </button>
+        </div>
+
         {/* Órdenes de Trabajo */}
         <div className="panel-section">
           <span className="panel-label">
@@ -878,6 +894,9 @@ ${context}
                     setInput(
                       `Contexto de OT seleccionada:\n\n- Orden: ${title}\n- Equipo: ${machineLabel}\n- Estado: ${status} (Prioridad: ${priority})\n- Problema reportado: ${description}\n\nConsiderando esta información, `,
                     )
+                    
+                    // Si el usuario toca una OT en móvil, cerramos el panel automáticamente
+                    if (window.innerWidth < 768) setIsSidebarOpen(false)
 
                     requestAnimationFrame(() => {
                       const el = document.getElementById('doc-input') as HTMLTextAreaElement | null
@@ -1083,8 +1102,23 @@ ${context}
           </div>
         )}
 
-        {/* Contexto */}
-        <div className="context-tags" style={{ flexShrink: 0 }}>
+        {/* Contexto y Botón Menú Móvil */}
+        <div className="context-tags" style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+          
+          {/* NUEVO: Botón Hamburguesa para Móviles */}
+          <button
+            type="button"
+            className="md:hidden flex items-center justify-center p-1.5 mr-2 rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)]"
+            onClick={() => setIsSidebarOpen(true)}
+            title="Mostrar Filtros y OTs"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+
           {!discipline ? (
             <span className="ctx-empty">
               {t.docChat?.emptyContext ?? 'Selecciona una disciplina para comenzar.'}
