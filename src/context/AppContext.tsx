@@ -195,6 +195,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => { if (typeof window !== 'undefined') window.localStorage.setItem('barb.currentScreen', currentScreen) }, [currentScreen])
   useEffect(() => { if (typeof window !== 'undefined') window.localStorage.setItem('barb.dark', String(dark)) }, [dark])
+
+  // Sincroniza el estado `dark` con el DOM. El sistema de estilos lee la
+  // clase .dark en <html> para forzar el tema oscuro (sección 26 de la
+  // guía); sin este efecto el estado cambiaba pero la UI nunca lo reflejaba.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const root = document.documentElement
+    root.classList.toggle('dark', dark)
+    root.classList.toggle('light', !dark)
+  }, [dark])
+
   useEffect(() => { if (typeof window !== 'undefined') window.localStorage.setItem('barb.lang', lang) }, [lang])
   
   // Persiste las URLs solo si son válidas para el entorno actual.
