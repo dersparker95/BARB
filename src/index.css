@@ -1384,3 +1384,207 @@ body {
   align-items: center;
   gap: 8px;
 }
+/* ── Shell general de la pantalla de Debug ──────────────────────────────── */
+.debug-shell {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+ 
+/* ── Overlay para el sidebar en mobile (mismo patrón que .modal-overlay) ── */
+.debug-sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 40;
+}
+ 
+@media (min-width: 768px) {
+  .debug-sidebar-overlay {
+    display: none;
+  }
+}
+ 
+/* ── Sidebar de selección de equipo ──────────────────────────────────────
+   Por defecto extiende .panel-left. En mobile se oculta y se convierte
+   en drawer deslizante cuando tiene el modificador --open. */
+.debug-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: transform 0.3s ease;
+}
+ 
+@media (max-width: 767px) {
+  .debug-sidebar {
+    display: none;
+  }
+ 
+  .debug-sidebar--open {
+    display: flex;
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 50;
+    height: 100%;
+    width: 280px;
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(0);
+  }
+}
+ 
+.debug-sidebar-mobile-header {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+ 
+@media (max-width: 767px) {
+  .debug-sidebar-mobile-header {
+    display: flex;
+  }
+}
+ 
+.debug-sidebar-mobile-title {
+  font-weight: 700;
+  color: var(--ink);
+}
+ 
+.debug-sidebar-hint {
+  font-size: 12px;
+  color: var(--ink3);
+  margin-bottom: 16px;
+}
+ 
+/* ── Historial de OTs dentro del sidebar ─────────────────────────────────── */
+.debug-history {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+ 
+.debug-history-label {
+  margin-bottom: 8px;
+}
+ 
+.debug-history-list {
+  overflow-y: auto;
+  padding-right: 8px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+ 
+.debug-history-empty {
+  font-size: 12px;
+  color: var(--ink3);
+  font-style: italic;
+}
+ 
+.debug-history-card {
+  padding: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+ 
+.debug-history-card-title {
+  font-weight: 700;
+  color: var(--ink);
+}
+ 
+.debug-history-card-desc {
+  color: var(--ink2);
+  margin-top: 4px;
+}
+ 
+.debug-history-card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--ink3);
+}
+ 
+.debug-inject-btn {
+  margin-top: 16px;
+  width: 100%;
+}
+ 
+/* ── Topbar del panel principal (variante local de .topbar) ─────────────── */
+.debug-topbar {
+  padding: 16px;
+  align-items: center;
+  flex-shrink: 0;
+  height: auto;
+}
+ 
+.debug-sidebar-toggle {
+  margin-right: 12px;
+}
+ 
+@media (min-width: 768px) {
+  .debug-sidebar-toggle {
+    display: none;
+  }
+}
+ 
+.debug-topbar-sub {
+  font-size: 12px;
+  color: var(--ink3);
+}
+ 
+@media (max-width: 639px) {
+  .debug-topbar-sub {
+    display: none;
+  }
+}
+ 
+/* ── Estado vacío del área de chat ───────────────────────────────────────── */
+.debug-empty-state {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink3);
+  font-size: 14px;
+  font-style: italic;
+  text-align: center;
+  padding: 0 16px;
+}
+ 
+/* ── Textarea e input de envío del chat de debug ─────────────────────────── */
+.debug-input {
+  flex: 1;
+  resize: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-family: var(--sans);
+}
+ 
+.debug-input::placeholder {
+  color: var(--ink3);
+}
+ 
+.debug-send-btn {
+  align-self: flex-end;
+}
+ 
+/* ── Responsive: panel-left como drawer ya cubierto arriba.
+   En desktop, .debug-sidebar se comporta como .panel-left normal. ───────── */
+@media (min-width: 768px) {
+  .debug-sidebar {
+    display: flex;
+  }
+}

@@ -9,20 +9,25 @@ export default function DebugChat() {
   const { apiBase, user, lang } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
   const nLang = normalizeLang(lang)
-  
+
   const location = useLocation()
 
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  
+
   const [machines, setMachines] = useState([])
   const [workOrders, setWorkOrders] = useState([])
   const [selectedMachineId, setSelectedMachineId] = useState(null)
-  
+
   const areaRef = useRef(null)
-  const apiRoot = (apiBase || 'https://barb-2ih8.onrender.com/api').replace(/\/$/, '')
+
+  const apiRoot = useMemo(() => {
+    if (apiBase) return apiBase.replace(/\/$/, '')
+    const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV
+    return isDev ? 'http://localhost:9000/api' : 'https://barb-2ih8.onrender.com/api'
+  }, [apiBase])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -91,39 +96,33 @@ export default function DebugChat() {
 
   const injectHistory = () => {
     if (!selectedMachine || machineHistory.length === 0) return;
-    
-    const historyText = machineHistory.map(ot => 
+
+    const historyText = machineHistory.map(ot =>
       `- [${ot.createdAt ? ot.createdAt.slice(0,10) : 'Fecha N/A'}] OT: ${ot.title}. Problema: ${ot.description}. Estado: ${ot.status}.`
     ).join('\n');
 
     const prompt = `Analiza el siguiente historial de fallas del equipo "${selectedMachine.name || selectedMachine.nombre}":\n\n${historyText}\n\n¿Ves algún patrón de falla repetitiva? ¿Qué componente deberíamos inspeccionar a fondo para evitar que vuelva a ocurrir?`;
-    
+
     setInput(prompt);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   }
 
   return (
-    <div className="two-panel w-full h-full relative">
-      
+    <div className="two-panel debug-shell">
+
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          className="debug-sidebar-overlay"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      <div 
-        className={`panel-left flex flex-col gap-4 transition-transform duration-300 ${
-          isSidebarOpen
-            ? 'flex absolute left-0 top-0 z-50 h-full w-[280px] bg-[var(--bg)] shadow-2xl translate-x-0'
-            : 'hidden md:flex'
-        }`}
-      >
-        <div className="md:hidden flex justify-between items-center mb-2 border-b border-[var(--border)] pb-2">
-          <span className="font-bold text-[var(--ink)]">Equipos</span>
+      <div className={`panel-left debug-sidebar ${isSidebarOpen ? 'debug-sidebar--open' : ''}`}>
+        <div className="debug-sidebar-mobile-header">
+          <span className="debug-sidebar-mobile-title">Equipos</span>
           <button
             onClick={() => setIsSidebarOpen(false)}
-            className="text-[var(--ink2)] p-1 hover:text-[var(--red)] transition"
+            className="icon-btn"
           >
             ✕
           </button>
@@ -131,11 +130,11 @@ export default function DebugChat() {
 
         <div className="panel-section">
           <span className="panel-label">🛠️ Diagnóstico de Equipos</span>
-          <p className="text-xs text-[var(--ink3)] mb-4">Selecciona una máquina para analizar su patrón de fallas con IA.</p>
-          
-          <select 
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)]"
-            value={selectedMachineId || ''} 
+          <p className="debug-sidebar-hint">Selecciona una máquina para analizar su patrón de fallas con IA.</p>
+
+          <select
+            className="form-select w-full"
+            value={selectedMachineId || ''}
             onChange={e => setSelectedMachineId(e.target.value)}
           >
             <option value="">Seleccionar equipo...</option>
@@ -146,18 +145,18 @@ export default function DebugChat() {
         </div>
 
         {selectedMachine && (
-          <div className="panel-section flex-1 overflow-hidden flex flex-col">
-            <span className="panel-label mb-2">Historial de OTs ({machineHistory.length})</span>
-            
-            <div className="overflow-y-auto pr-2 flex-1 space-y-2">
+          <div className="panel-section debug-history">
+            <span className="panel-label debug-history-label">Historial de OTs ({machineHistory.length})</span>
+
+            <div className="debug-history-list">
               {machineHistory.length === 0 ? (
-                <div className="text-xs text-[var(--ink3)] italic">Este equipo no tiene historial de fallas reportadas.</div>
+                <div className="debug-history-empty">Este equipo no tiene historial de fallas reportadas.</div>
               ) : (
                 machineHistory.map((ot, i) => (
-                  <div key={i} className="p-3 bg-[var(--bg-body)] border border-[var(--border)] rounded-lg text-xs">
-                    <div className="font-bold text-[var(--ink1)]">{ot.title || ot.numero_ot}</div>
-                    <div className="text-[var(--ink2)] mt-1">{ot.description || ot.descripcion_problema || 'Sin descripción.'}</div>
-                    <div className="flex justify-between items-center mt-2 text-[10px] text-[var(--ink3)]">
+                  <div key={i} className="debug-history-card">
+                    <div className="debug-history-card-title">{ot.title || ot.numero_ot}</div>
+                    <div className="debug-history-card-desc">{ot.description || ot.descripcion_problema || 'Sin descripción.'}</div>
+                    <div className="debug-history-card-meta">
                       <span className="capitalize">{ot.status || ot.estado}</span>
                       <span>{ot.createdAt ? ot.createdAt.slice(0, 10) : ''}</span>
                     </div>
@@ -167,9 +166,9 @@ export default function DebugChat() {
             </div>
 
             {machineHistory.length > 0 && (
-              <button 
+              <button
                 onClick={injectHistory}
-                className="mt-4 w-full py-2 bg-[var(--blue-bg)] text-[var(--blue)] border border-[var(--blue)] rounded-lg text-[13px] font-bold hover:bg-[var(--blue)] hover:text-white transition-colors"
+                className="btn btn-outline debug-inject-btn"
               >
                 🧠 Inyectar historial a la IA
               </button>
@@ -178,11 +177,11 @@ export default function DebugChat() {
         )}
       </div>
 
-      <div className="panel-right flex flex-col h-full bg-[var(--surface)]">
-        <div className="p-4 border-b border-[var(--border)] bg-[var(--surface)] flex items-center shrink-0">
+      <div className="panel-right debug-main">
+        <div className="topbar debug-topbar">
           <button
             type="button"
-            className="md:hidden flex items-center justify-center p-1.5 mr-3 rounded-md border border-[var(--border)] bg-[var(--bg-body)] text-[var(--ink)]"
+            className="icon-btn debug-sidebar-toggle"
             onClick={() => setIsSidebarOpen(true)}
             title="Seleccionar Equipo"
           >
@@ -194,28 +193,28 @@ export default function DebugChat() {
           </button>
 
           <div>
-            <h2 className="text-base font-black text-[var(--ink1)]">Debug & Análisis Predictivo</h2>
-            <p className="text-xs text-[var(--ink3)] hidden sm:block">Analiza causas raíz y solicita sugerencias de mantenimiento.</p>
+            <h2 className="topbar-title">Debug & Análisis Predictivo</h2>
+            <p className="debug-topbar-sub">Analiza causas raíz y solicita sugerencias de mantenimiento.</p>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={areaRef}>
+        <div className="chat-messages" ref={areaRef}>
           {messages.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-[var(--ink3)] text-sm italic text-center px-4">
+            <div className="debug-empty-state">
               Selecciona un equipo en el panel lateral e inyecta su historial, o haz una pregunta directa.
             </div>
           ) : (
             messages.map((msg, idx) => (
-              <ChatBubble 
-                key={idx} 
-                msg={msg} 
-                side={msg.role === 'user' ? 'user' : 'bot'} 
+              <ChatBubble
+                key={idx}
+                msg={msg}
+                side={msg.role === 'user' ? 'user' : 'bot'}
                 onFeedback={(msgData, rating) => {
                   fetch(`${apiRoot}/chat-feedback`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                      message_content: msgData.content, 
+                    body: JSON.stringify({
+                      message_content: msgData.content,
                       rating,
                       context: selectedMachine?.name || selectedMachine?.nombre || 'Debug General'
                     })
@@ -224,23 +223,23 @@ export default function DebugChat() {
               />
             ))
           )}
-          {loading && <div className="mt-2"><Thinking /></div>}
+          {loading && <div className="mt-sm"><Thinking /></div>}
         </div>
 
-        <div className="p-4 bg-[var(--surface)] border-t border-[var(--border)] shrink-0">
-          <div className="flex gap-2">
-            <textarea 
+        <div className="input-zone">
+          <div className="input-wrap">
+            <textarea
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
               placeholder="Escribe tu consulta analítica..."
-              className="flex-1 resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-body)] p-3 text-[13px] text-[var(--ink)] outline-none focus:border-[var(--blue)]"
+              className="debug-input"
               rows={2}
             />
-            <button 
-              onClick={send} 
+            <button
+              onClick={send}
               disabled={loading || !input.trim()}
-              className="px-4 bg-[var(--ink1)] text-[var(--surface)] rounded-xl font-bold hover:opacity-90 disabled:opacity-50"
+              className="btn btn-primary debug-send-btn"
             >
               Enviar
             </button>
