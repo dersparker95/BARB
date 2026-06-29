@@ -22,7 +22,7 @@ const MachineMemory: React.FC = () => {
         const api = createApiService(apiBase)
         const res = await api.workOrders.getAll()
         const tickets: WorkOrder[] = Array.isArray(res) ? res : (res.data || [])
-        
+
         if (mounted) {
           setEvents(getMachineHistory(tickets, mid))
         }
@@ -38,49 +38,60 @@ const MachineMemory: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="dashboard-body flex items-center justify-center">
-        <div className="text-[var(--ink3)]">{t.common?.loading || 'Cargando historial...'}</div>
+      // ✅ CORREGIDO: Tailwind flex/items-center/justify-center + text-[var(--ink3)] → clases BEM
+      <div className="dashboard-body mm-loading-wrap">
+        <div className="mm-loading-text">{t.common?.loading || 'Cargando historial...'}</div>
       </div>
     )
   }
 
   return (
     <div className="dashboard-body">
-      <div className="space-y-6 max-w-3xl">
+      {/* ✅ CORREGIDO: space-y-6 max-w-3xl de Tailwind → .mm-container */}
+      <div className="mm-container">
         {events.length === 0 ? (
           <div className="chat-empty">
             <h3>{t.machineMemory?.noHistoryTitle || 'No hay historial disponible'}</h3>
             <p>{t.machineMemory?.noHistoryDesc || 'No existen órdenes de trabajo ni reportes pasados para este equipo.'}</p>
           </div>
         ) : (
-          <div style={{ borderLeft: '2px solid var(--border)', paddingLeft: '24px', marginLeft: '12px' }}>
+          // ✅ CORREGIDO: inline styles borderLeft/paddingLeft/marginLeft → .mm-timeline
+          <div className="mm-timeline">
             {events.map((ev, index) => {
               const formattedDate = new Date(ev.date).toLocaleString(lang === 'en' ? 'en-US' : 'es-CL', {
                 year: 'numeric',
                 month: 'short',
                 day: 'numeric',
                 hour: '2-digit',
-                minute: '2-digit'
+                minute: '2-digit',
               })
 
               return (
-                <div key={ev.id || index} className="mb-8 relative hover:opacity-90 transition-opacity">
-                  <div 
-                    className="absolute top-0 w-3.5 h-3.5 rounded-full" 
-                    style={{ left: '-31px', background: 'var(--blue)', border: '2px solid var(--surface)' }} 
-                  />
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--ink3)' }}>
-                    {formattedDate}
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--ink)', marginTop: '4px' }}>
+                // ✅ CORREGIDO: mb-8 relative hover:opacity-90 transition-opacity de Tailwind → .mm-event
+                <div key={ev.id || index} className="mm-event">
+
+                  {/* ✅ CORREGIDO: absolute top-0 w-3.5 h-3.5 rounded-full + inline style left/bg/border → .mm-dot */}
+                  <div className="mm-dot" aria-hidden="true" />
+
+                  {/* ✅ CORREGIDO: inline fontFamily/fontSize/color → .mm-date */}
+                  <div className="mm-date">{formattedDate}</div>
+
+                  {/* ✅ CORREGIDO: inline fontSize/fontWeight/color/marginTop → .mm-event-title */}
+                  <div className="mm-event-title">
                     {ev.title || (t.common?.untitled || 'Sin Título')}
                   </div>
-                  <div style={{ fontSize: '13px', color: 'var(--ink2)', marginTop: '4px', lineHeight: 1.6 }}>
+
+                  {/* ✅ CORREGIDO: inline fontSize/color/marginTop/lineHeight → .mm-event-summary */}
+                  <div className="mm-event-summary">
                     {ev.summary || (t.common?.noDescription || 'Sin descripción')}
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--ink3)', marginTop: '8px' }}>
-                    {t.common?.operator || 'Operador'}: <span style={{ fontWeight: 500, color: 'var(--ink)' }}>{ev.actor || '—'}</span>
+
+                  {/* ✅ CORREGIDO: inline fontSize/color/marginTop + span con inline fontWeight/color → .mm-event-actor */}
+                  <div className="mm-event-actor">
+                    {t.common?.operator || 'Operador'}:{' '}
+                    <span className="mm-event-actor-name">{ev.actor || '—'}</span>
                   </div>
+
                 </div>
               )
             })}

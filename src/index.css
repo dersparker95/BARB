@@ -2331,3 +2331,127 @@ body {
   margin-top: 20px;
   flex-wrap: wrap;
 }
+/* ----------------------------------------------------------
+   mm-loading-wrap / mm-loading-text
+   Reemplaza: className="flex items-center justify-center" (Tailwind)
+              className="text-[var(--ink3)]" (Tailwind arbitrario)
+   ---------------------------------------------------------- */
+.mm-loading-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+ 
+.mm-loading-text {
+  font-size: 14px;
+  color: var(--ink3);
+}
+ 
+/* ----------------------------------------------------------
+   mm-container
+   Reemplaza: className="space-y-6 max-w-3xl" (Tailwind)
+   ---------------------------------------------------------- */
+.mm-container {
+  max-width: 768px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+ 
+/* ----------------------------------------------------------
+   mm-timeline
+   Reemplaza: style={{ borderLeft: '2px solid var(--border)',
+   paddingLeft: '24px', marginLeft: '12px' }} (inline)
+   ---------------------------------------------------------- */
+.mm-timeline {
+  border-left: 2px solid var(--border);
+  padding-left: 24px;
+  margin-left: 12px;
+}
+ 
+/* ----------------------------------------------------------
+   mm-event
+   Reemplaza: className="mb-8 relative hover:opacity-90
+   transition-opacity" (Tailwind)
+   ---------------------------------------------------------- */
+.mm-event {
+  position: relative;
+  margin-bottom: 32px;
+  transition: opacity 0.2s;
+}
+ 
+.mm-event:hover {
+  opacity: 0.9;
+}
+ 
+/* ----------------------------------------------------------
+   mm-dot
+   Reemplaza: className="absolute top-0 w-3.5 h-3.5 rounded-full"
+   + style={{ left: '-31px', background: 'var(--blue)',
+   border: '2px solid var(--surface)' }} (Tailwind + inline)
+   ---------------------------------------------------------- */
+.mm-dot {
+  position: absolute;
+  top: 0;
+  left: -31px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--blue);
+  border: 2px solid var(--surface);
+  flex-shrink: 0;
+}
+ 
+/* ----------------------------------------------------------
+   mm-date
+   Reemplaza: style={{ fontFamily: 'var(--mono)', fontSize: '11px',
+   color: 'var(--ink3)' }} (inline)
+   ---------------------------------------------------------- */
+.mm-date {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink3);
+  letter-spacing: 0.04em;
+}
+ 
+/* ----------------------------------------------------------
+   mm-event-title
+   Reemplaza: style={{ fontSize: '15px', fontWeight: 600,
+   color: 'var(--ink)', marginTop: '4px' }} (inline)
+   ---------------------------------------------------------- */
+.mm-event-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 4px;
+}
+ 
+/* ----------------------------------------------------------
+   mm-event-summary
+   Reemplaza: style={{ fontSize: '13px', color: 'var(--ink2)',
+   marginTop: '4px', lineHeight: 1.6 }} (inline)
+   ---------------------------------------------------------- */
+.mm-event-summary {
+  font-size: 13px;
+  color: var(--ink2);
+  margin-top: 4px;
+  line-height: 1.6;
+}
+ 
+/* ----------------------------------------------------------
+   mm-event-actor / mm-event-actor-name
+   Reemplaza: style={{ fontSize: '11px', color: 'var(--ink3)',
+   marginTop: '8px' }} + span con style={{ fontWeight: 500,
+   color: 'var(--ink)' }} (inline)
+   ---------------------------------------------------------- */
+.mm-event-actor {
+  font-size: 11px;
+  color: var(--ink3);
+  margin-top: 8px;
+}
+ 
+.mm-event-actor-name {
+  font-weight: 500;
+  color: var(--ink);
+}
+ 
