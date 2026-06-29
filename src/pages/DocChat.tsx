@@ -266,7 +266,7 @@ export default function DocChat() {
   const [uploading, setUploading] = useState(false)
   const [uploadPct, setUploadPct] = useState(0)
   const [dragOver, setDragOver] = useState(false)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false) // ESTADO PARA MOVIL
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [pendingImages, setPendingImages] = useState<Array<{ id: string; dataUrl: string; name: string }>>([])
 
   const [plants, setPlants] = useState<PlantRecord[]>([])
@@ -295,7 +295,6 @@ export default function DocChat() {
     () => (apiBase || 'http://localhost:9000/api').replace(/\/$/, ''),
     [apiBase],
   )
-
 
   /* ---------------------------------------------------------------------------
    * Estado derivado
@@ -441,7 +440,7 @@ export default function DocChat() {
   }, [apiRoot])
 
   /* ---------------------------------------------------------------------------
-   * Filtrado de OTs (Ahora MÁS PERMISIVO para que siempre aparezcan)
+   * Filtrado de OTs
    * -------------------------------------------------------------------------- */
 
   const filteredOTs = useMemo(() => {
@@ -455,13 +454,8 @@ export default function DocChat() {
       )
       const machine = machinesById.get(otMachineId)
 
-      // ── 1. MÁQUINA (filtro más específico) ──────────────────────
-      // Si hay máquina seleccionada, SOLO mostramos OTs de esa máquina
       if (hasMachine && otMachineId !== normalizeId(docMachine)) return false
 
-      // ── 2. PLANTA ────────────────────────────────────────────────
-      // Si hay planta seleccionada, excluimos solo las OTs que tengan
-      // una planta asignada DISTINTA (las sin planta siempre pasan)
       if (hasPlant) {
         const otPlantId = normalizeId(
           workOrder.plant_id ?? workOrder.planta_id ?? machine?.plant_id ?? machine?.planta_id
@@ -469,9 +463,6 @@ export default function DocChat() {
         if (otPlantId && otPlantId !== normalizeId(plant)) return false
       }
 
-      // ── 3. DISCIPLINA ────────────────────────────────────────────
-      // Si hay disciplina seleccionada, excluimos solo las OTs que
-      // tengan una disciplina asignada DISTINTA (las sin disciplina pasan)
       if (hasDiscipline && selectedDisciplineRecord) {
         const targetDiscId = normalizeId(selectedDisciplineRecord.id)
         const otDiscId = normalizeId(
@@ -673,7 +664,7 @@ export default function DocChat() {
   }, [docMessages])
 
   /* ---------------------------------------------------------------------------
-   * Envío de consulta (CON BUG DE LOADING CORREGIDO)
+   * Envío de consulta
    * -------------------------------------------------------------------------- */
 
   const send = useCallback(async () => {
@@ -688,7 +679,6 @@ export default function DocChat() {
     const inputElement = document.getElementById('doc-input') as HTMLTextAreaElement | null
     inputElement?.style.setProperty('height', 'auto')
 
-    // Construir el contenido del mensaje: texto + imágenes adjuntas
     const userContent = pendingImages.length > 0
       ? `${query}\n\n[${pendingImages.length} imagen(es) adjunta(s)]`
       : query
@@ -724,7 +714,7 @@ export default function DocChat() {
       if (response.ok) {
         const data = (await response.json()) as ChatApiResponse
         pushDocMessage({ role: 'assistant', content: data.reply, timestamp: Date.now() })
-        setLoading(false) // <-- CORRECCIÓN APLICADA AQUI
+        setLoading(false)
         return
       }
 
@@ -736,23 +726,22 @@ export default function DocChat() {
             'El servicio de IA no está disponible temporalmente. Inténtalo de nuevo en unos minutos.',
           timestamp: Date.now(),
         })
-        setLoading(false) // <-- CORRECCIÓN APLICADA AQUI
+        setLoading(false)
         return
       }
 
       const errorData = await response.json().catch(() => ({}))
       pushDocMessage({
         role: 'assistant',
-        content: `⚠️ Falla en la IA en la nube: ${errorData.detail ?? `Error ${response.status}`}`,
+        content: `Falla en la IA en la nube: ${errorData.detail ?? `Error ${response.status}`}`,
         timestamp: Date.now(),
       })
-      setLoading(false) // <-- CORRECCIÓN APLICADA AQUI
+      setLoading(false)
       return
     } catch {
-      // FastAPI no disponible — mostrar error claro al usuario
       pushDocMessage({
         role: 'assistant',
-        content: '⚠️ No se pudo conectar con el servidor. Verifica tu conexión o contacta al administrador.',
+        content: 'No se pudo conectar con el servidor. Verifica tu conexión o contacta al administrador.',
         timestamp: Date.now(),
       })
       setLoading(false)
@@ -810,39 +799,18 @@ export default function DocChat() {
 
   return (
     <div className="two-panel w-full h-full relative">
-      
+
       {/* -----------------------------------------------------------------------
-       * Panel izquierdo — colapsable en cualquier vista
-       * Cuando está cerrado: solo queda el botón (44px de ancho)
-       * Cuando está abierto: ancho completo del panel
+       * Panel izquierdo — colapsable
        * -------------------------------------------------------------------- */}
       <div
-        className="panel-left"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          width: isSidebarOpen ? undefined : 44,
-          minWidth: isSidebarOpen ? undefined : 44,
-          overflow: 'hidden',
-          transition: 'width 0.25s ease, min-width 0.25s ease',
-          flexShrink: 0,
-        }}
+        className={`panel-left dc-sidebar ${isSidebarOpen ? 'dc-sidebar--open' : 'dc-sidebar--collapsed'}`}
       >
-        {/* ── Botón toggle — siempre visible, alineado al borde ── */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: isSidebarOpen ? 'space-between' : 'center',
-            padding: isSidebarOpen ? '10px 12px' : '10px 0',
-            borderBottom: '1px solid var(--border)',
-            flexShrink: 0,
-          }}
-        >
+        {/* ── Botón toggle ── */}
+        {/* ✅ CORREGIDO: header del sidebar usa clase BEM en lugar de inline styles */}
+        <div className={`dc-sidebar-header ${isSidebarOpen ? 'dc-sidebar-header--open' : ''}`}>
           {isSidebarOpen && (
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-              Filtros y OTs
-            </span>
+            <span className="dc-sidebar-label">Filtros y OTs</span>
           )}
 
           <button
@@ -850,28 +818,13 @@ export default function DocChat() {
             onClick={() => setIsSidebarOpen(prev => !prev)}
             aria-expanded={isSidebarOpen}
             aria-label={isSidebarOpen ? 'Colapsar panel' : 'Expandir panel'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 28,
-              height: 28,
-              borderRadius: 6,
-              border: '1px solid var(--border)',
-              background: isSidebarOpen ? 'var(--blue-bg, #eff6ff)' : 'var(--surface)',
-              color: isSidebarOpen ? 'var(--blue)' : 'var(--ink2)',
-              cursor: 'pointer',
-              flexShrink: 0,
-              transition: 'background 0.15s, color 0.15s',
-            }}
+            className={`dc-toggle-btn ${isSidebarOpen ? 'dc-toggle-btn--active' : ''}`}
           >
             {isSidebarOpen ? (
-              /* Flecha apuntando a la izquierda — colapsar */
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="15 18 9 12 15 6" />
               </svg>
             ) : (
-              /* Flecha apuntando a la derecha — expandir */
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
@@ -879,229 +832,209 @@ export default function DocChat() {
           </button>
         </div>
 
-        {/* ── Contenido — se oculta cuando el panel está colapsado ── */}
-        <div
-          style={{
-            display: isSidebarOpen ? 'flex' : 'none',
-            flexDirection: 'column',
-            flex: 1,
-            overflowY: 'auto',
-          }}
-        >
+        {/* ── Contenido colapsable ── */}
+        {/* ✅ CORREGIDO: display condicional con clase en lugar de style inline */}
+        <div className={`dc-sidebar-content ${isSidebarOpen ? 'dc-sidebar-content--visible' : 'dc-sidebar-content--hidden'}`}>
 
-        {/* Órdenes de Trabajo */}
-        <div className="panel-section">
-          <span className="panel-label">
-            Target OTs
-            <span className="ml-count">{filteredOTs.length}</span>
-          </span>
+          {/* Órdenes de Trabajo */}
+          <div className="panel-section">
+            <span className="panel-label">
+              Target OTs
+              <span className="ml-count">{filteredOTs.length}</span>
+            </span>
 
-          <div className="manual-list-scroll">
-            {filteredOTs.map(workOrder => {
-              const machineId = String(
-                workOrder.maquina_id ??
-                  workOrder.maquinaId ??
-                  workOrder.machine_id ??
-                  workOrder.machineId ??
-                  '',
-              )
-              const machine = machinesById.get(machineId) ?? null
-              const title = getWorkOrderTitle(workOrder)
-              const machineLabel = normalizeWorkOrderMachine(workOrder, machine) || '—'
-              const statusKey = getWorkOrderStatus(workOrder)
-              const status = t.statuses?.[statusKey] ?? statusKey
-              const priority = getWorkOrderPriority(workOrder)
+            <div className="manual-list-scroll">
+              {filteredOTs.map(workOrder => {
+                const machineId = String(
+                  workOrder.maquina_id ??
+                    workOrder.maquinaId ??
+                    workOrder.machine_id ??
+                    workOrder.machineId ??
+                    '',
+                )
+                const machine = machinesById.get(machineId) ?? null
+                const title = getWorkOrderTitle(workOrder)
+                const machineLabel = normalizeWorkOrderMachine(workOrder, machine) || '—'
+                const statusKey = getWorkOrderStatus(workOrder)
+                const status = t.statuses?.[statusKey] ?? statusKey
+                const priority = getWorkOrderPriority(workOrder)
 
-              return (
-                <button
-                  key={String(workOrder.id)}
-                  type="button"
-                  className="manual-item"
-                  title={`${title} · ${machineLabel} · ${status} · ${priority}`}
-                  onClick={() => {
-                    const description =
-                      workOrder.description ??
-                      workOrder.descripcion_problema ??
-                      'Sin descripción detallada'
+                return (
+                  <button
+                    key={String(workOrder.id)}
+                    type="button"
+                    className="manual-item"
+                    title={`${title} · ${machineLabel} · ${status} · ${priority}`}
+                    onClick={() => {
+                      const description =
+                        workOrder.description ??
+                        workOrder.descripcion_problema ??
+                        'Sin descripción detallada'
 
-                    setInput(
-                      `Contexto de OT seleccionada:\n\n- Orden: ${title}\n- Equipo: ${machineLabel}\n- Estado: ${status} (Prioridad: ${priority})\n- Problema reportado: ${description}\n\nConsiderando esta información, `,
-                    )
-                    
-                    // Si el usuario toca una OT en móvil, cerramos el panel automáticamente
-                    if (window.innerWidth < 768) setIsSidebarOpen(false)
+                      setInput(
+                        `Contexto de OT seleccionada:\n\n- Orden: ${title}\n- Equipo: ${machineLabel}\n- Estado: ${status} (Prioridad: ${priority})\n- Problema reportado: ${description}\n\nConsiderando esta información, `,
+                      )
 
-                    requestAnimationFrame(() => {
-                      const el = document.getElementById('doc-input') as HTMLTextAreaElement | null
-                      if (!el) return
-                      el.focus()
-                      el.style.height = 'auto'
-                      el.style.height = `${Math.min(el.scrollHeight, 150)}px`
-                    })
-                  }}
-                >
-                  <div className="mi-icon">🛠️</div>
-                  <div className="mi-body">
-                    <div className="mi-name">{title}</div>
-                    <div className="mi-meta">
-                      {normalizeWorkOrderPlant(workOrder, machine) ||
-                        selectedPlantRecord?.name ||
-                        selectedPlantRecord?.nombre ||
-                        '—'}
-                    </div>
-                    <div className="mi-meta">{machineLabel}</div>
-                    <div className="mi-meta capitalize">
-                      {status} · {priority}
-                    </div>
-                  </div>
-                  <span className="mi-badge">OT</span>
-                </button>
-              )
-            })}
+                      if (window.innerWidth < 768) setIsSidebarOpen(false)
 
-            {catalogsLoading && (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: 'var(--ink3)',
-                  textAlign: 'center',
-                  padding: '8px 0',
-                }}
-              >
-                {t.common?.loading ?? 'Cargando...'}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="lib-sep" />
-
-        {/* Planta */}
-        <div className="panel-section">
-          <span className="panel-label">{t.common?.plant ?? 'Planta / Ubicación'}</span>
-          <select
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60"
-            value={String(plant ?? '')}
-            onChange={event => setPlant(event.target.value)}
-            disabled={loading || catalogsLoading}
-          >
-            {normalizedPlants.map(plantRecord => (
-              <option key={String(plantRecord.id)} value={String(plantRecord.id)}>
-                {normalizePlantLabel(plantRecord) || plantRecord.ubicacion || String(plantRecord.id)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Disciplina */}
-        <div className="panel-section">
-          <span className="panel-label">{t.common?.discipline ?? 'Disciplina'}</span>
-          <select
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60"
-            value={discipline ?? ''}
-            disabled={loading || catalogsLoading}
-            onChange={event => {
-              setDiscipline(event.target.value || null)
-              setDocMachine('all')
-              setSelectedMachine(null)
-              clearDocMessages()
-            }}
-          >
-            <option value="">{t.docChat?.selectDiscipline ?? 'Seleccionar disciplina...'}</option>
-            {disciplines.map((disciplineRecord, index) => {
-              const name = normalizeCatalogName(disciplineRecord)
-              const id = disciplineRecord.id ?? disciplineRecord.disciplina_id ?? index
-              return (
-                <option key={String(id)} value={name || String(id)}>
-                  {name || `Disciplina ${id}`}
-                </option>
-              )
-            })}
-          </select>
-        </div>
-
-        {/* Máquina */}
-        <div className="panel-section">
-          <span className="panel-label">
-            {t.common?.machine ?? 'Máquina'} ({t.common?.optional ?? 'opcional'})
-          </span>
-          <select
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--ink)] shadow-sm outline-none transition focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-bg)] disabled:cursor-not-allowed disabled:opacity-60"
-            value={docMachine === 'all' ? '' : docMachine}
-            disabled={loading || catalogsLoading || !selectedDisciplineRecord}
-            onChange={event => {
-              const machineId = event.target.value
-              setDocMachine(machineId || 'all')
-              setSelectedMachine(machineId || null)
-              clearDocMessages()
-            }}
-          >
-            <option value="">{t.docChat?.selectMachine ?? 'Seleccionar máquina...'}</option>
-            {availableMachines.map(machine => (
-              <option key={String(machine.id)} value={String(machine.id)}>
-                {normalizeMachineLabel(machine) || String(machine.id)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* BOTÓN GUARDAR SESIÓN (Integrado al panel izquierdo) */}
-        {docMessages.length > 0 && (
-          <div
-            className="panel-section"
-            style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border)' }}
-          >
-            <button
-              type="button"
-              disabled={saveStatus === 'saving'}
-              className="w-full rounded-lg px-3 py-2 text-[13px] font-medium transition shadow-sm outline-none"
-              style={{
-                background:
-                  saveStatus === 'saved'
-                    ? 'var(--green-bg, #d1fae5)'
-                    : saveStatus === 'error'
-                      ? 'var(--red-bg, #fee2e2)'
-                      : 'var(--blue)',
-                color:
-                  saveStatus === 'saved'
-                    ? 'var(--green, #059669)'
-                    : saveStatus === 'error'
-                      ? 'var(--red, #dc2626)'
-                      : '#fff',
-                cursor: saveStatus === 'saving' ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                border: 'none',
-              }}
-              onClick={openSaveModal}
-            >
-              {saveStatus === 'saving' && '⏳ Guardando...'}
-              {saveStatus === 'saved' && '✅ Sesión guardada'}
-              {saveStatus === 'error' && '❌ Error'}
-              {saveStatus === 'idle' && (
-                <>
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                      requestAnimationFrame(() => {
+                        const el = document.getElementById('doc-input') as HTMLTextAreaElement | null
+                        if (!el) return
+                        el.focus()
+                        el.style.height = 'auto'
+                        el.style.height = `${Math.min(el.scrollHeight, 150)}px`
+                      })
+                    }}
                   >
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                    <polyline points="7 3 7 8 15 8"></polyline>
-                  </svg>
-                  {t.docChat?.saveSession ?? 'Guardar Sesión'}
-                </>
+                    {/* ✅ CORREGIDO: emoji 🛠️ → SVG accesible */}
+                    <div className="mi-icon" aria-hidden="true">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                      </svg>
+                    </div>
+                    <div className="mi-body">
+                      <div className="mi-name">{title}</div>
+                      <div className="mi-meta">
+                        {normalizeWorkOrderPlant(workOrder, machine) ||
+                          selectedPlantRecord?.name ||
+                          selectedPlantRecord?.nombre ||
+                          '—'}
+                      </div>
+                      <div className="mi-meta">{machineLabel}</div>
+                      <div className="mi-meta capitalize">
+                        {status} · {priority}
+                      </div>
+                    </div>
+                    <span className="mi-badge">OT</span>
+                  </button>
+                )
+              })}
+
+              {/* ✅ CORREGIDO: loading inline → clase BEM */}
+              {catalogsLoading && (
+                <div className="dc-catalog-loading">
+                  {t.common?.loading ?? 'Cargando...'}
+                </div>
               )}
-            </button>
+            </div>
           </div>
-        )}
+
+          <div className="lib-sep" />
+
+          {/* Planta */}
+          {/* ✅ CORREGIDO: select con Tailwind arbitrario → .form-select del DS */}
+          <div className="panel-section">
+            <span className="panel-label">{t.common?.plant ?? 'Planta / Ubicación'}</span>
+            <select
+              className="form-select"
+              value={String(plant ?? '')}
+              onChange={event => setPlant(event.target.value)}
+              disabled={loading || catalogsLoading}
+            >
+              {normalizedPlants.map(plantRecord => (
+                <option key={String(plantRecord.id)} value={String(plantRecord.id)}>
+                  {normalizePlantLabel(plantRecord) || plantRecord.ubicacion || String(plantRecord.id)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Disciplina */}
+          {/* ✅ CORREGIDO: select con Tailwind arbitrario → .form-select del DS */}
+          <div className="panel-section">
+            <span className="panel-label">{t.common?.discipline ?? 'Disciplina'}</span>
+            <select
+              className="form-select"
+              value={discipline ?? ''}
+              disabled={loading || catalogsLoading}
+              onChange={event => {
+                setDiscipline(event.target.value || null)
+                setDocMachine('all')
+                setSelectedMachine(null)
+                clearDocMessages()
+              }}
+            >
+              <option value="">{t.docChat?.selectDiscipline ?? 'Seleccionar disciplina...'}</option>
+              {disciplines.map((disciplineRecord, index) => {
+                const name = normalizeCatalogName(disciplineRecord)
+                const id = disciplineRecord.id ?? disciplineRecord.disciplina_id ?? index
+                return (
+                  <option key={String(id)} value={name || String(id)}>
+                    {name || `Disciplina ${id}`}
+                  </option>
+                )
+              })}
+            </select>
+          </div>
+
+          {/* Máquina */}
+          {/* ✅ CORREGIDO: select con Tailwind arbitrario → .form-select del DS */}
+          <div className="panel-section">
+            <span className="panel-label">
+              {t.common?.machine ?? 'Máquina'} ({t.common?.optional ?? 'opcional'})
+            </span>
+            <select
+              className="form-select"
+              value={docMachine === 'all' ? '' : docMachine}
+              disabled={loading || catalogsLoading || !selectedDisciplineRecord}
+              onChange={event => {
+                const machineId = event.target.value
+                setDocMachine(machineId || 'all')
+                setSelectedMachine(machineId || null)
+                clearDocMessages()
+              }}
+            >
+              <option value="">{t.docChat?.selectMachine ?? 'Seleccionar máquina...'}</option>
+              {availableMachines.map(machine => (
+                <option key={String(machine.id)} value={String(machine.id)}>
+                  {normalizeMachineLabel(machine) || String(machine.id)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Botón guardar sesión */}
+          {/* ✅ CORREGIDO: botón con inline styles dinámicos → .btn base + modificadores BEM */}
+          {docMessages.length > 0 && (
+            <div className="panel-section dc-save-section">
+              <button
+                type="button"
+                disabled={saveStatus === 'saving'}
+                className={`btn dc-save-btn dc-save-btn--${saveStatus}`}
+                onClick={openSaveModal}
+              >
+                {saveStatus === 'saving' && (
+                  <>
+                    <span className="spinning" aria-hidden="true">⟳</span>
+                    <span className="sr-only">Guardando...</span>
+                    Guardando...
+                  </>
+                )}
+                {saveStatus === 'saved' && (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    Sesión guardada
+                  </>
+                )}
+                {saveStatus === 'error' && (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Error al guardar
+                  </>
+                )}
+                {saveStatus === 'idle' && (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                      <polyline points="17 21 17 13 7 13 7 21"/>
+                      <polyline points="7 3 7 8 15 8"/>
+                    </svg>
+                    {t.docChat?.saveSession ?? 'Guardar Sesión'}
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>{/* fin contenido colapsable */}
       </div>{/* fin panel-left */}
 
@@ -1114,7 +1047,11 @@ export default function DocChat() {
         {/* Barra manual activo */}
         {activeManual && (
           <div className="manual-active-bar">
-            <span style={{ fontSize: 14 }}>📖</span>
+            {/* ✅ CORREGIDO: emoji 📖 → SVG accesible */}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
             <span className="mab-name">{activeManual.name}</span>
             <span className="mab-meta">
               {[
@@ -1137,8 +1074,9 @@ export default function DocChat() {
           </div>
         )}
 
-        {/* Contexto desktop — tags de planta/disciplina/máquina — solo desktop */}
-        <div className="context-tags" style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+        {/* Context tags — planta/disciplina/máquina */}
+        {/* ✅ CORREGIDO: style inline flexShrink → clase BEM; ctx-tag manual usa modificador en vez de inline */}
+        <div className="context-tags">
           {!discipline ? (
             <span className="ctx-empty">
               {t.docChat?.emptyContext ?? 'Selecciona una disciplina para comenzar.'}
@@ -1146,12 +1084,15 @@ export default function DocChat() {
           ) : (
             <>
               <span className="ctx-tag plant">
-                📍 {normalizePlantLabel(selectedPlantRecord) || plant}
+                {/* ✅ CORREGIDO: emoji 📍 → SVG */}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                {normalizePlantLabel(selectedPlantRecord) || plant}
               </span>
 
               {activeManual && (
-                <span className="ctx-tag" style={{ background: 'var(--blue-bg)', color: 'var(--blue)' }}>
-                  📖{' '}
+                // ✅ CORREGIDO: inline style → modificador BEM .ctx-tag--manual
+                <span className="ctx-tag ctx-tag--manual">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
                   {activeManual.name.length > 26
                     ? `${activeManual.name.slice(0, 24)}…`
                     : activeManual.name}
@@ -1162,7 +1103,8 @@ export default function DocChat() {
 
               {selectedMachineRecord && (
                 <span className="ctx-tag machine">
-                  ⚙ {selectedMachineRecord.name ?? selectedMachineRecord.nombre ?? selectedMachineRecord.id}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 0 0 4.93 4.93"/><path d="M4.93 19.07A10 10 0 0 0 19.07 19.07"/></svg>
+                  {selectedMachineRecord.name ?? selectedMachineRecord.nombre ?? selectedMachineRecord.id}
                 </span>
               )}
             </>
@@ -1170,44 +1112,29 @@ export default function DocChat() {
         </div>
 
         {/* Modal guardar sesión */}
+        {/* ✅ CORREGIDO: todo el modal inline → clases BEM */}
         {saveModalOpen && (
           <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(0,0,0,0.4)',
-              zIndex: 1000,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            className="modal-overlay"
             onClick={e => {
               if (e.target === e.currentTarget) setSaveModalOpen(false)
             }}
           >
-            <div
-              style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 12,
-                padding: '24px 28px',
-                width: 380,
-                maxWidth: '90vw',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-              }}
-            >
-              <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>
-                💾 {t.docChat?.saveSession ?? 'Guardar sesión'}
+            <div className="modal-box dc-save-modal">
+              <h3 className="dc-save-modal-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                {t.docChat?.saveSession ?? 'Guardar sesión'}
               </h3>
-              <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--ink3)' }}>
+              <p className="dc-save-modal-meta">
                 {docMessages.length} mensajes · {discipline ?? '—'} ·{' '}
                 {normalizePlantLabel(selectedPlantRecord) || '—'}
               </p>
 
-              <label
-                htmlFor="session-title-input"
-                style={{ fontSize: 12, color: 'var(--ink2)', display: 'block', marginBottom: 6 }}
-              >
+              <label htmlFor="session-title-input" className="dc-save-modal-label">
                 {t.docChat?.sessionTitle ?? 'Título de la sesión'}
               </label>
               <input
@@ -1222,49 +1149,21 @@ export default function DocChat() {
                 }}
                 placeholder={`Sesión ${new Date().toLocaleDateString()}`}
                 autoFocus
-                style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  padding: '8px 12px',
-                  fontSize: 13,
-                  color: 'var(--ink)',
-                  background: 'var(--bg)',
-                  outline: 'none',
-                  marginBottom: 16,
-                }}
+                className="form-input"
               />
 
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <div className="dc-save-modal-actions">
                 <button
                   type="button"
                   onClick={() => setSaveModalOpen(false)}
-                  style={{
-                    padding: '7px 16px',
-                    borderRadius: 7,
-                    border: '1px solid var(--border)',
-                    background: 'transparent',
-                    color: 'var(--ink2)',
-                    fontSize: 13,
-                    cursor: 'pointer',
-                  }}
+                  className="btn btn-outline"
                 >
                   {t.common?.cancel ?? 'Cancelar'}
                 </button>
                 <button
                   type="button"
                   onClick={() => void saveSession(sessionTitle)}
-                  style={{
-                    padding: '7px 18px',
-                    borderRadius: 7,
-                    border: 'none',
-                    background: 'var(--blue)',
-                    color: '#fff',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
+                  className="btn btn-primary"
                 >
                   {t.docChat?.saveSession ?? 'Guardar'}
                 </button>
@@ -1276,13 +1175,13 @@ export default function DocChat() {
         {/* Chat messages */}
         <div className="chat-messages" ref={areaRef}>
           {docMessages.length === 0 ? (
-            <div className="chat-empty" style={{ background: 'transparent' }} />
+            <div className="chat-empty" />
           ) : (
             docMessages.map((message, index) => (
-              <ChatBubble 
-                key={index} 
-                msg={message} 
-                side={message.role === 'user' ? 'user' : 'bot'} 
+              <ChatBubble
+                key={index}
+                msg={message}
+                side={message.role === 'user' ? 'user' : 'bot'}
                 onFeedback={(msg, rating) => {
                   fetch(`${apiRoot}/chat-feedback`, {
                     method: 'POST',
@@ -1300,10 +1199,12 @@ export default function DocChat() {
             </div>
           )}
         </div>
+
         {/* Zona de entrada */}
-        <div className="input-zone" style={{ flexShrink: 0 }}>
+        <div className="input-zone">
+          {/* ✅ CORREGIDO: clase Tailwind ring-2 ring-[var(--blue)] → modificador BEM */}
           <div
-            className={`input-wrap ${dragOver ? 'ring-2 ring-[var(--blue)]' : ''}`}
+            className={`input-wrap ${dragOver ? 'input-wrap--drag' : ''}`}
             onDragOver={event => {
               event.preventDefault()
               setDragOver(true)
@@ -1319,6 +1220,7 @@ export default function DocChat() {
               {t.docChat?.inputPlaceholder ?? 'Escribe tu pregunta'}
             </label>
 
+            {/* ✅ CORREGIDO: Tailwind arbitrario en textarea → .dc-textarea */}
             <textarea
               id="doc-input"
               rows={1}
@@ -1330,7 +1232,7 @@ export default function DocChat() {
                 'Pregunta por procedimientos, especificaciones o mantenimiento...'
               }
               disabled={!discipline || loading}
-              className="flex-1 resize-none overflow-hidden bg-transparent border-none outline-none text-[13px] text-[var(--ink)] placeholder-[var(--ink3)]"
+              className="dc-textarea"
               onChange={event => {
                 setInput(event.target.value)
                 event.currentTarget.style.height = 'auto'
@@ -1339,27 +1241,15 @@ export default function DocChat() {
               onKeyDown={handleKeyDown}
             />
 
-            {/* Botón cámara — abre selector de foto en móvil (capture=environment) */}
+            {/* Botón cámara */}
+            {/* ✅ CORREGIDO: todos los inline styles → .dc-camera-btn; hover JS → CSS :hover */}
             <button
               type="button"
               title="Tomar foto"
               aria-label="Tomar foto"
               disabled={!discipline || loading}
               onClick={() => cameraInputRef.current?.click()}
-              style={{
-                flexShrink: 0,
-                background: 'none',
-                border: 'none',
-                padding: '4px 6px',
-                cursor: 'pointer',
-                color: 'var(--ink3)',
-                display: 'flex',
-                alignItems: 'center',
-                opacity: (!discipline || loading) ? 0.4 : 1,
-                transition: 'color 0.15s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--blue)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--ink3)' }}
+              className="dc-camera-btn"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
@@ -1385,7 +1275,7 @@ export default function DocChat() {
           <div className="input-hint">
             {t.docChat?.inputHint ?? 'Enter para enviar · Shift+Enter nueva línea · '}
             {activeManual
-              ? `📖 ${activeManual.name.slice(0, 30)}`
+              ? activeManual.name.slice(0, 30)
               : 'Powered by API externa'}
           </div>
 
@@ -1402,7 +1292,6 @@ export default function DocChat() {
             }}
           />
 
-          {/* Input oculto de cámara — capture=environment usa cámara trasera en móvil */}
           <input
             ref={cameraInputRef}
             type="file"
@@ -1417,54 +1306,22 @@ export default function DocChat() {
             }}
           />
 
-          {/* Preview de imágenes pendientes antes de enviar */}
+          {/* Preview imágenes pendientes */}
+          {/* ✅ CORREGIDO: contenedor y elementos de imagen → clases BEM */}
           {pendingImages.length > 0 && (
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 8,
-                marginTop: 8,
-              }}
-            >
+            <div className="dc-pending-images">
               {pendingImages.map(img => (
-                <div
-                  key={img.id}
-                  style={{ position: 'relative', display: 'inline-block' }}
-                >
+                <div key={img.id} className="dc-pending-image">
                   <img
                     src={img.dataUrl}
                     alt={img.name}
-                    style={{
-                      width: 72,
-                      height: 72,
-                      objectFit: 'cover',
-                      borderRadius: 8,
-                      border: '1px solid var(--border)',
-                    }}
+                    className="dc-pending-image-thumb"
                   />
                   <button
                     type="button"
                     onClick={() => removePendingImage(img.id)}
                     aria-label="Quitar imagen"
-                    style={{
-                      position: 'absolute',
-                      top: -6,
-                      right: -6,
-                      width: 18,
-                      height: 18,
-                      borderRadius: '50%',
-                      background: 'var(--red, #dc2626)',
-                      color: '#fff',
-                      border: 'none',
-                      fontSize: 10,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      lineHeight: 1,
-                    }}
+                    className="dc-pending-image-remove"
                   >
                     ✕
                   </button>
@@ -1473,30 +1330,29 @@ export default function DocChat() {
             </div>
           )}
 
+          {/* ✅ CORREGIDO: Tailwind arbitrario → .dc-upload-progress */}
           {uploading && (
-            <div className="mt-2 text-xs text-[var(--ink3)]">
+            <div className="dc-upload-progress">
               {t.common?.processing ?? 'Procesando archivo...'} {uploadPct}%
             </div>
           )}
 
+          {/* Selector de manuales activos */}
+          {/* ✅ CORREGIDO: Tailwind arbitrario en botones → .dc-manual-tag con modificador activo */}
           {manuals.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="dc-manual-tags">
               {manuals.map(manual => (
-                <div key={manual.id} className="flex items-center gap-1">
+                <div key={manual.id} className="dc-manual-tag-group">
                   <button
                     type="button"
-                    className={`rounded-full border px-3 py-1 text-xs ${
-                      manual.id === activeManualId
-                        ? 'border-[var(--blue)] bg-[var(--blue-bg)] text-[var(--blue)]'
-                        : 'border-[var(--border)] bg-[var(--surface)] text-[var(--ink2)]'
-                    }`}
+                    className={`dc-manual-tag ${manual.id === activeManualId ? 'dc-manual-tag--active' : ''}`}
                     onClick={() => setActiveManualId(manual.id)}
                   >
                     {manual.name}
                   </button>
                   <button
                     type="button"
-                    className="text-xs text-[var(--red)] underline opacity-70 hover:opacity-100"
+                    className="dc-manual-tag-remove"
                     title={t.common?.remove ?? 'Quitar'}
                     onClick={() => removeManual(manual.id)}
                   >

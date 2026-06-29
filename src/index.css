@@ -1881,4 +1881,385 @@ body {
     gap: 8px;
   }
 }
+ /* ----------------------------------------------------------
+   dc-sidebar  (reemplaza el panel-left con width inline dinámico)
+   ---------------------------------------------------------- */
+.dc-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width 0.25s ease, min-width 0.25s ease;
+}
+ 
+.dc-sidebar--open {
+  /* hereda el width natural de .panel-left (300px) */
+}
+ 
+.dc-sidebar--collapsed {
+  width: 44px;
+  min-width: 44px;
+}
+ 
+/* ----------------------------------------------------------
+   dc-sidebar-header  (reemplaza el div toggle con inline styles)
+   ---------------------------------------------------------- */
+.dc-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+ 
+.dc-sidebar-header--open {
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+ 
+.dc-sidebar-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink2);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+ 
+/* ----------------------------------------------------------
+   dc-toggle-btn  (reemplaza el botón toggle con inline styles)
+   ---------------------------------------------------------- */
+.dc-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+ 
+.dc-toggle-btn--active {
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+ 
+.dc-toggle-btn:hover {
+  background: var(--surface2);
+  color: var(--ink);
+}
+ 
+/* ----------------------------------------------------------
+   dc-sidebar-content  (reemplaza display:flex/none inline)
+   ---------------------------------------------------------- */
+.dc-sidebar-content {
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+}
+ 
+.dc-sidebar-content--visible {
+  display: flex;
+}
+ 
+.dc-sidebar-content--hidden {
+  display: none;
+}
+ 
+/* ----------------------------------------------------------
+   dc-catalog-loading  (reemplaza el loading OTs con inline)
+   ---------------------------------------------------------- */
+.dc-catalog-loading {
+  font-size: 11px;
+  color: var(--ink3);
+  text-align: center;
+  padding: 8px 0;
+}
+ 
+/* ----------------------------------------------------------
+   dc-save-section  (área del botón guardar en panel izq.)
+   ---------------------------------------------------------- */
+.dc-save-section {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+ 
+/* ----------------------------------------------------------
+   dc-save-btn  (reemplaza el botón guardar con inline dinámico)
+   Estados: idle | saving | saved | error
+   ---------------------------------------------------------- */
+.dc-save-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+ 
+.dc-save-btn--idle {
+  background: var(--blue);
+  color: #fff;
+}
+ 
+.dc-save-btn--idle:hover {
+  background: var(--blue-dark);
+}
+ 
+.dc-save-btn--saving {
+  background: var(--surface2);
+  color: var(--ink3);
+  cursor: not-allowed;
+}
+ 
+.dc-save-btn--saved {
+  background: var(--green-bg);
+  color: var(--green);
+}
+ 
+.dc-save-btn--error {
+  background: var(--red-bg);
+  color: var(--red);
+}
+ 
+/* ----------------------------------------------------------
+   dc-save-modal  (reemplaza modal guardar sesión con inline)
+   Usa .modal-overlay y .modal-box ya existentes en el DS
+   ---------------------------------------------------------- */
+.dc-save-modal {
+  width: 380px;
+  max-width: 90vw;
+}
+ 
+.dc-save-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+ 
+.dc-save-modal-meta {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--ink3);
+}
+ 
+.dc-save-modal-label {
+  display: block;
+  font-size: 12px;
+  color: var(--ink2);
+  margin-bottom: 6px;
+}
+ 
+.dc-save-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+ 
+/* ----------------------------------------------------------
+   dc-textarea  (reemplaza Tailwind arbitrario en textarea)
+   ---------------------------------------------------------- */
+.dc-textarea {
+  flex: 1;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: var(--ink);
+  font-family: var(--sans);
+  line-height: 1.5;
+}
+ 
+.dc-textarea::placeholder {
+  color: var(--ink3);
+}
+ 
+/* ----------------------------------------------------------
+   dc-camera-btn  (reemplaza botón cámara con inline + JS hover)
+   ---------------------------------------------------------- */
+.dc-camera-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  cursor: pointer;
+  color: var(--ink3);
+  transition: color 0.15s;
+}
+ 
+.dc-camera-btn:hover {
+  color: var(--blue);
+}
+ 
+.dc-camera-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+ 
+/* ----------------------------------------------------------
+   input-wrap--drag  (reemplaza Tailwind ring-2 ring-[var(--blue)])
+   ---------------------------------------------------------- */
+.input-wrap--drag {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px var(--blue-alpha);
+}
+ 
+/* ----------------------------------------------------------
+   dc-pending-images  (reemplaza contenedor inline de previews)
+   ---------------------------------------------------------- */
+.dc-pending-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+ 
+.dc-pending-image {
+  position: relative;
+  display: inline-block;
+}
+ 
+.dc-pending-image-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  display: block;
+}
+ 
+.dc-pending-image-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  border: none;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.15s;
+}
+ 
+.dc-pending-image-remove:hover {
+  background: var(--red-dark);
+}
+ 
+/* ----------------------------------------------------------
+   dc-upload-progress  (reemplaza Tailwind arbitrario mt-2 text-xs)
+   ---------------------------------------------------------- */
+.dc-upload-progress {
+  margin-top: 6px;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--ink3);
+}
+ 
+/* ----------------------------------------------------------
+   dc-manual-tags  (reemplaza Tailwind arbitrario en lista manuales)
+   ---------------------------------------------------------- */
+.dc-manual-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+ 
+.dc-manual-tag-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+ 
+.dc-manual-tag {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink2);
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+ 
+.dc-manual-tag:hover {
+  border-color: var(--border2);
+  color: var(--ink);
+}
+ 
+.dc-manual-tag--active {
+  border-color: var(--blue);
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+ 
+.dc-manual-tag-remove {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--red);
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: opacity 0.15s;
+  text-decoration: underline;
+}
+ 
+.dc-manual-tag-remove:hover {
+  opacity: 1;
+}
+ 
+/* ----------------------------------------------------------
+   ctx-tag--manual  (modificador BEM para el tag de manual activo)
+   Reemplaza el style inline con background/color hardcodeados
+   ---------------------------------------------------------- */
+.ctx-tag--manual {
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+ 
+/* ----------------------------------------------------------
+   Responsive
+   ---------------------------------------------------------- */
+@media (max-width: 640px) {
+  .dc-sidebar--open {
+    width: 100%;
+    min-width: unset;
+  }
+ 
+  .dc-save-modal {
+    width: 100%;
+  }
+}
  
