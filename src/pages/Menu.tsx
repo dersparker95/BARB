@@ -205,6 +205,20 @@ const Menu: React.FC = () => {
           </div>
         </button>
 
+        {/* 🔥 NUEVO BOTÓN: Historial de Diagnósticos */}
+        <button className="menu-card" onClick={() => navigate('/history')} style={{ borderColor: 'rgba(217, 119, 6, 0.3)' }}>
+          <div className="menu-card-icon orange">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+          </div>
+          <div className="menu-card-text">
+            <h3>{t.menu?.historyTitle || (nLang === 'en' ? 'Diagnostic History' : 'Historial de Diagnósticos')}</h3>
+            <p>{t.menu?.historyDescription || (nLang === 'en' ? 'Review previous AI sessions' : 'Revisa consultas y sesiones previas')}</p>
+          </div>
+        </button>
+
         {user?.role === 'admin' && (
           <>
             <button className="menu-card admin-only" onClick={() => navigate('/dashboard')} style={{ borderColor: 'rgba(94,61,179,0.3)' }}>

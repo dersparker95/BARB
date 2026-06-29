@@ -16,6 +16,8 @@ const Debug = React.lazy(() => import('./pages/Debug'))
 const Topology = React.lazy(() => import('./pages/Topology'))
 const MachineMemory = React.lazy(() => import('./pages/MachineMemory'))
 const Report = React.lazy(() => import('./pages/Report'))
+// 🔥 NUEVA RUTA: Historial de Sesiones
+const SessionHistory = React.lazy(() => import('./pages/SessionHistory'))
 
 type GuardProps = {
   allowedRoles: Role[]
@@ -130,11 +132,19 @@ export default function App() {
               </RoleGuard>
             }
           />
+          {/* 🔥 SECCIÓN INYECTADA */}
+          <Route
+            path="/history"
+            element={
+              <RoleGuard allowedRoles={routeRoles('/history')}>
+                <SessionHistory />
+              </RoleGuard>
+            }
+          />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Suspense>
-    // 🗑️ ELIMINADO: <Toast /> (Ya está renderizado dentro de <Layout />)
   )
 }

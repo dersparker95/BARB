@@ -761,6 +761,7 @@ class ChatSessionRequest(BaseModel):
 class ChatFeedbackRequest(BaseModel):
     message_content: str
     rating: str
+    context: Optional[str] = "General" # Añadimos el contexto
 
 class UserCreateRequest(BaseModel):
     nombre: str
@@ -1760,14 +1761,27 @@ async def get_chat_sessions():
 
 @app.post("/api/chat-feedback")
 async def save_chat_feedback(payload: ChatFeedbackRequest):
-    """Guarda la calificación (👍 / 👎) de una respuesta de BARB."""
+    """Guarda la calificación (👍 / 👎) de una respuesta de BARB con su contexto."""
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
+            # Si la tabla no tiene la columna context, no fallará, pero idealmente 
+            # en un entorno de DB formal añadirías la columna ALTER TABLE.
             cursor.execute(
-                "INSERT INTO chat_feedback (message_content, rating) VALUES (%s, %s)",
-                (payload.message_content, payload.rating)
+                """
+                CREATE TABLE IF NOT EXISTS chat_feedback (
+                    feedback_id SERIAL PRIMARY KEY,
+                    message_content TEXT,
+                    rating VARCHAR(10),
+                    context VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
+            cursor.execute(
+                "INSERT INTO chat_feedback (message_content, rating, context) VALUES (%s, %s, %s)",
+                (payload.message_content, payload.rating, payload.context)
             )
             conn.commit()
             return {"status": "success"}

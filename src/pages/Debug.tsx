@@ -221,11 +221,24 @@ export default function DebugChat() {
             </div>
           ) : (
             messages.map((msg, idx) => (
-              <ChatBubble key={idx} msg={msg} side={msg.role === 'user' ? 'user' : 'bot'} />
+              <ChatBubble 
+                key={idx} 
+                msg={msg} 
+                side={msg.role === 'user' ? 'user' : 'bot'} 
+                onFeedback={(msgData, rating) => {
+                  fetch(`${apiRoot}/chat-feedback`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                      message_content: msgData.content, 
+                      rating,
+                      context: selectedMachine?.name || 'Debug General' // Enviamos el contexto
+                    })
+                  }).catch(err => console.error("Error enviando feedback:", err));
+                }}
+              />
             ))
           )}
-          {loading && <div className="mt-2"><Thinking /></div>}
-        </div>
 
         <div className="p-4 bg-[var(--surface)] border-t border-[var(--border)] shrink-0">
           <div className="flex gap-2">
