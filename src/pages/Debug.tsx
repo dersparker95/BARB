@@ -6,19 +6,17 @@ import ChatBubble, { Thinking } from '../components/ChatBubble'
 import { getTranslations, normalizeLang } from '../utils/i18n'
 
 export default function DebugChat() {
-  const { apiBase, lmBase, user, lang } = useAppContext()
+  const { apiBase, user, lang } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
   const nLang = normalizeLang(lang)
   
-  // 🔥 Importamos useLocation para leer datos de otras pantallas
   const location = useLocation()
 
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false) // ESTADO PARA RESPONSIVIDAD
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   
-  // Datos del backend
   const [machines, setMachines] = useState([])
   const [workOrders, setWorkOrders] = useState([])
   const [selectedMachineId, setSelectedMachineId] = useState(null)
@@ -26,7 +24,6 @@ export default function DebugChat() {
   const areaRef = useRef(null)
   const apiRoot = (apiBase || 'https://barb-2ih8.onrender.com/api').replace(/\/$/, '')
 
-  // 1. Cargar Máquinas y OTs al iniciar
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -43,19 +40,16 @@ export default function DebugChat() {
     fetchData()
   }, [apiRoot])
 
-  // 🔥 NUEVO: Atrapamos la máquina que seleccionaron en Topología
   useEffect(() => {
     if (location.state && typeof location.state === 'object' && location.state.machineId) {
       setSelectedMachineId(String(location.state.machineId))
     }
   }, [location.state])
 
-  // Scroll automático del chat
   useEffect(() => {
     if (areaRef.current) areaRef.current.scrollTop = areaRef.current.scrollHeight
   }, [messages])
 
-  // 2. Filtrar el historial de la máquina seleccionada
   const machineHistory = useMemo(() => {
     if (!selectedMachineId) return []
     return workOrders.filter(ot => String(ot.machineId ?? ot.machine_id) === String(selectedMachineId))
@@ -63,7 +57,6 @@ export default function DebugChat() {
 
   const selectedMachine = machines.find(m => String(m.id ?? m.maquina_id) === String(selectedMachineId))
 
-  // 3. Enviar mensaje a la IA
   const send = async () => {
     const query = input.trim()
     if (!query || loading) return
@@ -96,7 +89,6 @@ export default function DebugChat() {
     }
   }
 
-  // 4. INYECCIÓN DE HISTORIAL (La Magia de RAG)
   const injectHistory = () => {
     if (!selectedMachine || machineHistory.length === 0) return;
     
@@ -107,14 +99,12 @@ export default function DebugChat() {
     const prompt = `Analiza el siguiente historial de fallas del equipo "${selectedMachine.name || selectedMachine.nombre}":\n\n${historyText}\n\n¿Ves algún patrón de falla repetitiva? ¿Qué componente deberíamos inspeccionar a fondo para evitar que vuelva a ocurrir?`;
     
     setInput(prompt);
-    // En móviles, cerramos el menú automáticamente al inyectar
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   }
 
   return (
     <div className="two-panel w-full h-full relative">
       
-      {/* OVERLAY FONDO OSCURO PARA MOVIL */}
       {isSidebarOpen && (
         <div
           className="fixed inset-0 bg-black/40 z-40 md:hidden"
@@ -122,7 +112,6 @@ export default function DebugChat() {
         />
       )}
 
-      {/* PANEL IZQUIERDO: Selector de Máquinas y Ficha Histórica (RESPONSIVO) */}
       <div 
         className={`panel-left flex flex-col gap-4 transition-transform duration-300 ${
           isSidebarOpen
@@ -130,7 +119,6 @@ export default function DebugChat() {
             : 'hidden md:flex'
         }`}
       >
-        {/* ENCABEZADO MOVIL DEL PANEL */}
         <div className="md:hidden flex justify-between items-center mb-2 border-b border-[var(--border)] pb-2">
           <span className="font-bold text-[var(--ink)]">Equipos</span>
           <button
@@ -190,11 +178,8 @@ export default function DebugChat() {
         )}
       </div>
 
-      {/* PANEL DERECHO: El Chat */}
       <div className="panel-right flex flex-col h-full bg-[var(--surface)]">
         <div className="p-4 border-b border-[var(--border)] bg-[var(--surface)] flex items-center shrink-0">
-          
-          {/* BOTÓN HAMBURGUESA MÓVIL */}
           <button
             type="button"
             className="md:hidden flex items-center justify-center p-1.5 mr-3 rounded-md border border-[var(--border)] bg-[var(--bg-body)] text-[var(--ink)]"
@@ -232,13 +217,15 @@ export default function DebugChat() {
                     body: JSON.stringify({ 
                       message_content: msgData.content, 
                       rating,
-                      context: selectedMachine?.name || 'Debug General' // Enviamos el contexto
+                      context: selectedMachine?.name || selectedMachine?.nombre || 'Debug General'
                     })
                   }).catch(err => console.error("Error enviando feedback:", err));
                 }}
               />
             ))
           )}
+          {loading && <div className="mt-2"><Thinking /></div>}
+        </div>
 
         <div className="p-4 bg-[var(--surface)] border-t border-[var(--border)] shrink-0">
           <div className="flex gap-2">
