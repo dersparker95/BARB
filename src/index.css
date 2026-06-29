@@ -1666,3 +1666,219 @@ body {
   display: flex;
   gap: 8px;
 }
+.dash-block {
+  min-width: 320px;
+  flex: 1 1 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+ 
+.dash-block--wide {
+  flex: 2 1 400px;
+}
+ 
+.dash-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+ 
+.dash-block-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);        /* ✅ corregido: era --ink1 (inexistente) */
+}
+ 
+.dash-block-subtitle {
+  font-size: 12px;
+  color: var(--ink3);
+  display: block;
+  margin-top: 2px;
+}
+ 
+/* ----------------------------------------------------------
+   dash-alert-banner  (reemplaza el banner inline con hardcodes)
+   ---------------------------------------------------------- */
+.dash-alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--red-bg);
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: var(--radius-sm);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+ 
+.dash-alert-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: var(--red);
+}
+ 
+.dash-alert-title {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+ 
+.dash-alert-body {
+  font-size: 13px;
+  opacity: 0.9;
+}
+ 
+/* ----------------------------------------------------------
+   dash-charts-grid  (reemplaza el flex container inline)
+   ---------------------------------------------------------- */
+.dash-charts-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+ 
+/* ----------------------------------------------------------
+   dash-chart-scroll / dash-chart-center
+   ---------------------------------------------------------- */
+.dash-chart-scroll {
+  width: 100%;
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+}
+ 
+.dash-chart-center {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+ 
+/* ----------------------------------------------------------
+   dash-tooltip  (reemplaza las clases Tailwind hardcodeadas)
+   ---------------------------------------------------------- */
+.dash-tooltip {
+  background: var(--color-primary);
+  border: 1px solid var(--border2);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: #fff;
+}
+ 
+.dash-tooltip-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+ 
+.dash-tooltip-value--danger {
+  color: var(--red);
+}
+ 
+.dash-tooltip-value--ok {
+  color: var(--green);
+}
+ 
+.dash-tooltip-secondary {
+  color: var(--ink3);
+  margin-top: 4px;
+}
+ 
+/* ----------------------------------------------------------
+   dash-time-range  (reemplaza el div de selector inline)
+   ---------------------------------------------------------- */
+.dash-time-range {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+ 
+.dash-time-select {
+  font-weight: 700;
+  border-width: 2px;
+}
+ 
+/* ----------------------------------------------------------
+   dash-filters-actions  (botones dentro del panel de filtros)
+   ---------------------------------------------------------- */
+.dash-filters-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+ 
+/* ----------------------------------------------------------
+   dash-empty  (reemplaza p-8 text-center text-slate-500)
+   ---------------------------------------------------------- */
+.dash-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--ink3);
+  font-size: 13px;
+}
+ 
+/* ----------------------------------------------------------
+   dash-loading
+   ---------------------------------------------------------- */
+.dash-loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--ink3);
+  font-size: 14px;
+}
+ 
+/* ----------------------------------------------------------
+   dash-pagination  (reemplaza el div de paginación inline)
+   ---------------------------------------------------------- */
+.dash-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+ 
+.dash-pagination-info {
+  font-size: 12px;
+  color: var(--ink3);
+}
+ 
+.dash-pagination-controls {
+  display: flex;
+  gap: 8px;
+}
+ 
+/* ----------------------------------------------------------
+   Responsive
+   ---------------------------------------------------------- */
+@media (max-width: 900px) {
+  .dash-charts-grid {
+    flex-direction: column;
+  }
+ 
+  .dash-block--wide {
+    flex: 1 1 auto;
+  }
+}
+ 
+@media (max-width: 640px) {
+  .dash-filters-actions {
+    margin-left: 0;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+ 
+  .dash-alert-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+ 

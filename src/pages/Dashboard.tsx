@@ -30,7 +30,7 @@ interface ApiWorkOrder {
   discipline_name?: string; disciplina?: string;
   tipo?: string; maintenance_type?: string;
   costo_estimado?: number; costo_real?: number;
-  reporte_id?: number | null; diagnostico_id?: number | null; 
+  reporte_id?: number | null; diagnostico_id?: number | null;
   downtime_minutes?: number | null;
   machine_name?: string; maquina_nombre?: string;
 }
@@ -46,7 +46,7 @@ const mapApiWorkOrder = (o: ApiWorkOrder): WorkOrder => {
   const createdAt = ensureUTC(o.created_at ?? o.fecha_creacion) ?? new Date(Date.now() - (o.age_minutes || 0) * 60000).toISOString()
   const closedAt = ensureUTC(o.closed_at ?? o.fecha_cierre)
   let duration = 0
-  
+
   if (o.downtime_minutes != null) duration = Number(o.downtime_minutes)
   else if (closedAt) duration = Math.max(1, Math.round((new Date(closedAt).getTime() - new Date(createdAt).getTime()) / 60000))
   else duration = Math.max(1, Math.round((Date.now() - new Date(createdAt).getTime()) / 60000))
@@ -54,30 +54,31 @@ const mapApiWorkOrder = (o: ApiWorkOrder): WorkOrder => {
   const machineId = String(o.machine_id ?? o.maquina_id ?? o.machineId ?? o.maquinaId ?? '')
 
   return {
-    id: String(o.id ?? o.ot_id), 
-    title: o.title ?? o.numero_ot ?? `OT-${o.id}`, 
-    description: o.description ?? o.descripcion_problema ?? o.title ?? 'Sin descripción', 
+    id: String(o.id ?? o.ot_id),
+    title: o.title ?? o.numero_ot ?? `OT-${o.id}`,
+    description: o.description ?? o.descripcion_problema ?? o.title ?? 'Sin descripción',
     machineId,
     machineName: o.machine_name ?? o.maquina_nombre ?? `Máquina ${machineId}`,
-    status: (o.status ?? o.estado ?? 'pending').toLowerCase(), 
+    status: (o.status ?? o.estado ?? 'pending').toLowerCase(),
     priority: (o.priority ?? o.prioridad ?? 'medium').toLowerCase() as any,
-    createdAt, 
-    closedAt, 
+    createdAt,
+    closedAt,
     durationReal: duration,
-    createdBy: o.tecnico_nombre ?? o.creado_por ?? 'Operador', 
+    createdBy: o.tecnico_nombre ?? o.creado_por ?? 'Operador',
     discipline: o.discipline_name ?? o.disciplina ?? 'General',
-    maintenanceType: o.tipo ?? o.maintenance_type ?? 'corrective', 
-    costoEstimado: Number(o.costo_estimado) || 0, 
+    maintenanceType: o.tipo ?? o.maintenance_type ?? 'corrective',
+    costoEstimado: Number(o.costo_estimado) || 0,
     costoReal: Number(o.costo_real) || 0,
     hasBarbAi: !!(o.reporte_id || o.diagnostico_id)
   }
 }
 
-const Block: React.FC<{ title: string; subtitle?: string; children: React.ReactNode; style?: React.CSSProperties }> = ({ title, subtitle, children, style }) => (
-  <div style={{ ...style, minWidth: 320, flex: '1 1 auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
-    <div style={{ marginBottom: 16 }}>
-      <span style={{ fontSize: 16, fontWeight: 900, color: 'var(--ink1)' }}>{title}</span>
-      {subtitle && <span style={{ fontSize: 12, color: 'var(--ink3)', display: 'block', marginTop: 2 }}>{subtitle}</span>}
+// ✅ CORREGIDO: Block usa clases BEM en lugar de estilos inline
+const Block: React.FC<{ title: string; subtitle?: string; children: React.ReactNode; className?: string }> = ({ title, subtitle, children, className = '' }) => (
+  <div className={`dash-block ${className}`}>
+    <div className="dash-block-header">
+      <span className="dash-block-title">{title}</span>
+      {subtitle && <span className="dash-block-subtitle">{subtitle}</span>}
     </div>
     {children}
   </div>
@@ -95,16 +96,16 @@ export default function Dashboard() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
-  
+
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
   const [isFiltersOpen, setIsFiltersOpen] = useState(!isMobile)
-  
+
   useEffect(() => {
     const handleResize = () => { setIsMobile(window.innerWidth <= 768); if (window.innerWidth > 768) setIsFiltersOpen(true) }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
-  
+
   const [selectedTicket, setSelectedTicket] = useState<WorkOrder | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -113,28 +114,28 @@ export default function Dashboard() {
     setIsLoading(true)
     try {
       const safeApi = apiBase ? apiBase.replace(/\/$/, '') : API_URL
-      const [resOts, resMach] = await Promise.all([ 
-        fetch(`${safeApi}/work-orders`, { signal }), 
-        fetch(`${safeApi}/machines`, { signal }) 
+      const [resOts, resMach] = await Promise.all([
+        fetch(`${safeApi}/work-orders`, { signal }),
+        fetch(`${safeApi}/machines`, { signal })
       ])
-      
+
       if (resMach.ok) setMachines(await resMach.json())
       if (resOts.ok) {
         const rawData = await resOts.json();
         const ticketsArray = Array.isArray(rawData) ? rawData : (rawData.data || []);
         setTickets(ticketsArray.map(mapApiWorkOrder))
       }
-    } catch (err: any) { 
-      if (err.name === 'AbortError') return; 
-      showToast(t.common?.error || 'Error de conexión al cargar el Dashboard') 
-    } finally { 
-      setIsLoading(false) 
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      showToast(t.common?.error || 'Error de conexión al cargar el Dashboard')
+    } finally {
+      setIsLoading(false)
     }
   }, [apiBase, t.common])
 
-  useEffect(() => { 
+  useEffect(() => {
     const controller = new AbortController()
-    void loadData(controller.signal) 
+    void loadData(controller.signal)
     return () => controller.abort()
   }, [loadData])
 
@@ -162,7 +163,6 @@ export default function Dashboard() {
     return filtered.filter(tk => {
       const isClosed = tk.status === 'closed' || tk.status === 'cerrado' || tk.status === 'resolved';
       if (isClosed) return false;
-      // Lógica de SLA: Críticas/Altas > 2 hrs. Normales > 24 hrs.
       const ageHours = tk.durationReal / 60;
       return (tk.priority === 'high' || tk.priority === 'critical' ? ageHours > 2 : ageHours > 24);
     });
@@ -208,9 +208,14 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-body">
-      
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <select value={timeRange} onChange={e => setTimeRange(e.target.value === 'all' ? 'all' : Number(e.target.value))} className="filter-select" style={{ background: 'var(--surface)', fontWeight: 700, border: '2px solid var(--border)' }}>
+
+      {/* Selector de rango de tiempo */}
+      <div className="dash-time-range">
+        <select
+          value={timeRange}
+          onChange={e => setTimeRange(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+          className="filter-select dash-time-select"
+        >
           <option value={7}>{t.dashboard?.last7Days || 'Últimos 7 días'}</option>
           <option value={30}>{t.dashboard?.last30Days || 'Últimos 30 días'}</option>
           <option value={90}>{t.dashboard?.last90Days || 'Últimos 90 días'}</option>
@@ -218,71 +223,100 @@ export default function Dashboard() {
         </select>
       </div>
 
-      {/* BANNER DE ALERTAS INTELIGENTES */}
+      {/* ✅ CORREGIDO: Banner de alertas usa variables DS y clases BEM — sin hardcodes ni emoji */}
       {overdueTickets.length > 0 && (
-        <div style={{ background: 'var(--red-bg, #fee2e2)', color: 'var(--red, #dc2626)', padding: '16px 20px', borderRadius: 12, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16, border: '1px solid #f87171' }}>
-          <span style={{ fontSize: 24 }}>🚨</span>
+        <div className="dash-alert-banner" role="alert">
+          <svg className="dash-alert-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <span className="sr-only">Alerta:</span>
           <div>
-            <strong style={{ display: 'block', fontSize: 15, marginBottom: 4 }}>Atención: Tienes {overdueTickets.length} Órdenes de Trabajo estancadas o críticas.</strong>
-            <span style={{ fontSize: 13, opacity: 0.9 }}>Revisa el listado inferior para gestionar las intervenciones y evitar tiempos muertos en la planta.</span>
+            <strong className="dash-alert-title">
+              Atención: Tienes {overdueTickets.length} Órdenes de Trabajo estancadas o críticas.
+            </strong>
+            <span className="dash-alert-body">
+              Revisa el listado inferior para gestionar las intervenciones y evitar tiempos muertos en la planta.
+            </span>
           </div>
         </div>
       )}
 
       <FinancialDashboard timeRange={timeRange} />
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 24 }}>
-        <Block title={t.dashboard?.chartResolution || 'Resolución'} style={{ flex: '2 1 400px' }}>
-          {resolutionData.length === 0 ? <div className="p-8 text-center text-slate-500">{t.dashboard?.noData || 'Sin datos'}</div> : (
-            <div style={{ width: '100%', overflowX: 'auto', display: 'flex', justifyContent: 'center' }}>
+      {/* ✅ CORREGIDO: Contenedor de charts usa clase BEM */}
+      <div className="dash-charts-grid">
+        <Block title={t.dashboard?.chartResolution || 'Resolución'} className="dash-block--wide">
+          {resolutionData.length === 0
+            ? <div className="dash-empty">{t.dashboard?.noData || 'Sin datos'}</div>
+            : (
+              <div className="dash-chart-scroll">
                 <BarChart width={500} height={260} data={resolutionData} margin={{ top: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="machineName" tick={{ fontSize: 10, fill: 'var(--ink3)' }} angle={-25} textAnchor="end" height={60} />
                   <YAxis tick={{ fontSize: 10, fill: 'var(--ink3)' }} tickFormatter={v => `${v}m`} />
-                  <Tooltip cursor={{ fill: 'rgba(0,0,0,0.05)' }} content={({ payload }) => payload?.length ? (
-                    <div className="bg-slate-900 border border-slate-700 p-3 rounded text-xs text-white">
-                      <div className="font-bold mb-2">{payload[0].payload.machineName}</div>
-                      <div>{t.common?.duration || 'Duración'}: <b className={payload[0].payload.minutos > (BARB_BUSINESS?.SLA_TARGET || 24) ? 'text-red-400' : 'text-emerald-400'}>{payload[0].payload.minutos}m</b></div>
-                      <div className="text-slate-400 mt-1">{t.common?.technician || 'Técnico'}: {payload[0].payload.tech}</div>
-                    </div>
-                  ) : null} />
-                  <ReferenceLine y={BARB_BUSINESS?.SLA_TARGET || 24} stroke="#ef4444" strokeDasharray="3 3" />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(0,0,0,0.05)' }}
+                    content={({ payload }) => payload?.length ? (
+                      // ✅ CORREGIDO: tooltip usa variables DS en lugar de clases Tailwind hardcodeadas
+                      <div className="dash-tooltip">
+                        <div className="dash-tooltip-title">{payload[0].payload.machineName}</div>
+                        <div>
+                          {t.common?.duration || 'Duración'}:{' '}
+                          <b className={payload[0].payload.minutos > (BARB_BUSINESS?.SLA_TARGET || 24) ? 'dash-tooltip-value--danger' : 'dash-tooltip-value--ok'}>
+                            {payload[0].payload.minutos}m
+                          </b>
+                        </div>
+                        <div className="dash-tooltip-secondary">{t.common?.technician || 'Técnico'}: {payload[0].payload.tech}</div>
+                      </div>
+                    ) : null}
+                  />
+                  <ReferenceLine y={BARB_BUSINESS?.SLA_TARGET || 24} stroke="var(--red)" strokeDasharray="3 3" />
                   <Bar dataKey="minutos" radius={[4, 4, 0, 0]}>
-                    {resolutionData.map((d, i) => <Cell key={i} fill={d.minutos > (BARB_BUSINESS?.SLA_TARGET || 24) ? '#ef4444' : '#10b981'} />)}
+                    {resolutionData.map((d, i) => (
+                      <Cell key={i} fill={d.minutos > (BARB_BUSINESS?.SLA_TARGET || 24) ? 'var(--red)' : 'var(--green)'} />
+                    ))}
                   </Bar>
                 </BarChart>
-            </div>
-          )}
+              </div>
+            )}
         </Block>
 
-        <Block title={t.dashboard?.strategyTitle || 'Estrategia'} style={{ flex: '1 1 300px' }}>
-          {typeData.length === 0 ? <div className="p-8 text-center text-slate-500">{t.dashboard?.noData || 'Sin datos'}</div> : (
-            <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+        <Block title={t.dashboard?.strategyTitle || 'Estrategia'}>
+          {typeData.length === 0
+            ? <div className="dash-empty">{t.dashboard?.noData || 'Sin datos'}</div>
+            : (
+              <div className="dash-chart-center">
                 <PieChart width={300} height={260}>
                   <Pie data={typeData} innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value" nameKey="name">
                     {typeData.map((d, i) => <Cell key={i} fill={d.fill} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: 'var(--surface)', borderRadius: 8 }} />
+                  <Tooltip contentStyle={{ background: 'var(--surface)', borderRadius: 'var(--radius-sm)' }} />
                   <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: 11 }} />
                 </PieChart>
-            </div>
-          )}
+              </div>
+            )}
         </Block>
       </div>
 
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>{t.dashboard?.title || 'Órdenes'} ({filtered.length})</h3>
-          {isMobile && <button className="btn btn-outline btn-sm" onClick={() => setIsFiltersOpen(!isFiltersOpen)}>{t.dashboard?.filters || 'Filtros'}</button>}
+      {/* ✅ CORREGIDO: Tabla de OTs usa clase del DS en lugar de styles inline */}
+      <div className="dash-block">
+        <div className="dash-block-header">
+          <h3 className="dash-block-title">{t.dashboard?.title || 'Órdenes'} ({filtered.length})</h3>
+          {isMobile && (
+            <button className="btn btn-outline btn-sm" onClick={() => setIsFiltersOpen(!isFiltersOpen)}>
+              {t.dashboard?.filters || 'Filtros'}
+            </button>
+          )}
         </div>
 
+        {/* ✅ CORREGIDO: Filtros usan .dash-filters del DS en lugar de styles inline */}
         {isFiltersOpen && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20, background: 'var(--bg-body)', padding: 12, borderRadius: 12 }}>
+          <div className="dash-filters">
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="filter-select">
               <option value="all">{t.dashboard?.allStatuses || 'Todos los estados'}</option>
               {Object.entries(t.statuses || {}).map(([k, v]) => <option key={k} value={k}>{String(v)}</option>)}
             </select>
-            
+
             <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="filter-select">
               <option value="all">{t.dashboard?.allTypes || 'Todos los tipos'}</option>
               {Object.entries(t.maintenanceTypes || {}).map(([k, v]) => <option key={k} value={k}>{String(v)}</option>)}
@@ -292,10 +326,15 @@ export default function Dashboard() {
               <option value="all">{t.dashboard?.allMachines || 'Todas las máquinas'}</option>
               {machines.map(m => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
             </select>
-            
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={(t.common?.search || 'Buscar') + "..."} className="filter-search" style={{ flex: '1 1 150px' }} />
-            
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={(t.common?.search || 'Buscar') + '...'}
+              className="filter-search"
+            />
+
+            <div className="dash-filters-actions">
               <button className="btn btn-outline" onClick={handleExportCsv}>{t.common?.csv || 'CSV'}</button>
               <button className="btn btn-outline" onClick={handleExportXlsx}>{t.common?.xlsx || 'XLSX'}</button>
               <button className="btn btn-primary" onClick={() => setIsCreateOpen(true)}>+ {t.dashboard?.createWorkOrder || 'Crear'}</button>
@@ -303,20 +342,29 @@ export default function Dashboard() {
           </div>
         )}
 
-        {isLoading ? <div style={{ padding: 40, textAlign: 'center' }}>{t.common?.loading || 'Cargando...'}</div> : (
-          <>
-            <TicketTable tickets={paginatedTickets} onSelect={id => setSelectedTicket(tickets.find(tk => tk.id === id) || null)} />
-            {filtered.length > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-                <span style={{ fontSize: 12, color: 'var(--ink3)' }}>{t.common?.page || 'Pág'} {currentPage} / {Math.ceil(filtered.length / 10) || 1}</span>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-outline" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>{t.common?.prev || 'Anterior'}</button>
-                  <button className="btn btn-outline" onClick={() => setCurrentPage(p => Math.min(Math.ceil(filtered.length / 10), p + 1))} disabled={currentPage === Math.ceil(filtered.length / 10)}>{t.common?.next || 'Siguiente'}</button>
+        {isLoading
+          ? <div className="dash-loading">{t.common?.loading || 'Cargando...'}</div>
+          : (
+            <>
+              <TicketTable tickets={paginatedTickets} onSelect={id => setSelectedTicket(tickets.find(tk => tk.id === id) || null)} />
+              {filtered.length > 0 && (
+                // ✅ CORREGIDO: Paginación usa clase BEM en lugar de styles inline
+                <div className="dash-pagination">
+                  <span className="dash-pagination-info">
+                    {t.common?.page || 'Pág'} {currentPage} / {Math.ceil(filtered.length / 10) || 1}
+                  </span>
+                  <div className="dash-pagination-controls">
+                    <button className="btn btn-outline" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                      {t.common?.prev || 'Anterior'}
+                    </button>
+                    <button className="btn btn-outline" onClick={() => setCurrentPage(p => Math.min(Math.ceil(filtered.length / 10), p + 1))} disabled={currentPage === Math.ceil(filtered.length / 10)}>
+                      {t.common?.next || 'Siguiente'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
       </div>
 
       <WorkOrderCreateModal
@@ -338,9 +386,9 @@ export default function Dashboard() {
                 disciplina_id: Number(p.disciplinaId)
               })
             });
-            
+
             if (!response.ok) throw new Error("Error del servidor");
-            
+
             showToast(t.common?.success || "Orden creada con éxito", "success");
             loadData();
             setIsCreateOpen(false);
@@ -358,10 +406,10 @@ export default function Dashboard() {
             const safeApi = apiBase ? apiBase.replace(/\/$/, '') : API_URL
             const response = await fetch(`${safeApi}/work-orders/${id}/status`, {
               method: 'PUT',
-              headers:{'Content-Type':'application/json'},
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ status: s })
             });
-            if(!response.ok) throw new Error("Error actualizando");
+            if (!response.ok) throw new Error("Error actualizando");
             loadData();
             setSelectedTicket(null);
             showToast(t.common?.success || "Estado actualizado");
@@ -373,10 +421,10 @@ export default function Dashboard() {
           try {
             const safeApi = apiBase ? apiBase.replace(/\/$/, '') : API_URL
             const response = await fetch(`${safeApi}/work-orders/${id}`, { method: 'DELETE' });
-            if(!response.ok) throw new Error("Error borrando");
+            if (!response.ok) throw new Error("Error borrando");
             loadData();
             setSelectedTicket(null);
-          } catch(error) {
+          } catch (error) {
             showToast(t.common?.error || "Error al eliminar");
             throw error;
           }
