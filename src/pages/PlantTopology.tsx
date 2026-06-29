@@ -30,7 +30,7 @@ const NODE_H = 85
 const PlantTopology: React.FC = () => {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const { setSelectedMachine, lang } = useAppContext()
+  const { setSelectedMachine, lang, apiBase } = useAppContext()
   const navigate = useNavigate()
   
   const t = useMemo(() => getTranslations(lang), [lang])
@@ -51,7 +51,7 @@ const PlantTopology: React.FC = () => {
     
     async function fetchTopology() {
       try {
-        const api = createApiService()
+        const api = createApiService(apiBase)
         const data = await api.topologia() 
         if (!controller.signal.aborted && data) {
           setNodes(Array.isArray(data.nodos) ? data.nodos : [])
@@ -66,7 +66,7 @@ const PlantTopology: React.FC = () => {
     
     void fetchTopology()
     return () => controller.abort()
-  }, [])
+  }, [apiBase])
 
   const nodesDict = useMemo(() => {
     const dict = new Map<number, {x: number, y: number}>()
