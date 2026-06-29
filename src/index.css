@@ -2262,4 +2262,72 @@ body {
     width: 100%;
   }
 }
+ /* ----------------------------------------------------------
+   forbidden-root
+   Reemplaza: className="flex min-h-[100dvh] w-full items-center
+   justify-center bg-[var(--bg)]"  (Tailwind + arbitrario)
+   ---------------------------------------------------------- */
+.forbidden-root {
+  display: flex;
+  min-height: 100dvh;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
  
+/* ----------------------------------------------------------
+   forbidden-card
+   Reemplaza: style={{ maxWidth: 560, width: 'calc(100% - 32px)',
+   textAlign: 'center' }} (inline)
+   ---------------------------------------------------------- */
+.forbidden-card {
+  max-width: 560px;
+  width: calc(100% - 32px);
+  text-align: center;
+}
+ 
+/* ----------------------------------------------------------
+   forbidden-icon
+   Reemplaza: style={{ fontSize: 44 }} en el div del emoji
+   El SVG hereda el color de var(--ink3) y escala con width/height
+   ---------------------------------------------------------- */
+.forbidden-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  width: 56px;
+  height: 56px;
+  color: var(--ink3);
+}
+ 
+.forbidden-icon svg {
+  width: 100%;
+  height: 100%;
+}
+ 
+/* ----------------------------------------------------------
+   forbidden-title / forbidden-sub
+   Reemplaza: style={{ marginTop: 8 }} en ambos elementos
+   ---------------------------------------------------------- */
+.forbidden-title {
+  margin-top: 8px;
+}
+ 
+.forbidden-sub {
+  margin-top: 8px;
+}
+ 
+/* ----------------------------------------------------------
+   forbidden-actions
+   Reemplaza: style={{ display: 'flex', gap: 12,
+   justifyContent: 'center', marginTop: 20, flexWrap: 'wrap' }}
+   ---------------------------------------------------------- */
+.forbidden-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}

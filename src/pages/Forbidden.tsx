@@ -6,8 +6,7 @@ import { getTranslations } from '../utils/i18n'
 const Forbidden: React.FC = () => {
   const navigate = useNavigate()
   const { setUser, lang } = useAppContext()
-  
-  // 🔥 BLINDAJE: Conectamos el diccionario de idiomas para evitar el hardcodeo
+
   const t = useMemo(() => getTranslations(lang), [lang])
 
   const handleGoMenu = () => {
@@ -20,28 +19,28 @@ const Forbidden: React.FC = () => {
   }
 
   return (
-    // 🔥 FIX MÓVIL: Cambiamos min-h-screen por min-h-[100dvh] y movimos el bg a clases de Tailwind
-    <div className="flex min-h-[100dvh] w-full items-center justify-center bg-[var(--bg)]">
-      <div
-        className="login-card shadow-soft"
-        style={{
-          maxWidth: 560,
-          width: 'calc(100% - 32px)',
-          textAlign: 'center',
-        }}
-      >
-        {/* 🔥 ACCESIBILIDAD: aria-hidden="true" para que el lector de pantalla no lea el emoji redundante */}
-        <div className="login-icon" style={{ fontSize: 44 }} aria-hidden="true">
-          🚫
-        </div>
-        <div className="login-title" style={{ marginTop: 8 }}>
-          {t.common?.forbiddenTitle || '403 - No Autorizado'}
-        </div>
-        <div className="login-sub" style={{ marginTop: 8 }}>
-          {t.common?.forbiddenMessage || 'Tu usuario no tiene permiso para acceder a esta ruta.'}
+    // ✅ CORREGIDO: Tailwind arbitrario → clases BEM del DS
+    <div className="forbidden-root">
+      <div className="login-card shadow-soft forbidden-card">
+
+        {/* ✅ CORREGIDO: emoji 🚫 → SVG accesible; fontSize inline → clase BEM */}
+        <div className="forbidden-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+          </svg>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20, flexWrap: 'wrap' }}>
+        <h1 className="login-title forbidden-title">
+          {t.common?.forbiddenTitle || '403 — No Autorizado'}
+        </h1>
+
+        <p className="login-sub forbidden-sub">
+          {t.common?.forbiddenMessage || 'Tu usuario no tiene permiso para acceder a esta ruta.'}
+        </p>
+
+        {/* ✅ CORREGIDO: div con inline styles → .forbidden-actions */}
+        <div className="forbidden-actions">
           <button className="btn btn-primary" onClick={handleGoMenu} type="button">
             {t.common?.backToMenu || 'Volver al menú'}
           </button>
@@ -49,6 +48,7 @@ const Forbidden: React.FC = () => {
             {t.common?.goToLogin || 'Ir al Login'}
           </button>
         </div>
+
       </div>
     </div>
   )
