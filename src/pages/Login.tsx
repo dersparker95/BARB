@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Spinner from '../components/Spinner'
 import { useAppContext } from '../context/AppContext'
@@ -19,15 +19,11 @@ const Login: React.FC = () => {
   const api = useMemo(() => createApiService((apiBase || 'http://localhost:9000/api').replace(/\/$/, '')), [apiBase])
   const t = useMemo(() => getTranslations(lang), [lang])
 
-  useEffect(() => {
-    if (dark) {
-      document.documentElement.classList.add('dark')
-      document.body.dataset.theme = 'dark'
-    } else {
-      document.documentElement.classList.remove('dark')
-      document.body.dataset.theme = 'light'
-    }
-  }, [dark])
+  // Nota: la sincronización de `dark` con el DOM (clase .dark/.light en
+  // <html>) vive centralizada en AppContext.tsx, ya que ese Provider
+  // envuelve toda la app y persiste durante la navegación. Tenerla
+  // duplicada aquí hacía que el toggle de tema solo funcionara mientras
+  // el usuario estuviera en la pantalla de Login.
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -92,7 +88,6 @@ const Login: React.FC = () => {
           onClick={() => setDark(!dark)}
           title={t.login?.themeToggle || 'Cambiar tema'}
           aria-label={t.login?.themeToggle || 'Cambiar tema'}
-          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
           type="button"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -167,12 +162,12 @@ const Login: React.FC = () => {
 
           {/* 🔥 Ahora el mensaje de error es dinámico */}
           {error && (
-            <div className="login-error" role="alert" style={{ color: 'var(--red)', fontSize: '13px', marginTop: '8px', textAlign: 'center' }}>
+            <div className="login-error" role="alert">
               {error}
             </div>
           )}
 
-          <button type="submit" className="btn btn-primary btn-lg" disabled={isSubmitDisabled} style={{ marginTop: '16px' }}>
+          <button type="submit" className="btn btn-primary btn-lg login-submit-btn" disabled={isSubmitDisabled}>
             <span className="login-button-content">
               {loading ? <Spinner label={connectingText} /> : null}
               <span>{loading ? connectingText : (t.login?.loginButton || 'Ingresar')}</span>
