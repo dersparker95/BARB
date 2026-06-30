@@ -869,6 +869,54 @@ async def shutdown_cleanup():
     """Cierra el cliente HTTP de DeepSeek para liberar conexiones keep-alive."""
     await ia_client.close()
 
+@app.get("/api/force-reset-db")
+def force_reset_db():
+    """
+    Fuerza el borrado de la BD, inyecta el archivo 01_tablas.sql
+    y encripta las contraseñas en texto plano para que el Login funcione.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            print("Iniciando reseteo forzado de la base de datos...")
+            
+            # 1. Ubicar el archivo SQL
+            base_dir = os.path.dirname(__file__)
+            sql_file_path = os.path.join(base_dir, 'initScripts', '01_tablas.sql')
+            
+            if not os.path.exists(sql_file_path):
+                raise HTTPException(status_code=404, detail=f"No se encontró el archivo: {sql_file_path}")
+                
+            # 2. Leer y ejecutar TODO el archivo (esto borra y recrea las tablas con los datos)
+            with open(sql_file_path, 'r', encoding='utf-8') as file:
+                sql_script = file.read()
+            cursor.execute(sql_script)
+            
+            # 3. Arreglar las contraseñas (encriptar 'admin123', 'tecnico123', etc.)
+            # Para que puedas iniciar sesión sin problemas
+            cursor.execute("SELECT usuario_id, password_hash FROM usuario")
+            # Dependiendo de si tu cursor retorna dicts o tuplas, lo manejamos seguro:
+            usuarios = cursor.fetchall()
+            for u in usuarios:
+                uid = u['usuario_id'] if isinstance(u, dict) else u[0]
+                plain_pass = u['password_hash'] if isinstance(u, dict) else u[1]
+                
+                hashed = hash_password(plain_pass)
+                cursor.execute("UPDATE usuario SET password_hash = %s WHERE usuario_id = %s", (hashed, uid))
+            
+            conn.commit()
+            
+        return {
+            "status": "success", 
+            "message": "¡Base de datos reseteada y poblada con éxito! Contraseñas encriptadas y listas para usar."
+        }
+    except Exception as e:
+        if conn: conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al forzar reseteo: {str(e)}")
+    finally:
+        if conn: release_db_connection(conn)
+        
 # =============================================================================
 # ENDPOINTS — SALUD Y DIAGNÓSTICO
 # =============================================================================
