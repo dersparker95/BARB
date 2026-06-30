@@ -14,7 +14,7 @@ from typing import Any, Optional
 import bcrypt
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
 from psycopg2.extras import RealDictCursor
@@ -909,7 +909,7 @@ async def shutdown_cleanup():
     await ia_client.close()
 
 @app.post("/api/force-reset-db")
-def force_reset_db(x_admin_token: str = ""):
+def force_reset_db(x_admin_token: str = Header(default="", alias="X-Admin-Token")):
     """
     Fuerza el borrado total de la BD (vía DROP SCHEMA dentro del propio SQL),
     reinyecta el archivo 01_tablas.sql (OTs, sesiones, máquinas de prueba) y
