@@ -807,7 +807,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_checks():
-    """Valida dependencias y auto-construye la base de datos completa si está vacía."""
+    """Valida dependencias y auto-construye la base de datos leyendo un archivo SQL local."""
     if not DEEPSEEK_API_KEY:
         print("⚠️ ADVERTENCIA: DEEPSEEK_API_KEY no configurada. El endpoint /api/chat estará degradado.")
     
@@ -815,31 +815,48 @@ async def startup_checks():
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            # 1. Crear TODAS las tablas principales si no existen
+            # 1. VERIFICACIÓN DE SEGURIDAD: Comprobamos si la BD ya tiene tablas
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS planta (planta_id SERIAL PRIMARY KEY, nombre VARCHAR(100), ubicacion VARCHAR(255));
-                CREATE TABLE IF NOT EXISTS disciplina (disciplina_id SERIAL PRIMARY KEY, nombre VARCHAR(100));
-                CREATE TABLE IF NOT EXISTS maquina (maquina_id SERIAL PRIMARY KEY, nombre VARCHAR(100), planta_id INTEGER, disciplina_id INTEGER);
-                CREATE TABLE IF NOT EXISTS usuario (usuario_id SERIAL PRIMARY KEY, nombre VARCHAR(100), email VARCHAR(100) UNIQUE, password_hash VARCHAR(255), rol VARCHAR(50), activo BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-                CREATE TABLE IF NOT EXISTS orden_trabajo (ot_id SERIAL PRIMARY KEY, numero_ot VARCHAR(50) UNIQUE, maquina_id INTEGER, tecnico_id INTEGER, creado_por INTEGER, diagnostico_id INTEGER, reporte_id INTEGER, tipo VARCHAR(50), descripcion_problema TEXT, descripcion_reparacion TEXT, resolution TEXT, priority VARCHAR(20), severity VARCHAR(20), fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP, fecha_inicio TIMESTAMP, fecha_cierre TIMESTAMP, fecha_vencimiento TIMESTAMP, tiempo_reparacion_min INTEGER, downtime_minutes INTEGER, costo_estimado NUMERIC, costo_real NUMERIC, estado VARCHAR(50));
-                CREATE TABLE IF NOT EXISTS ot_foto (ot_foto_id SERIAL PRIMARY KEY, ot_id INTEGER, file_name VARCHAR(255), original_name VARCHAR(255), content_type VARCHAR(50), file_path TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-                CREATE TABLE IF NOT EXISTS chat_session (session_id SERIAL PRIMARY KEY, title VARCHAR(255), saved_by VARCHAR(100), discipline VARCHAR(100), plant_id VARCHAR(50), plant_name VARCHAR(255), machine_id VARCHAR(50), machine_name VARCHAR(255), active_manual VARCHAR(255), messages JSONB, metadata JSONB, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-                CREATE TABLE IF NOT EXISTS chat_feedback (feedback_id SERIAL PRIMARY KEY, message_content TEXT, rating VARCHAR(10), context VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'usuario'
+                );
             """)
-            
-            # 2. Insertar un Usuario Administrador por defecto si la tabla está vacía
-            cursor.execute("SELECT COUNT(*) as total FROM usuario")
-            row = cursor.fetchone()
-            if row and row['total'] == 0:
-                default_hash = hash_password('admin123')
-                cursor.execute(
-                    "INSERT INTO usuario (nombre, email, password_hash, rol) VALUES (%s, %s, %s, %s)",
-                    ('Admin BARB', 'admin@barb.com', default_hash, 'admin')
-                )
-                print("✅ Usuario Administrador creado automáticamente.")
+            db_exists = cursor.fetchone()['exists']
+
+            # 2. INYECCIÓN: Si la BD está vacía, leemos y ejecutamos tu archivo SQL
+            if not db_exists:
+                print("⚙️ Base de datos vacía detectada. Buscando archivo SQL...")
                 
-            conn.commit()
-            print("✅ Base de datos inicializada y estructurada correctamente.")
+                # 👇 AQUI ESTA LA MAGIA DE LA RUTA: Entramos a la carpeta initScripts
+                base_dir = os.path.dirname(__file__) 
+                sql_file_path = os.path.join(base_dir, 'initScripts', '01_tablas.sql')
+                
+                if os.path.exists(sql_file_path):
+                    with open(sql_file_path, 'r', encoding='utf-8') as file:
+                        sql_script = file.read()
+                    
+                    cursor.execute(sql_script)
+                    conn.commit()
+                    print("✅ Tablas y datos inyectados exitosamente desde el archivo SQL.")
+                    
+                    # 3. VERIFICACIÓN DEL ADMIN: Nos aseguramos de que puedas entrar
+                    cursor.execute("SELECT COUNT(*) as total FROM usuario")
+                    row = cursor.fetchone()
+                    if row and row['total'] == 0:
+                        default_hash = hash_password('admin123')
+                        cursor.execute(
+                            "INSERT INTO usuario (nombre, email, password_hash, rol) VALUES (%s, %s, %s, %s)",
+                            ('Admin BARB', 'admin@barb.com', default_hash, 'admin')
+                        )
+                        conn.commit()
+                        print("✅ Usuario Administrador creado automáticamente.")
+                else:
+                    print(f"⚠️ ERROR: No se encontró el archivo {sql_file_path}")
+            else:
+                print("✅ La base de datos ya está estructurada. Omitiendo lectura del SQL.")
+                
     except Exception as e:
         if conn: conn.rollback()
         print(f"⚠️ ADVERTENCIA: No se pudo estructurar PostgreSQL al iniciar: {e}")
