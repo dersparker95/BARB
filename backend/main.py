@@ -807,42 +807,45 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_checks():
-    """Valida dependencias críticas y asegura las tablas necesarias al iniciar el servidor."""
+    """Valida dependencias y auto-construye la base de datos completa si está vacía."""
     if not DEEPSEEK_API_KEY:
-        print("⚠️  ADVERTENCIA: DEEPSEEK_API_KEY no configurada. El endpoint /api/chat estará degradado.")
+        print("⚠️ ADVERTENCIA: DEEPSEEK_API_KEY no configurada. El endpoint /api/chat estará degradado.")
+    
+    conn = None
     try:
         conn = get_db_connection()
-        with conn.cursor() as cursor:
-            # Auto-creación de tablas para el Chat y Feedback (si no existen)
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            # 1. Crear TODAS las tablas principales si no existen
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS chat_session (
-                    session_id SERIAL PRIMARY KEY,
-                    title VARCHAR(255),
-                    saved_by VARCHAR(100),
-                    discipline VARCHAR(100),
-                    plant_id VARCHAR(50),
-                    plant_name VARCHAR(255),
-                    machine_id VARCHAR(50),
-                    machine_name VARCHAR(255),
-                    active_manual VARCHAR(255),
-                    messages JSONB,
-                    metadata JSONB,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS chat_feedback (
-                    feedback_id SERIAL PRIMARY KEY,
-                    message_content TEXT,
-                    rating VARCHAR(10),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
+                CREATE TABLE IF NOT EXISTS planta (planta_id SERIAL PRIMARY KEY, nombre VARCHAR(100), ubicacion VARCHAR(255));
+                CREATE TABLE IF NOT EXISTS disciplina (disciplina_id SERIAL PRIMARY KEY, nombre VARCHAR(100));
+                CREATE TABLE IF NOT EXISTS maquina (maquina_id SERIAL PRIMARY KEY, nombre VARCHAR(100), planta_id INTEGER, disciplina_id INTEGER);
+                CREATE TABLE IF NOT EXISTS usuario (usuario_id SERIAL PRIMARY KEY, nombre VARCHAR(100), email VARCHAR(100) UNIQUE, password_hash VARCHAR(255), rol VARCHAR(50), activo BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE IF NOT EXISTS orden_trabajo (ot_id SERIAL PRIMARY KEY, numero_ot VARCHAR(50) UNIQUE, maquina_id INTEGER, tecnico_id INTEGER, creado_por INTEGER, diagnostico_id INTEGER, reporte_id INTEGER, tipo VARCHAR(50), descripcion_problema TEXT, descripcion_reparacion TEXT, resolution TEXT, priority VARCHAR(20), severity VARCHAR(20), fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP, fecha_inicio TIMESTAMP, fecha_cierre TIMESTAMP, fecha_vencimiento TIMESTAMP, tiempo_reparacion_min INTEGER, downtime_minutes INTEGER, costo_estimado NUMERIC, costo_real NUMERIC, estado VARCHAR(50));
+                CREATE TABLE IF NOT EXISTS ot_foto (ot_foto_id SERIAL PRIMARY KEY, ot_id INTEGER, file_name VARCHAR(255), original_name VARCHAR(255), content_type VARCHAR(50), file_path TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE IF NOT EXISTS chat_session (session_id SERIAL PRIMARY KEY, title VARCHAR(255), saved_by VARCHAR(100), discipline VARCHAR(100), plant_id VARCHAR(50), plant_name VARCHAR(255), machine_id VARCHAR(50), machine_name VARCHAR(255), active_manual VARCHAR(255), messages JSONB, metadata JSONB, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE IF NOT EXISTS chat_feedback (feedback_id SERIAL PRIMARY KEY, message_content TEXT, rating VARCHAR(10), context VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
             """)
+            
+            # 2. Insertar un Usuario Administrador por defecto si la tabla está vacía
+            cursor.execute("SELECT COUNT(*) as total FROM usuario")
+            row = cursor.fetchone()
+            if row and row['total'] == 0:
+                default_hash = hash_password('admin123')
+                cursor.execute(
+                    "INSERT INTO usuario (nombre, email, password_hash, rol) VALUES (%s, %s, %s, %s)",
+                    ('Admin BARB', 'admin@barb.com', default_hash, 'admin')
+                )
+                print("✅ Usuario Administrador creado automáticamente.")
+                
             conn.commit()
+            print("✅ Base de datos inicializada y estructurada correctamente.")
     except Exception as e:
-        print(f"⚠️  ADVERTENCIA: No se pudo conectar a PostgreSQL o crear tablas al iniciar: {e}")
+        if conn: conn.rollback()
+        print(f"⚠️ ADVERTENCIA: No se pudo estructurar PostgreSQL al iniciar: {e}")
     finally:
-        if 'conn' in locals() and conn:
+        if conn:
             release_db_connection(conn)
-
 
 @app.on_event("shutdown")
 async def shutdown_cleanup():
