@@ -940,7 +940,20 @@ def force_reset_db(x_admin_token: str = Header(default="", alias="X-Admin-Token"
     expected_token = (os.getenv("ADMIN_RESET_TOKEN") or "").strip()
     received_token = (x_admin_token or "").strip()
     if not expected_token or received_token != expected_token:
-        raise HTTPException(status_code=403, detail="Token de administrador inválido o no configurado.")
+        # DIAGNÓSTICO TEMPORAL: no expone los tokens completos, solo longitud
+        # y primeros/últimos caracteres para comparar sin filtrar el secreto.
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "mensaje": "Token de administrador inválido o no configurado.",
+                "token_esperado_longitud": len(expected_token),
+                "token_esperado_inicio": expected_token[:4] if expected_token else None,
+                "token_recibido_longitud": len(received_token),
+                "token_recibido_inicio": received_token[:4] if received_token else None,
+                "token_recibido_fin": received_token[-4:] if received_token else None,
+                "token_recibido_vacio": received_token == "",
+            },
+        )
 
     conn = None
     try:
