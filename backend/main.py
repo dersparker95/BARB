@@ -908,6 +908,20 @@ async def shutdown_cleanup():
     """Cierra el cliente HTTP de DeepSeek para liberar conexiones keep-alive."""
     await ia_client.close()
 
+@app.get("/api/debug-token-status")
+def debug_token_status():
+    """
+    ENDPOINT TEMPORAL DE DIAGNÓSTICO — eliminar después de confirmar configuración.
+    No expone el token real, solo confirma si la variable existe y su longitud.
+    """
+    token = os.getenv("ADMIN_RESET_TOKEN")
+    return {
+        "configurado": bool(token),
+        "longitud": len(token) if token else 0,
+        "primeros_4_caracteres": token[:4] if token else None,
+    }
+
+
 @app.post("/api/force-reset-db")
 def force_reset_db(x_admin_token: str = Header(default="", alias="X-Admin-Token")):
     """
@@ -923,8 +937,9 @@ def force_reset_db(x_admin_token: str = Header(default="", alias="X-Admin-Token"
     HTTPException(404): No se encontró el archivo 01_tablas.sql.
     HTTPException(500): Falla al ejecutar el script o al hashear contraseñas.
     """
-    expected_token = os.getenv("ADMIN_RESET_TOKEN")
-    if not expected_token or x_admin_token != expected_token:
+    expected_token = (os.getenv("ADMIN_RESET_TOKEN") or "").strip()
+    received_token = (x_admin_token or "").strip()
+    if not expected_token or received_token != expected_token:
         raise HTTPException(status_code=403, detail="Token de administrador inválido o no configurado.")
 
     conn = None
