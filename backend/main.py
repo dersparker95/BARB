@@ -271,6 +271,37 @@ def verify_password(raw_password: str, stored_password: str) -> bool:
     return stored == raw_password
 
 
+def ensure_passwords_hashed(cursor) -> int:
+    """
+    Detecta usuarios cuya password_hash NO está en formato bcrypt (es decir,
+    quedó en texto plano por venir directo del seed SQL) y la hashea in-place.
+
+    Es idempotente: si ya están todas hasheadas, no hace nada. Se puede llamar
+    en cada arranque sin riesgo de doble-hasheo, porque sólo toca filas cuyo
+    valor no empieza con '$2' (prefijo estándar de bcrypt).
+
+    ## Args:
+    cursor: Cursor psycopg2 activo (debe soportar RealDictCursor o tupla).
+
+    ## Returns:
+    Cantidad de usuarios actualizados.
+    """
+    cursor.execute("SELECT usuario_id, password_hash FROM usuario")
+    usuarios = cursor.fetchall()
+    actualizados = 0
+    for u in usuarios:
+        uid = u["usuario_id"] if isinstance(u, dict) else u[0]
+        stored = (u["password_hash"] if isinstance(u, dict) else u[1]) or ""
+        if not stored.strip().startswith("$2"):
+            hashed = hash_password(stored)
+            cursor.execute(
+                "UPDATE usuario SET password_hash = %s WHERE usuario_id = %s",
+                (hashed, uid),
+            )
+            actualizados += 1
+    return actualizados
+
+
 def serialize_user(user: dict) -> dict:
     """
     Filtra y estandariza un registro de usuario para su exposición vía API.
@@ -847,8 +878,8 @@ async def startup_checks():
                     if row and row['total'] == 0:
                         default_hash = hash_password('admin123')
                         cursor.execute(
-                            "INSERT INTO usuario (nombre, email, password_hash, rol) VALUES (%s, %s, %s, %s)",
-                            ('Admin BARB', 'admin@barb.com', default_hash, 'admin')
+                            "INSERT INTO usuario (empresa_id, nombre, email, password_hash, rol) VALUES (%s, %s, %s, %s, %s)",
+                            (1, 'Admin BARB', 'admin@barb.com', default_hash, 'admin')
                         )
                         conn.commit()
                         print("✅ Usuario Administrador creado automáticamente.")
@@ -856,7 +887,15 @@ async def startup_checks():
                     print(f"⚠️ ERROR: No se encontró el archivo {sql_file_path}")
             else:
                 print("✅ La base de datos ya está estructurada. Omitiendo lectura del SQL.")
-                
+
+            # 4. REPARACIÓN DE CONTRASEÑAS: se ejecuta SIEMPRE (exista o no la tabla
+            # previamente), porque el seed SQL puede traer passwords en texto plano
+            # (ej. 'admin123') y eso rompe el login aunque la tabla ya existiera.
+            actualizados = ensure_passwords_hashed(cursor)
+            conn.commit()
+            if actualizados:
+                print(f"🔒 {actualizados} contraseña(s) en texto plano fueron hasheadas automáticamente.")
+
     except Exception as e:
         if conn: conn.rollback()
         print(f"⚠️ ADVERTENCIA: No se pudo estructurar PostgreSQL al iniciar: {e}")
@@ -869,48 +908,55 @@ async def shutdown_cleanup():
     """Cierra el cliente HTTP de DeepSeek para liberar conexiones keep-alive."""
     await ia_client.close()
 
-@app.get("/api/force-reset-db")
-def force_reset_db():
+@app.post("/api/force-reset-db")
+def force_reset_db(x_admin_token: str = ""):
     """
-    Fuerza el borrado de la BD, inyecta el archivo 01_tablas.sql
-    y encripta las contraseñas en texto plano para que el Login funcione.
+    Fuerza el borrado total de la BD (vía DROP SCHEMA dentro del propio SQL),
+    reinyecta el archivo 01_tablas.sql (OTs, sesiones, máquinas de prueba) y
+    encripta cualquier contraseña en texto plano para que el Login funcione.
+
+    Protegido por token: requiere el header X-Admin-Token con el valor
+    configurado en la variable de entorno ADMIN_RESET_TOKEN de Render.
+
+    ## Raises:
+    HTTPException(403): Token ausente o incorrecto.
+    HTTPException(404): No se encontró el archivo 01_tablas.sql.
+    HTTPException(500): Falla al ejecutar el script o al hashear contraseñas.
     """
+    expected_token = os.getenv("ADMIN_RESET_TOKEN")
+    if not expected_token or x_admin_token != expected_token:
+        raise HTTPException(status_code=403, detail="Token de administrador inválido o no configurado.")
+
     conn = None
     try:
         conn = get_db_connection()
-        with conn.cursor() as cursor:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             print("Iniciando reseteo forzado de la base de datos...")
-            
+
             # 1. Ubicar el archivo SQL
             base_dir = os.path.dirname(__file__)
             sql_file_path = os.path.join(base_dir, 'initScripts', '01_tablas.sql')
-            
+
             if not os.path.exists(sql_file_path):
                 raise HTTPException(status_code=404, detail=f"No se encontró el archivo: {sql_file_path}")
-                
-            # 2. Leer y ejecutar TODO el archivo (esto borra y recrea las tablas con los datos)
+
+            # 2. Leer y ejecutar TODO el archivo (DROP SCHEMA + recreación + datos de prueba)
             with open(sql_file_path, 'r', encoding='utf-8') as file:
                 sql_script = file.read()
             cursor.execute(sql_script)
-            
-            # 3. Arreglar las contraseñas (encriptar 'admin123', 'tecnico123', etc.)
-            # Para que puedas iniciar sesión sin problemas
-            cursor.execute("SELECT usuario_id, password_hash FROM usuario")
-            # Dependiendo de si tu cursor retorna dicts o tuplas, lo manejamos seguro:
-            usuarios = cursor.fetchall()
-            for u in usuarios:
-                uid = u['usuario_id'] if isinstance(u, dict) else u[0]
-                plain_pass = u['password_hash'] if isinstance(u, dict) else u[1]
-                
-                hashed = hash_password(plain_pass)
-                cursor.execute("UPDATE usuario SET password_hash = %s WHERE usuario_id = %s", (hashed, uid))
-            
+
+            # 3. Hashear cualquier contraseña en texto plano ('admin123', 'tecnico123', etc.)
+            actualizados = ensure_passwords_hashed(cursor)
+
             conn.commit()
-            
+
         return {
-            "status": "success", 
-            "message": "¡Base de datos reseteada y poblada con éxito! Contraseñas encriptadas y listas para usar."
+            "status": "success",
+            "message": "Base de datos reseteada y poblada con éxito.",
+            "passwords_hasheadas": actualizados,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         if conn: conn.rollback()
         raise HTTPException(status_code=500, detail=f"Error al forzar reseteo: {str(e)}")
