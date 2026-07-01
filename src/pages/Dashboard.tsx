@@ -14,7 +14,6 @@ import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
 import { BARB_BUSINESS } from '../hooks/useFinancialStats'
 
-// Interfaz flexibilizada para soportar las nuevas llaves de FastAPI
 interface ApiWorkOrder {
   id?: string | number; ot_id?: string | number;
   title?: string; numero_ot?: string;
@@ -37,7 +36,11 @@ interface ApiWorkOrder {
 
 interface ApiMachine { id: number; name: string; discipline_id: number; plant_id?: number }
 
-const API_URL = 'https://barb-2ih8.onrender.com/api'
+// ⚠️ FIX: se elimina el dominio de Render hardcodeado. apiBase (del contexto) es
+// la fuente principal; si no está disponible, se usa VITE_API_URL definida en el
+// entorno de build (Vercel → Settings → Environment Variables). Sin esto, cambiar
+// de backend requería tocar código en vez de una variable de entorno.
+const API_URL = import.meta.env.VITE_API_URL || ''
 const CHART_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#84cc16']
 
 const ensureUTC = (d?: string | null) => { if (!d) return undefined; return d.endsWith('Z') || d.includes('+') ? d : d + 'Z' }
@@ -55,25 +58,28 @@ const mapApiWorkOrder = (o: ApiWorkOrder): WorkOrder => {
 
   return {
     id: String(o.id ?? o.ot_id),
-    title: o.title ?? o.numero_ot ?? `OT-${o.id}`,
-    description: o.description ?? o.descripcion_problema ?? o.title ?? 'Sin descripción',
+    title: o.title || o.numero_ot || `OT-${o.id}`,
+    description: o.description || o.descripcion_problema || o.title || 'Sin descripción',
     machineId,
-    machineName: o.machine_name ?? o.maquina_nombre ?? `Máquina ${machineId}`,
-    status: (o.status ?? o.estado ?? 'pending').toLowerCase(),
+    machineName: o.machine_name || o.maquina_nombre || `Máquina ${machineId}`,
+    // ⚠️ FIX: se prioriza 'estado' (valor crudo snake_case: pending/assigned/in_progress/
+    // completed/cancelled/overdue) porque es la clave que usan los filtros y las
+    // traducciones. 'status' es solo una etiqueta humanizada en inglés ("In Progress")
+    // que nunca coincide con esas claves y rompía filtros y badges.
+    status: (o.estado ?? o.status ?? 'pending').toLowerCase().replace(/\s+/g, '_'),
     priority: (o.priority ?? o.prioridad ?? 'medium').toLowerCase() as any,
     createdAt,
     closedAt,
     durationReal: duration,
-    createdBy: o.tecnico_nombre ?? o.creado_por ?? 'Operador',
-    discipline: o.discipline_name ?? o.disciplina ?? 'General',
-    maintenanceType: o.tipo ?? o.maintenance_type ?? 'corrective',
+    createdBy: o.tecnico_nombre || o.creado_por || 'Operador',
+    discipline: o.discipline_name || o.disciplina || 'General',
+    maintenanceType: o.tipo || o.maintenance_type || 'corrective',
     costoEstimado: Number(o.costo_estimado) || 0,
     costoReal: Number(o.costo_real) || 0,
     hasBarbAi: !!(o.reporte_id || o.diagnostico_id)
   }
 }
 
-// ✅ CORREGIDO: Block usa clases BEM en lugar de estilos inline
 const Block: React.FC<{ title: string; subtitle?: string; children: React.ReactNode; className?: string }> = ({ title, subtitle, children, className = '' }) => (
   <div className={`dash-block ${className}`}>
     <div className="dash-block-header">
@@ -87,6 +93,17 @@ const Block: React.FC<{ title: string; subtitle?: string; children: React.ReactN
 export default function Dashboard() {
   const { lang, apiBase } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
+
+  // Centraliza la resolución de la URL base del backend (evita repetir esta
+  // lógica en cada fetch, y avisa en consola si no hay configuración disponible).
+  const safeApi = useMemo(() => {
+    const resolved = apiBase ? apiBase.replace(/\/$/, '') : API_URL
+    if (!resolved) {
+      console.warn('[BARB] No hay apiBase (contexto) ni VITE_API_URL configurada. Las llamadas al backend van a fallar.')
+    }
+    return resolved
+  }, [apiBase])
+
 
   const [tickets, setTickets] = useState<WorkOrder[]>([])
   const [machines, setMachines] = useState<ApiMachine[]>([])
@@ -113,7 +130,6 @@ export default function Dashboard() {
   const loadData = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true)
     try {
-      const safeApi = apiBase ? apiBase.replace(/\/$/, '') : API_URL
       const [resOts, resMach] = await Promise.all([
         fetch(`${safeApi}/work-orders`, { signal }),
         fetch(`${safeApi}/machines`, { signal })
@@ -158,7 +174,6 @@ export default function Dashboard() {
     })
   }, [tickets, statusFilter, machineFilter, typeFilter, search, timeRange, machineLabel])
 
-  // SMART NOTIFICATION: Calculamos OTs vencidas en el frontend
   const overdueTickets = useMemo(() => {
     return filtered.filter(tk => {
       const isClosed = tk.status === 'closed' || tk.status === 'cerrado' || tk.status === 'resolved';
@@ -208,8 +223,6 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-body">
-
-      {/* Selector de rango de tiempo */}
       <div className="dash-time-range">
         <select
           value={timeRange}
@@ -223,7 +236,6 @@ export default function Dashboard() {
         </select>
       </div>
 
-      {/* ✅ CORREGIDO: Banner de alertas usa variables DS y clases BEM — sin hardcodes ni emoji */}
       {overdueTickets.length > 0 && (
         <div className="dash-alert-banner" role="alert">
           <svg className="dash-alert-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -243,7 +255,6 @@ export default function Dashboard() {
 
       <FinancialDashboard timeRange={timeRange} />
 
-      {/* ✅ CORREGIDO: Contenedor de charts usa clase BEM */}
       <div className="dash-charts-grid">
         <Block title={t.dashboard?.chartResolution || 'Resolución'} className="dash-block--wide">
           {resolutionData.length === 0
@@ -257,7 +268,6 @@ export default function Dashboard() {
                   <Tooltip
                     cursor={{ fill: 'rgba(0,0,0,0.05)' }}
                     content={({ payload }) => payload?.length ? (
-                      // ✅ CORREGIDO: tooltip usa variables DS en lugar de clases Tailwind hardcodeadas
                       <div className="dash-tooltip">
                         <div className="dash-tooltip-title">{payload[0].payload.machineName}</div>
                         <div>
@@ -298,7 +308,6 @@ export default function Dashboard() {
         </Block>
       </div>
 
-      {/* ✅ CORREGIDO: Tabla de OTs usa clase del DS en lugar de styles inline */}
       <div className="dash-block">
         <div className="dash-block-header">
           <h3 className="dash-block-title">{t.dashboard?.title || 'Órdenes'} ({filtered.length})</h3>
@@ -309,7 +318,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ✅ CORREGIDO: Filtros usan .dash-filters del DS en lugar de styles inline */}
         {isFiltersOpen && (
           <div className="dash-filters">
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="filter-select">
@@ -348,7 +356,6 @@ export default function Dashboard() {
             <>
               <TicketTable tickets={paginatedTickets} onSelect={id => setSelectedTicket(tickets.find(tk => tk.id === id) || null)} />
               {filtered.length > 0 && (
-                // ✅ CORREGIDO: Paginación usa clase BEM en lugar de styles inline
                 <div className="dash-pagination">
                   <span className="dash-pagination-info">
                     {t.common?.page || 'Pág'} {currentPage} / {Math.ceil(filtered.length / 10) || 1}
@@ -372,7 +379,6 @@ export default function Dashboard() {
         onClose={() => setIsCreateOpen(false)}
         onCreate={async (p) => {
           try {
-            const safeApi = apiBase ? apiBase.replace(/\/$/, '') : API_URL
             const response = await fetch(`${safeApi}/work-orders`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -403,7 +409,6 @@ export default function Dashboard() {
         onClose={() => setSelectedTicket(null)}
         onUpdateStatus={async (id, s) => {
           try {
-            const safeApi = apiBase ? apiBase.replace(/\/$/, '') : API_URL
             const response = await fetch(`${safeApi}/work-orders/${id}/status`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
@@ -419,7 +424,6 @@ export default function Dashboard() {
         }}
         onDelete={async (id) => {
           try {
-            const safeApi = apiBase ? apiBase.replace(/\/$/, '') : API_URL
             const response = await fetch(`${safeApi}/work-orders/${id}`, { method: 'DELETE' });
             if (!response.ok) throw new Error("Error borrando");
             loadData();

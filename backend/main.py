@@ -908,20 +908,6 @@ async def shutdown_cleanup():
     """Cierra el cliente HTTP de DeepSeek para liberar conexiones keep-alive."""
     await ia_client.close()
 
-@app.get("/api/debug-token-status")
-def debug_token_status():
-    """
-    ENDPOINT TEMPORAL DE DIAGNÓSTICO — eliminar después de confirmar configuración.
-    No expone el token real, solo confirma si la variable existe y su longitud.
-    """
-    token = os.getenv("ADMIN_RESET_TOKEN")
-    return {
-        "configurado": bool(token),
-        "longitud": len(token) if token else 0,
-        "primeros_4_caracteres": token[:4] if token else None,
-    }
-
-
 @app.post("/api/force-reset-db")
 def force_reset_db(x_admin_token: str = Header(default="", alias="X-Admin-Token")):
     """
@@ -940,20 +926,7 @@ def force_reset_db(x_admin_token: str = Header(default="", alias="X-Admin-Token"
     expected_token = (os.getenv("ADMIN_RESET_TOKEN") or "").strip()
     received_token = (x_admin_token or "").strip()
     if not expected_token or received_token != expected_token:
-        # DIAGNÓSTICO TEMPORAL: no expone los tokens completos, solo longitud
-        # y primeros/últimos caracteres para comparar sin filtrar el secreto.
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "mensaje": "Token de administrador inválido o no configurado.",
-                "token_esperado_longitud": len(expected_token),
-                "token_esperado_inicio": expected_token[:4] if expected_token else None,
-                "token_recibido_longitud": len(received_token),
-                "token_recibido_inicio": received_token[:4] if received_token else None,
-                "token_recibido_fin": received_token[-4:] if received_token else None,
-                "token_recibido_vacio": received_token == "",
-            },
-        )
+        raise HTTPException(status_code=403, detail="Token de administrador inválido o no configurado.")
 
     conn = None
     try:
