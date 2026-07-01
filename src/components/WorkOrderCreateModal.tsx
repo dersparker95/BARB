@@ -5,8 +5,10 @@ import { showToast } from './Toast'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
 
-// 🔥 BLINDAJE DE TIPOS: Normalizados a minúsculas para hacer match con TicketTable
-type WorkOrderPriority = 'low' | 'medium' | 'high'
+// ⚠️ FIX: faltaba 'urgent' — es el valor máximo real del enum prioridad_ot en la
+// BD (low/medium/high/urgent). Sin esto, nunca se podía crear una OT urgente
+// desde este formulario.
+type WorkOrderPriority = 'low' | 'medium' | 'high' | 'urgent'
 type WorkOrderStatus = 'open' | 'in_progress' | 'done' | 'closed'
 
 export type WorkOrderCreatePayload = {
@@ -289,6 +291,7 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
                   <option value="low">{t.common?.low || 'Baja'}</option>
                   <option value="medium">{t.common?.medium || 'Media'}</option>
                   <option value="high">{t.common?.high || 'Alta'}</option>
+                  <option value="urgent">{lang === 'en' ? 'Urgent' : 'Urgente'}</option>
                 </select>
               </div>
 

@@ -323,6 +323,34 @@ def serialize_user(user: dict) -> dict:
     }
 
 
+def normalize_priority(value: str | None) -> str:
+    """
+    Normaliza el valor de prioridad de una OT al conjunto válido del enum prioridad_ot.
+
+    ⚠️ Antes esta normalización reutilizaba normalize_db_status() (pensada para
+    el campo 'estado'), lo cual funcionaba solo por casualidad: como valores como
+    'low'/'medium'/'high'/'urgent' no están en el mapa de estados, la función
+    los devolvía tal cual sin tocarlos. Cualquier cambio futuro en esa función
+    (pensada para otro dominio) podía romper 'priority' sin relación aparente.
+
+    ## Args:
+    value: Prioridad en formato libre.
+
+    ## Returns:
+    Clave de prioridad normalizada (low/medium/high/urgent).
+    """
+    raw = (value or "").strip().lower()
+    mapping = {
+        "low": "low",
+        "medium": "medium",
+        "normal": "medium",
+        "high": "high",
+        "urgent": "urgent",
+        "critical": "urgent",  # alias defensivo: 'critical' es de severity, pero se mapea por si llega mezclado
+    }
+    return mapping.get(raw, "medium")
+
+
 def normalize_db_status(value: str | None) -> str:
     """
     Normaliza variaciones semánticas de estados operativos al conjunto estándar de la base de datos.
@@ -1311,6 +1339,9 @@ def get_financial_impact(days: int | None = Query(default=None, ge=1)):
             COALESCE(SUM(ot.costo_real), 0) AS costo_total_acumulado,
             COALESCE(SUM(ot.downtime_minutes) FILTER (WHERE ot.estado = 'completed'), 0) AS downtime_evitado_min,
             COUNT(*) FILTER (WHERE ot.estado = 'completed') AS total_completadas,
+            COUNT(*) FILTER (
+                WHERE ot.estado = 'completed' AND ot.tiempo_reparacion_min <= {SLA_TARGET_MINUTES}
+            ) AS completadas_en_sla,
             COUNT(*) AS total_ots
         FROM orden_trabajo ot
         WHERE 1=1 {date_filter}
@@ -1364,12 +1395,16 @@ def get_financial_impact(days: int | None = Query(default=None, ge=1)):
         costo_total = float(f["costo_total_acumulado"])
         downtime_evitado = float(f["downtime_evitado_min"])
         total_completadas = int(f["total_completadas"])
+        completadas_en_sla = int(f["completadas_en_sla"])
         total_ots = int(f["total_ots"])
 
         # Ahorro estimado: minutos de downtime resueltos por BARB * costo por minuto de inactividad.
         ahorro_generado = downtime_evitado * DOWNTIME_COST_PER_MINUTE
-        # Eficiencia: % de OTs completadas dentro del SLA objetivo.
-        efficiency = round(100.0 * total_completadas / total_ots, 1) if total_ots > 0 else 0.0
+        # ⚠️ FIX: 'efficiency' antes era % de OTs completadas sobre el total (tasa de
+        # cierre), lo cual no coincidía con el subtítulo de la UI ("Optimización
+        # hacia SLA") ni con slaCompliance por máquina (que sí mide SLA). Ahora usa
+        # la misma definición: % de OTs completadas dentro del SLA objetivo.
+        efficiency = round(100.0 * completadas_en_sla / total_completadas, 1) if total_completadas > 0 else 0.0
         # MTBF simplificado: horas transcurridas en la ventana / fallas registradas (mínimo 2 para ser significativo).
         mtbf_hours = None
         if total_completadas >= 2:
@@ -1651,7 +1686,7 @@ async def create_work_order(request: Request):
     )
     descripcion_reparacion = safe_text(payload.get("descripcion_reparacion"), "")
     resolution = safe_text(payload.get("resolution"), "")
-    priority = normalize_db_status(safe_text(payload.get("priority"), "medium")) or "medium"
+    priority = normalize_priority(safe_text(payload.get("priority"), "medium"))
     severity = safe_text(payload.get("severity"), "") or None
     estado = parse_work_order_status(safe_text(payload.get("estado") or payload.get("status"), "pending"))
     fecha_vencimiento = parse_optional_datetime(payload.get("fecha_vencimiento") or payload.get("due_date"))

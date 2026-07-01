@@ -102,10 +102,10 @@ export default function FinancialDashboard({ timeRange }) {
           icon={CheckCircle} 
           label={t.financial?.efficiency || 'Eficiencia'} 
           value={`${safeEfficiency}%`} 
-          subtitle={t.financial?.efficiencySub || 'Estimado'} 
+          subtitle={t.financial?.efficiencySub || 'Óptimo dentro de SLA'} 
           highlightColor="#10b981" 
-          badgeType="est" 
-          badgeText={t.financial?.estimated || 'Est'} 
+          badgeType="real" 
+          badgeText={t.financial?.measured || 'Real'} 
         />
         <StatCard 
           icon={Banknote} 

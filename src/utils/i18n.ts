@@ -312,7 +312,7 @@ const translations: Record<AppLang, TranslationTree> = {
       roiTitle: 'Impacto Anual Proyectado (Modelo BARB v1.0)', roiSubtitle: 'Basado en US$2.000/min de inactividad operativa.',
       withoutBarb: 'Escenario Sin BARB', withBarb: 'Escenario Con BARB', savingsGenerated: 'Ahorro Generado a la fecha',
       mttrGlobal: 'MTTR Global', mttrOptimal: '✓ Dentro de SLA', mttrOver: (mins: number) => `⚠ ${mins}m sobre SLA`,
-      efficiency: 'Eficiencia Resolución', efficiencySub: 'Optimización hacia el SLA (45m)', directCost: 'Costo Directo',
+      efficiency: 'Eficiencia Resolución', efficiencySub: 'OTs completadas dentro del SLA (24h)', directCost: 'Costo Directo',
       directCostSub: 'Repuestos y servicios facturados', mtbf: 'MTBF Global', mtbfSub: 'Tiempo Medio Entre Fallas (Horas)',
       mtbfNeedData: 'Requiere historial min. 2 fallas', healthTitle: 'Salud Operacional: Backlog', healthSub: 'Tendencia diaria de OTs Abiertas vs Cerradas (14 d).',
       performanceTitle: 'Rendimiento por Máquina', measured: 'Medido', estimated: 'Estimado'
@@ -414,7 +414,7 @@ const translations: Record<AppLang, TranslationTree> = {
       roiTitle: 'Projected Annual Impact (BARB v1.0 Model)', roiSubtitle: 'Based on US$2,000/min of operational downtime.',
       withoutBarb: 'Without BARB Scenario', withBarb: 'With BARB Scenario', savingsGenerated: 'Savings Generated to Date',
       mttrGlobal: 'Global MTTR', mttrOptimal: '✓ Within SLA', mttrOver: (mins: number) => `⚠ ${mins}m over SLA`,
-      efficiency: 'Resolution Efficiency', efficiencySub: 'Optimization towards SLA (45m)', directCost: 'Direct Cost',
+      efficiency: 'Resolution Efficiency', efficiencySub: 'Work orders completed within SLA (24h)', directCost: 'Direct Cost',
       directCostSub: 'Billed parts and services', mtbf: 'Global MTBF', mtbfSub: 'Mean Time Between Failures (Hours)',
       mtbfNeedData: 'Requires min. 2 failures history', healthTitle: 'Operational Health: Backlog', healthSub: 'Daily trend of Open vs Closed WOs (14 d).',
       performanceTitle: 'Machine Performance', measured: 'Measured', estimated: 'Estimated'
