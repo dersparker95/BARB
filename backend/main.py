@@ -14,7 +14,7 @@ from typing import Any, Optional
 import bcrypt
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
 from psycopg2.extras import RealDictCursor
@@ -815,6 +815,21 @@ class WorkOrderStatusRequest(BaseModel):
 
 
 # =============================================================================
+# CONSTANTES DE NEGOCIO
+# =============================================================================
+# ⚠️ Deben coincidir con BARB_BUSINESS en frontend/src/hooks/useFinancialStats.ts
+# para que las cifras de ahorro y SLA mostradas en el dashboard sean consistentes
+# entre lo que calcula el backend y lo que el frontend usa para su propia UI.
+SLA_TARGET_MINUTES = 24 * 60  # 24 horas, expresado en minutos (frontend usa SLA_TARGET: 24)
+# ⚠️ Se usa $2000/min (no BARB_BUSINESS.avgDowntimeCost=5000) porque el texto ya
+# visible al usuario en i18n.ts dice explícitamente "Based on US$2,000/min of
+# operational downtime" (financial.roiSubtitle) y la fórmula original del backend
+# ya usaba este mismo valor. Mantenerlo evita mostrar una cifra que contradiga
+# el texto que el usuario ya lee en pantalla.
+DOWNTIME_COST_PER_MINUTE = 2000
+
+
+# =============================================================================
 # APLICACIÓN Y CORS
 # =============================================================================
 
@@ -1268,34 +1283,140 @@ async def delete_user(usuario_id: int):
 
 
 @app.get("/api/stats/financial-impact")
-@lru_cache(maxsize=1)
-def get_financial_impact():
+def get_financial_impact(days: int | None = Query(default=None, ge=1)):
     """
-    Calcula KPIs de desempeño (MTTR, costos acumulados, ahorro estimado) desde la tabla de OTs completadas.
+    Calcula KPIs de desempeño y tendencias para el dashboard financiero.
+
+    ⚠️ Anteriormente esta función tenía @lru_cache(maxsize=1), lo que la dejaba
+    congelada con el primer resultado calculado en la vida del proceso — nunca
+    reflejaba OTs nuevas. Se quitó el cache para que siempre refleje datos reales.
+    También antes ignoraba el filtro de rango de fechas que el frontend sí manda
+    (?days=7/30/90); ahora se aplica al SQL.
+
+    ## Args:
+    days: Ventana de días hacia atrás a considerar (None = histórico completo).
 
     ## Returns:
-    Indicadores financieros: mttr, costo_total_acumulado, ahorro_estimado.
+    Objeto con la forma exacta que espera useFinancialStats.ts:
+    financials (KPIs agregados), trend14Days (serie de 14 días) y
+    machines (ranking de máquinas por volumen y ahorro).
     """
-    query = text(
-        """
+    date_filter = "AND ot.fecha_creacion >= NOW() - (:days || ' days')::interval" if days else ""
+    params = {"days": days} if days else {}
+
+    financials_query = text(
+        f"""
         SELECT
-            COALESCE(AVG(tiempo_reparacion_min), 0) AS mttr,
-            COALESCE(SUM(costo_real), 0) AS costo_total_acumulado,
-            COALESCE(SUM(downtime_minutes), 0) * 2000 AS ahorro_estimado
-        FROM orden_trabajo
-        WHERE estado = 'completed'
+            COALESCE(AVG(ot.tiempo_reparacion_min) FILTER (WHERE ot.estado = 'completed'), 0) AS mttr,
+            COALESCE(SUM(ot.costo_real), 0) AS costo_total_acumulado,
+            COALESCE(SUM(ot.downtime_minutes) FILTER (WHERE ot.estado = 'completed'), 0) AS downtime_evitado_min,
+            COUNT(*) FILTER (WHERE ot.estado = 'completed') AS total_completadas,
+            COUNT(*) AS total_ots
+        FROM orden_trabajo ot
+        WHERE 1=1 {date_filter}
         """
     )
+
+    # Ventana de 14 días para el gráfico de tendencia (siempre 14 días fijos,
+    # independiente del filtro de rango general, como espera el componente).
+    trend_query = text(
+        """
+        SELECT
+            d::date AS date,
+            COUNT(*) FILTER (WHERE ot.fecha_creacion::date = d::date) AS abiertas,
+            COUNT(*) FILTER (WHERE ot.fecha_cierre::date = d::date) AS cerradas
+        FROM generate_series(CURRENT_DATE - INTERVAL '13 days', CURRENT_DATE, INTERVAL '1 day') d
+        LEFT JOIN orden_trabajo ot
+            ON ot.fecha_creacion::date = d::date OR ot.fecha_cierre::date = d::date
+        GROUP BY d
+        ORDER BY d
+        """
+    )
+
+    machines_query = text(
+        f"""
+        SELECT
+            m.maquina_id AS id,
+            m.nombre AS name,
+            COUNT(ot.ot_id) AS total,
+            COALESCE(SUM(ot.downtime_minutes) FILTER (WHERE ot.estado = 'completed'), 0) AS downtime_evitado_min,
+            COALESCE(AVG(ot.tiempo_reparacion_min) FILTER (WHERE ot.estado = 'completed'), 0) AS mttr,
+            COALESCE(
+                100.0 * COUNT(*) FILTER (WHERE ot.estado = 'completed' AND ot.tiempo_reparacion_min <= {SLA_TARGET_MINUTES})
+                / NULLIF(COUNT(*) FILTER (WHERE ot.estado = 'completed'), 0),
+                0
+            ) AS sla_compliance
+        FROM maquina m
+        LEFT JOIN orden_trabajo ot ON ot.maquina_id = m.maquina_id {date_filter}
+        GROUP BY m.maquina_id, m.nombre
+        ORDER BY total DESC
+        LIMIT 5
+        """
+    )
+
     try:
         with engine.connect() as conn:
-            res = conn.execute(query).mappings().one()
-            return {
-                "mttr": float(res["mttr"]),
-                "costo_total_acumulado": float(res["costo_total_acumulado"]),
-                "ahorro_estimado": float(res["ahorro_estimado"]),
-            }
-    except Exception:
-        return {"mttr": 0.0, "costo_total_acumulado": 0.0, "ahorro_estimado": 0.0}
+            f = conn.execute(financials_query, params).mappings().one()
+            trend_rows = conn.execute(trend_query).mappings().all()
+            machine_rows = conn.execute(machines_query, params).mappings().all()
+
+        mttr = float(f["mttr"])
+        costo_total = float(f["costo_total_acumulado"])
+        downtime_evitado = float(f["downtime_evitado_min"])
+        total_completadas = int(f["total_completadas"])
+        total_ots = int(f["total_ots"])
+
+        # Ahorro estimado: minutos de downtime resueltos por BARB * costo por minuto de inactividad.
+        ahorro_generado = downtime_evitado * DOWNTIME_COST_PER_MINUTE
+        # Eficiencia: % de OTs completadas dentro del SLA objetivo.
+        efficiency = round(100.0 * total_completadas / total_ots, 1) if total_ots > 0 else 0.0
+        # MTBF simplificado: horas transcurridas en la ventana / fallas registradas (mínimo 2 para ser significativo).
+        mtbf_hours = None
+        if total_completadas >= 2:
+            window_hours = (days * 24) if days else 24 * 365
+            mtbf_hours = round(window_hours / total_completadas, 1)
+
+        return {
+            "financials": {
+                "ahorro_generado": round(ahorro_generado, 2),
+                "mttr": round(mttr, 1),
+                "efficiency": efficiency,
+                "costo_total_acumulado": round(costo_total, 2),
+                "mtbfHours": mtbf_hours,
+            },
+            "trend14Days": [
+                {
+                    "date": row["date"].isoformat(),
+                    "abiertas": int(row["abiertas"]),
+                    "cerradas": int(row["cerradas"]),
+                }
+                for row in trend_rows
+            ],
+            "machines": [
+                {
+                    "id": str(row["id"]),
+                    "name": row["name"],
+                    "total": int(row["total"]),
+                    "ahorroGenerado": round(float(row["downtime_evitado_min"]) * DOWNTIME_COST_PER_MINUTE, 2),
+                    "mttr": round(float(row["mttr"]), 1),
+                    "slaCompliance": round(float(row["sla_compliance"]), 1),
+                }
+                for row in machine_rows
+            ],
+        }
+    except Exception as e:
+        print(f"Error calculando stats financieras: {e}")
+        return {
+            "financials": {
+                "ahorro_generado": 0.0,
+                "mttr": 0.0,
+                "efficiency": 0.0,
+                "costo_total_acumulado": 0.0,
+                "mtbfHours": None,
+            },
+            "trend14Days": [],
+            "machines": [],
+        }
 
 
 # =============================================================================

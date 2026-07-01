@@ -176,10 +176,13 @@ export default function Dashboard() {
 
   const overdueTickets = useMemo(() => {
     return filtered.filter(tk => {
-      const isClosed = tk.status === 'closed' || tk.status === 'cerrado' || tk.status === 'resolved';
+      const isClosed = tk.status === 'closed' || tk.status === 'cerrado' || tk.status === 'resolved' || tk.status === 'completed';
       if (isClosed) return false;
       const ageHours = tk.durationReal / 60;
-      return (tk.priority === 'high' || tk.priority === 'critical' ? ageHours > 2 : ageHours > 24);
+      // ⚠️ FIX: la BD usa 'urgent' como valor máximo de prioridad (enum prioridad_ot:
+      // low/medium/high/urgent). 'critical' pertenece a otro campo (severity) y nunca
+      // coincidía aquí, así que las OTs urgentes usaban el umbral de 24h en vez de 2h.
+      return (tk.priority === 'high' || tk.priority === 'urgent' ? ageHours > 2 : ageHours > 24);
     });
   }, [filtered]);
 
