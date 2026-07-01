@@ -53,8 +53,18 @@ const readStoredAuth = (): StoredAuth | null => {
 const AppContext = createContext<AppContextValue | undefined>(undefined)
 
 // === VARIABLES DE ENTORNO DINÁMICAS ===
-const defaultApiUrl: string = import.meta.env.VITE_API_URL || 'https://barb-2ih8.onrender.com/api'
+// ⚠️ FIX: se elimina el dominio de Render hardcodeado como fallback ("...onrender.com").
+// Esta es LA fuente real de apiBase para toda la app (Dashboard.tsx y demás componentes
+// solo heredan este valor vía contexto) — dejar un dominio fijo aquí hacía inútil
+// cualquier VITE_API_URL que no coincidiera exactamente, y ataba el código a un
+// backend específico. Ahora, si no hay VITE_API_URL configurada, queda vacío y se
+// avisa por consola en vez de apuntar silenciosamente a un dominio adivinado.
+const defaultApiUrl: string = import.meta.env.VITE_API_URL || ''
 const defaultLmUrl: string = import.meta.env.VITE_LM_URL || 'http://localhost:1234/v1'
+
+if (!defaultApiUrl && typeof window !== 'undefined') {
+  console.warn('[BARB] VITE_API_URL no está configurada. Define esta variable en Vercel → Settings → Environment Variables.')
+}
 
 const isLocalUrl = (url: string): boolean =>
   url.includes('localhost') || url.includes('127.0.0.1') || url.includes('0.0.0.0')

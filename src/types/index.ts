@@ -23,10 +23,17 @@ export interface WorkOrder {
   machineId?: string | number
   machine?: string 
   machineName?: string // 🛠️ Integrado desde el mapeo del Dashboard
-  
-  // 🔥 NORMALIZACIÓN: Dejamos solo los estados en minúsculas. Si el backend envía mayúsculas, el UI lo normaliza.
-  status: 'open' | 'in_progress' | 'done' | 'closed' | (string & {})
-  priority?: 'low' | 'medium' | 'high' | (string & {})
+
+  // ⚠️ FIX: antes decía 'open'|'in_progress'|'done'|'closed', que NO son los
+  // valores reales del enum estado_ot en Postgres (pending/assigned/in_progress/
+  // completed/cancelled/overdue). Se corrige para que el tipo documente lo que
+  // realmente llega del backend; se mantiene (string & {}) para no romper nada
+  // que dependa de valores adicionales.
+  status: 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | 'overdue' | (string & {})
+  // ⚠️ FIX: faltaba 'urgent', que es el valor máximo real del enum prioridad_ot
+  // (low/medium/high/urgent). 'critical' no es un valor de prioridad en la BD
+  // (pertenece a severity, un campo distinto).
+  priority?: 'low' | 'medium' | 'high' | 'urgent' | (string & {})
   
   createdAt: string
   closedAt?: string | null

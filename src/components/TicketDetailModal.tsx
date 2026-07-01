@@ -13,13 +13,25 @@ interface Props {
   onDelete: (id: string) => Promise<void> | void
 }
 
+// ⚠️ FIX: antes solo existían 2 ramas (high / medium por defecto), así que 'low'
+// y 'urgent' (el valor real más alto del enum prioridad_ot) caían ambos en
+// "Media" sin distinguirse ni resaltar en rojo. Se cubre el enum completo.
+const PRIORITY_LABEL_ES: Record<string, string> = { low: 'Baja', medium: 'Media', high: 'Alta', urgent: 'Urgente' }
+const PRIORITY_LABEL_EN: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent' }
+const PRIORITY_COLOR: Record<string, string> = {
+  low: 'var(--ink3)',
+  medium: 'var(--amber)',
+  high: '#ef4444',
+  urgent: '#dc2626',
+}
+
 const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, onDelete }) => {
   const { lang } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
 
   if (!ticket) return null
 
-  const statusOrder = WO_STATUSES || ['pending', 'open', 'in_progress', 'resolved', 'closed']
+  const statusOrder = WO_STATUSES || ['pending', 'assigned', 'in_progress', 'completed', 'cancelled', 'overdue']
   
   // 🔥 BLINDAJE: Normalizamos el estado por si el backend lo envía en mayúsculas
   const currentStatus = String(ticket.status || 'pending').toLowerCase() as WOStatus
@@ -64,7 +76,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
     }, 200)
   }
 
-  const closeTicket = () => onUpdateStatus(ticket.id, 'closed')
+  const closeTicket = () => onUpdateStatus(ticket.id, 'completed')
 
   const handleDelete = async () => {
     const confirmed = window.confirm(`¿Eliminar la OT ${ticket.id}?`)
@@ -80,9 +92,11 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
     }
   }
 
-  // Traducciones seguras
-  const isHighPriority = ticket.priority?.toLowerCase() === 'high'
-  const priorityLabel = isHighPriority ? (t.common?.high || 'Alta') : (t.common?.medium || 'Media')
+  // Traducciones seguras — cubre las 4 prioridades reales (low/medium/high/urgent)
+  const priorityKey = String(ticket.priority || 'medium').toLowerCase()
+  const priorityLabels = lang === 'en' ? PRIORITY_LABEL_EN : PRIORITY_LABEL_ES
+  const priorityLabel = t.common?.[priorityKey] || priorityLabels[priorityKey] || priorityLabels.medium
+  const priorityColor = PRIORITY_COLOR[priorityKey] || PRIORITY_COLOR.medium
 
   return (
     <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
@@ -135,7 +149,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
             </div>
             <div className="ot-detail-field">
               <div className="ot-detail-label">{t.common?.priority || 'Prioridad'}</div>
-              <div className="ot-detail-val" style={{ fontWeight: 600, color: isHighPriority ? '#ef4444' : 'var(--amber)' }}>
+              <div className="ot-detail-val" style={{ fontWeight: 600, color: priorityColor }}>
                 {priorityLabel}
               </div>
             </div>

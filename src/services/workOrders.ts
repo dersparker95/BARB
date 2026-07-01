@@ -1,15 +1,21 @@
 import { WorkOrder } from '../types'
 
-// 🔥 BLINDAJE: Estados normalizados EXACTAMENTE como los espera el frontend y tu API
-export const WO_STATUSES = ['open', 'in_progress', 'done', 'closed'] as const
+// ⚠️ FIX: antes esta lista era ['open','in_progress','done','closed'], inventada
+// y distinta al enum real de Postgres (estado_ot). Esto rompía el botón "Avanzar
+// estado" (podía mandar 'open'/'done'/'closed', que no existen en la BD → el
+// PUT /status fallaba) y hacía que computeMTTR() nunca contara nada (comparaba
+// contra 'closed'/'done', pero el status real es 'completed').
+export const WO_STATUSES = ['pending', 'assigned', 'in_progress', 'completed', 'cancelled', 'overdue'] as const
 export type WOStatus = typeof WO_STATUSES[number]
 
 // Fallback de etiquetas (Aunque en la UI ahora usamos t.statuses del i18n)
 export const WO_STATUS_LABEL: Record<WOStatus, string> = {
-  'open': 'Abierta',
+  'pending': 'Pendiente',
+  'assigned': 'Asignada',
   'in_progress': 'En Progreso',
-  'done': 'Realizada',
-  'closed': 'Cerrada'
+  'completed': 'Completada',
+  'cancelled': 'Cancelada',
+  'overdue': 'Vencida'
 }
 
 // Interfaz estricta para evitar el uso de 'any'
@@ -27,10 +33,11 @@ export function computeMTTR(tickets: WorkOrder[]): number {
   if (!Array.isArray(tickets) || tickets.length === 0) return 0
 
   const durations: number[] = tickets
-    // Normalizamos el estado para la comprobación
+    // ⚠️ FIX: 'completed' es el único estado terminal real en la BD.
+    // 'closed'/'done' no existen como valores de estado_ot.
     .filter(t => {
       const s = String(t.status || '').toLowerCase()
-      return (s === 'closed' || s === 'done') && t.closedAt && t.createdAt
+      return s === 'completed' && t.closedAt && t.createdAt
     })
     .map(t => (new Date(t.closedAt!).getTime() - new Date(t.createdAt!).getTime()) / 60000)
     .filter(d => d > 0)
