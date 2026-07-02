@@ -15,8 +15,10 @@ const Login: React.FC = () => {
   const { setUser, apiBase, setLoading, loading, dark, setDark, lang } = useAppContext()
   const navigate = useNavigate()
 
-  // OPTIMIZACIÓN: Memorizamos la instancia de la API
-  const api = useMemo(() => createApiService((apiBase || 'http://localhost:9000/api').replace(/\/$/, '')), [apiBase])
+  // ⚠️ FIX: se elimina el fallback 'http://localhost:9000/api'. Si apiBase está
+  // vacío (falta VITE_API_URL en producción), es mejor que el login falle con un
+  // error claro de red que intentar silenciosamente contra localhost.
+  const api = useMemo(() => createApiService(apiBase ? apiBase.replace(/\/$/, '') : apiBase), [apiBase])
   const t = useMemo(() => getTranslations(lang), [lang])
 
   // Nota: la sincronización de `dark` con el DOM (clase .dark/.light en

@@ -292,7 +292,9 @@ export default function DocChat() {
   const nLang = normalizeLang(lang)
 
   const apiRoot = useMemo(
-    () => (apiBase || 'http://localhost:9000/api').replace(/\/$/, ''),
+    // ⚠️ FIX: se elimina el fallback 'http://localhost:9000/api'. apiBase ya
+    // viene resuelto correctamente desde el contexto (AppContext.tsx).
+    () => (apiBase || '').replace(/\/$/, ''),
     [apiBase],
   )
 

@@ -21,7 +21,25 @@ const MachineMemory: React.FC = () => {
       try {
         const api = createApiService(apiBase)
         const res = await api.workOrders.getAll()
-        const tickets: WorkOrder[] = Array.isArray(res) ? res : (res.data || [])
+        const rawTickets: any[] = Array.isArray(res) ? res : (res.data || [])
+
+        // ⚠️ FIX: api.workOrders.getAll() devuelve las filas CRUDAS del backend
+        // (snake_case: machine_id, estado, created_at, closed_at...). getMachineHistory()
+        // espera el formato ya normalizado (camelCase: machineId, status, createdAt...),
+        // el mismo que Dashboard.tsx genera con su propio mapApiWorkOrder(). Sin este
+        // mapeo, el filtro por máquina nunca encontraba coincidencias (tMachine
+        // siempre era '') y esta pantalla SIEMPRE mostraba "sin historial", para
+        // cualquier máquina.
+        const tickets: WorkOrder[] = rawTickets.map((o: any) => ({
+          id: String(o.id ?? o.ot_id),
+          title: o.title || o.numero_ot || `OT-${o.id}`,
+          description: o.description || o.descripcion_problema || '',
+          machineId: String(o.machine_id ?? o.maquina_id ?? o.machineId ?? o.maquinaId ?? ''),
+          status: String(o.estado ?? o.status ?? 'pending').toLowerCase(),
+          createdAt: o.created_at ?? o.fecha_creacion ?? new Date().toISOString(),
+          closedAt: o.closed_at ?? o.fecha_cierre ?? null,
+          createdBy: o.tecnico_nombre || o.creado_por || '',
+        }))
 
         if (mounted) {
           setEvents(getMachineHistory(tickets, mid))

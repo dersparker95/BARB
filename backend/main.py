@@ -2018,6 +2018,72 @@ async def save_chat_session(payload: ChatSessionRequest):
     finally:
         if conn: release_db_connection(conn)
 
+@app.post("/api/reports/debug")
+def create_debug_report(payload: dict):
+    """
+    Guarda un reporte de diagnóstico (tabla REPORTE) generado desde la pantalla
+    de Debug. Antes este endpoint no existía: api.ts ya lo llamaba
+    (reports.send -> POST /reports/debug) pero el formulario de Report.tsx
+    nunca lo invocaba realmente, así que ningún reporte se guardaba jamás.
+
+    ## Args:
+    payload: maquina_id, tecnico_id, issue_description, severity (requeridos),
+             resolution, actions_taken, additional_notes, downtime_minutes (opcionales).
+
+    ## Returns:
+    report_number y reporte_id del registro creado.
+    """
+    maquina_id = payload.get("maquina_id")
+    tecnico_id = payload.get("tecnico_id")
+    issue_description = safe_text(payload.get("issue_description"), "")
+    severity = safe_text(payload.get("severity"), "medium").lower()
+
+    if not maquina_id or not tecnico_id:
+        raise HTTPException(status_code=422, detail="maquina_id y tecnico_id son obligatorios.")
+    if not issue_description.strip():
+        raise HTTPException(status_code=422, detail="issue_description es obligatorio.")
+    if severity not in ("low", "medium", "high", "critical"):
+        severity = "medium"
+
+    report_number = f"RPT-{datetime.utcnow():%Y%m%d}-{secrets.token_hex(3).upper()}"
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                INSERT INTO reporte (
+                    report_number, maquina_id, tecnico_id, summary, issue_description,
+                    resolution, actions_taken, additional_notes, severity, downtime_minutes
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING reporte_id, report_number
+                """,
+                (
+                    report_number,
+                    maquina_id,
+                    tecnico_id,
+                    safe_text(payload.get("summary"), None),
+                    issue_description,
+                    safe_text(payload.get("resolution"), None),
+                    json.dumps(payload.get("actions_taken")) if payload.get("actions_taken") else None,
+                    safe_text(payload.get("additional_notes"), None),
+                    severity,
+                    payload.get("downtime_minutes"),
+                ),
+            )
+            row = cursor.fetchone()
+            conn.commit()
+        return {"status": "success", "reporte_id": row["reporte_id"], "report_number": row["report_number"]}
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al guardar el reporte: {str(e)}")
+    finally:
+        if conn:
+            release_db_connection(conn)
+
+
 @app.get("/api/chat-sessions")
 async def get_chat_sessions():
     """Recupera el historial de todas las sesiones de chat guardadas."""

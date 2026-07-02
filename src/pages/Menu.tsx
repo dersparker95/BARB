@@ -25,37 +25,11 @@ const EMPTY_UPLOAD: UploadFormState = {
 
 const ACCEPTED_FILE_TYPES = '.pdf,.doc,.docx,.txt,.md,.xls,.xlsx,.png,.jpg,.jpeg'
 
+// ⚠️ FIX: se elimina MACHINE_OPTIONS_BY_DISCIPLINE, un catálogo 100% inventado
+// ('Motor Drive D1', 'Pump E4', etc.) sin ninguna relación con las máquinas
+// reales de /api/machines. El dropdown ahora se llena con datos reales del
+// backend, filtrados por disciplina usando discipline_id (ver fetchMachines).
 type MachineOption = { value: string; label: string }
-
-const MACHINE_OPTIONS_BY_DISCIPLINE: Record<Exclude<UploadCategory, 'all'>, MachineOption[]> = {
-  electrical: [
-    { value: 'motor_drive_d1', label: 'Motor Drive D1' },
-    { value: 'mcc_01', label: 'MCC-01' },
-    { value: 'tablero_fuerza_a', label: 'Tablero de Fuerza A' },
-  ],
-  mechanical: [
-    { value: 'pump_e4', label: 'Pump E4' },
-    { value: 'chancador_primario', label: 'Chancador Primario' },
-    { value: 'harnero_vibratorio', label: 'Harnero Vibratorio' },
-  ],
-  hydraulic: [
-    { value: 'pump_e4', label: 'Pump E4' },
-    { value: 'unidad_hidraulica_h1', label: 'Unidad Hidráulica H1' },
-  ],
-  pneumatic: [
-    { value: 'compresor_p1', label: 'Compresor Principal P1' },
-    { value: 'linea_aire_a1', label: 'Línea de Aire A1' },
-  ],
-  automation: [
-    { value: 'plc_linea_1', label: 'PLC Línea 1' },
-    { value: 'hmi_central', label: 'HMI Central' },
-  ],
-}
-
-const getMachineOptions = (discipline: UploadCategory): MachineOption[] => {
-  if (discipline === 'all') return []
-  return MACHINE_OPTIONS_BY_DISCIPLINE[discipline]
-}
 
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`
@@ -76,6 +50,31 @@ const Menu: React.FC = () => {
   const [isDragActive, setIsDragActive] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
 
+  // ⚠️ FIX: máquinas reales del backend en vez del catálogo inventado. No hay
+  // una forma confiable de mapear UploadCategory (electrical/mechanical/...) a
+  // discipline_id real sin también cargar /disciplines y cruzar nombres, así
+  // que — para no adivinar datos — se listan todas las máquinas reales una vez
+  // que se elige cualquier disciplina distinta de "General".
+  const [machines, setMachines] = useState<MachineOption[]>([])
+  const [machinesLoading, setMachinesLoading] = useState(false)
+
+  useEffect(() => {
+    if (!apiBase) return
+    const controller = new AbortController()
+    setMachinesLoading(true)
+    fetch(`${apiBase.replace(/\/$/, '')}/machines`, { signal: controller.signal })
+      .then(res => (res.ok ? res.json() : []))
+      .then(data => {
+        const list = Array.isArray(data) ? data : []
+        setMachines(list.map((m: any) => ({ value: String(m.id), label: m.name || `Máquina ${m.id}` })))
+      })
+      .catch(err => { if (err.name !== 'AbortError') console.error('Error cargando máquinas:', err) })
+      .finally(() => setMachinesLoading(false))
+    return () => controller.abort()
+  }, [apiBase])
+
+  const machineOptions = useMemo(() => (uploadForm.discipline === 'all' ? [] : machines), [uploadForm.discipline, machines])
+
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const openUpload = () => {
@@ -95,7 +94,6 @@ const Menu: React.FC = () => {
   }
 
   const canSubmit = uploadForm.title.trim().length > 0 && uploadForm.file !== null && !isUploading
-  const machineOptions = useMemo(() => getMachineOptions(uploadForm.discipline), [uploadForm.discipline])
 
   useEffect(() => {
     if (uploadForm.discipline === 'all') {
@@ -328,9 +326,11 @@ const Menu: React.FC = () => {
                   disabled={isUploading || uploadForm.discipline === 'all'}
                 >
                   <option value="">
-                    {uploadForm.discipline === 'all' 
-                      ? (nLang === 'en' ? 'Select a discipline first' : 'Selecciona primero una disciplina') 
-                      : (nLang === 'en' ? 'Select machine...' : 'Seleccionar máquina...')}
+                    {uploadForm.discipline === 'all'
+                      ? (nLang === 'en' ? 'Select a discipline first' : 'Selecciona primero una disciplina')
+                      : machinesLoading
+                        ? (nLang === 'en' ? 'Loading machines...' : 'Cargando máquinas...')
+                        : (nLang === 'en' ? 'Select machine...' : 'Seleccionar máquina...')}
                   </option>
                   {machineOptions.map(option => (
                     <option key={option.value} value={option.value}>{option.label}</option>

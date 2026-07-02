@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import { showToast } from '../components/Toast'
@@ -8,7 +8,7 @@ const Report: React.FC = () => {
   const navigate = useNavigate()
   
   // 🔥 BLINDAJE: Conectamos el idioma y evitamos el Spanglish
-  const { selectedMachine, sessionStart, getDebugMessages, lang } = useAppContext()
+  const { selectedMachine, sessionStart, getDebugMessages, lang, apiBase, user } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
   const nLang = normalizeLang(lang)
 
@@ -17,14 +17,69 @@ const Report: React.FC = () => {
   const summaryText = debugMessages.filter(m => m.role === 'user').map(m => m.content).join('\n')
   const elapsed = sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : 0
 
-  // 🔥 MEJORA: Manejador de envío nativo para interceptar el formulario completo
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSending, setIsSending] = useState(false)
+
+  // ⚠️ FIX: antes handleSubmit no llamaba a ningún backend — solo mostraba un
+  // toast de éxito falso ("Aquí iría tu lógica futura de fetch()"). Ahora sí
+  // persiste el reporte contra POST /api/reports/debug (endpoint agregado al
+  // backend), usando datos reales de la sesión de debug.
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    
-    // Aquí iría tu lógica futura de fetch() para guardar en la BD.
-    // Por ahora, simulamos el éxito usando traducciones.
-    showToast(t.common?.success || (nLang === 'en' ? '✅ Report sent to central repository' : '✅ Reporte enviado a repositorio central'))
-    navigate(-1)
+
+    if (!selectedMachine) {
+      showToast(nLang === 'en' ? '⚠️ No machine selected' : '⚠️ No hay máquina seleccionada')
+      return
+    }
+    if (!user?.id) {
+      showToast(nLang === 'en' ? '⚠️ Session expired, please log in again' : '⚠️ Sesión expirada, vuelve a iniciar sesión')
+      return
+    }
+    if (!apiBase) {
+      showToast(nLang === 'en' ? '⚠️ API not configured' : '⚠️ API no configurada')
+      return
+    }
+
+    const form = e.currentTarget
+    const formData = new FormData(form)
+    const issueDescription = String(formData.get('issue_summary') || summaryText || '').trim()
+    const actionsTaken = String(formData.get('actions_taken') || '').trim()
+    const preventiveActions = String(formData.get('preventive_actions') || '').trim()
+    const severity = String(formData.get('severity') || 'medium')
+
+    if (!issueDescription) {
+      showToast(nLang === 'en' ? '⚠️ Describe the issue before sending' : '⚠️ Describe el problema antes de enviar')
+      return
+    }
+
+    setIsSending(true)
+    try {
+      const response = await fetch(`${apiBase.replace(/\/$/, '')}/reports/debug`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maquina_id: Number(selectedMachine),
+          tecnico_id: Number(user.id),
+          issue_description: issueDescription,
+          resolution: actionsTaken || null,
+          additional_notes: preventiveActions || null,
+          severity,
+          downtime_minutes: elapsed > 0 ? elapsed : null,
+        }),
+      })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.detail || `HTTP ${response.status}`)
+      }
+
+      showToast(t.common?.success || (nLang === 'en' ? '✅ Report sent to central repository' : '✅ Reporte enviado a repositorio central'))
+      navigate(-1)
+    } catch (error) {
+      console.error('Error enviando reporte:', error)
+      showToast(nLang === 'en' ? '❌ Could not send the report' : '❌ No se pudo enviar el reporte')
+    } finally {
+      setIsSending(false)
+    }
   }
 
   return (
@@ -50,6 +105,7 @@ const Report: React.FC = () => {
         <div className="report-field">
           <label>{t.report?.issueSummary || (nLang === 'en' ? 'Issue Summary' : 'Resumen del Problema')}</label>
           <textarea 
+            name="issue_summary"
             className="report-textarea" 
             rows={4} 
             placeholder={t.report?.issuePlaceholder || (nLang === 'en' ? 'Describe the issue and resolution...' : 'Describe el problema y la resolución...')} 
@@ -60,6 +116,7 @@ const Report: React.FC = () => {
         <div className="report-field">
           <label>{t.report?.actionsTaken || (nLang === 'en' ? 'Actions Taken' : 'Acciones Realizadas')}</label>
           <textarea 
+            name="actions_taken"
             className="report-textarea" 
             rows={3} 
             placeholder={t.report?.actionsPlaceholder || (nLang === 'en' ? 'List actions taken...' : 'Enumera las acciones realizadas...')}
@@ -69,6 +126,7 @@ const Report: React.FC = () => {
         <div className="report-field">
           <label>{t.report?.preventiveActions || (nLang === 'en' ? 'Recommended Preventive Actions' : 'Acciones Preventivas Recomendadas')}</label>
           <textarea 
+            name="preventive_actions"
             className="report-textarea" 
             rows={3} 
             placeholder={t.report?.preventivePlaceholder || (nLang === 'en' ? 'List recommended preventive actions...' : 'Enumera las acciones preventivas recomendadas...')}
@@ -77,7 +135,7 @@ const Report: React.FC = () => {
         
         <div className="report-field">
           <label>{t.common?.severity || 'Severidad'}</label>
-          <select className="form-select" style={{ maxWidth: '200px' }}>
+          <select name="severity" className="form-select" defaultValue="medium" style={{ maxWidth: '200px' }}>
             {/* 🔥 NORMALIZACIÓN: Valores en minúsculas (BD) vs Etiquetas en el idioma del usuario */}
             <option value="low">{t.common?.low || 'Baja'}</option>
             <option value="medium">{t.common?.medium || 'Media'}</option>
@@ -87,7 +145,7 @@ const Report: React.FC = () => {
         </div>
         
         <div className="report-actions mt-4">
-          <button className="btn btn-green btn-lg" type="submit">
+          <button className="btn btn-green btn-lg" type="submit" disabled={isSending}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>

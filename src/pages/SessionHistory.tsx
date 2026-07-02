@@ -19,7 +19,10 @@ export default function SessionHistory() {
   const [loading, setLoading] = useState(true)
   const [selectedSession, setSelectedSession] = useState<SavedSession | null>(null)
 
-  const apiRoot = (apiBase || 'https://barb-2ih8.onrender.com/api').replace(/\/$/, '')
+  // ⚠️ FIX: se elimina el dominio de Render hardcodeado (mismo patrón corregido
+  // en AppContext.tsx/Dashboard.tsx/api.ts). apiBase ya viene resuelto del
+  // contexto (incluye el fallback a VITE_API_URL).
+  const apiRoot = (apiBase || '').replace(/\/$/, '')
 
   useEffect(() => {
     fetch(`${apiRoot}/chat-sessions`)
