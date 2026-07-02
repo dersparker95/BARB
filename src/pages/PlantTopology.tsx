@@ -136,12 +136,31 @@ const PlantTopology: React.FC = () => {
 
   const reset = () => setViewBox(INITIAL_VB)
 
+  // ⚠️ FIX: el enum real de la BD (estado_nodo) es operational/warning/error/offline
+  // (inglés). Antes se buscaban valores en español ('operativo'/'alerta'/'falla')
+  // que nunca existen ahí, así que 'operational' y 'offline' nunca coincidían con
+  // ninguna condición y caían al gris por defecto — la topología se veía casi toda
+  // gris en vez de reflejar el estado real de cada nodo.
   const getStatusColor = (status: string) => {
     const s = String(status || '').toLowerCase()
-    if (s.includes('operativo') || s.includes('ok') || s === 'open') return 'var(--green)'
-    if (s.includes('alerta') || s.includes('warning') || s.includes('mantenimiento')) return 'var(--amber)'
-    if (s.includes('falla') || s.includes('error') || s.includes('closed')) return 'var(--red)'
+    if (s === 'operational') return 'var(--green)'
+    if (s === 'warning') return 'var(--amber)'
+    if (s === 'error') return 'var(--red)'
+    if (s === 'offline') return 'var(--ink3)'
     return 'var(--ink3)'
+  }
+
+  // Traducción local del enum real (i18n.ts no tiene estas claves; sus claves
+  // 'operativo'/'alerta'/'mantenimiento'/'falla' pertenecen a otro sistema de
+  // estados — Machine.status — no a estado_nodo).
+  const NODE_STATUS_LABEL: Record<string, Record<string, string>> = {
+    es: { operational: 'Operativo', warning: 'Alerta', error: 'Falla', offline: 'Fuera de línea' },
+    en: { operational: 'Operational', warning: 'Warning', error: 'Error', offline: 'Offline' },
+  }
+  const nodeStatusLabel = (status?: string) => {
+    const s = String(status || '').toLowerCase()
+    const dict = NODE_STATUS_LABEL[lang] || NODE_STATUS_LABEL.en
+    return dict[s] || status || ''
   }
 
   if (loading) {
@@ -220,7 +239,7 @@ const PlantTopology: React.FC = () => {
           >
             <div className="topo-tooltip-title">{tooltip.node.nombre_visual}</div>
             <div className="topo-tooltip-meta">
-              {tooltip.node.tipo} · {t.statuses?.[tooltip.node.estado_actual?.toLowerCase()] || tooltip.node.estado_actual}
+              {tooltip.node.tipo} · {nodeStatusLabel(tooltip.node.estado_actual)}
             </div>
             <div className="topo-tooltip-actions">
               <button className="btn btn-sm btn-primary" onClick={() => goToDebug(tooltip.node?.maquina_id)}>

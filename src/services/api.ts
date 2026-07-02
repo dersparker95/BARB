@@ -38,7 +38,11 @@ async function callAPI<T>(base: string, path: string, opts?: RequestInit): Promi
 
 // 🌐 Única fuente de la verdad para las URLs
 export const createApiService = (
- apiBase = 'https://barb-2ih8.onrender.com/api',
+ // ⚠️ FIX: se elimina el dominio de Render hardcodeado (mismo problema ya
+ // corregido en AppContext.tsx/Dashboard.tsx). apiBase normalmente llega
+ // como argumento explícito desde AppContext; este default solo aplica si
+ // alguien instancia createApiService() sin argumentos.
+ apiBase = import.meta.env.VITE_API_URL || '',
   lmBase = import.meta.env.VITE_LM_URL || 'http://localhost:1234/v1'
 ) => {
   return {
@@ -145,7 +149,9 @@ export const createApiService = (
         
       updateStatus: async (orderId: number | string, status: string) =>
         callAPI<any>(apiBase, `/work-orders/${orderId}/status`, {
-          method: 'PATCH', // Corregido de PUT a PATCH para seguir estándares REST
+          // ⚠️ FIX: el backend expone @app.put("/api/work-orders/{numero_ot}/status"),
+          // no PATCH. Con PATCH, cualquier código que use esta función recibía 405.
+          method: 'PUT',
           body: JSON.stringify({ status })
         })
     },

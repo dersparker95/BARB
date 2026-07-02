@@ -25,8 +25,13 @@ export default function DebugChat() {
 
   const apiRoot = useMemo(() => {
     if (apiBase) return apiBase.replace(/\/$/, '')
+    // ⚠️ FIX: se elimina el dominio de Render hardcodeado. Se usa VITE_API_URL
+    // (misma estrategia que AppContext.tsx/Dashboard.tsx) en vez de un dominio
+    // fijo o un localhost adivinado.
     const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV
-    return isDev ? 'http://localhost:9000/api' : 'https://barb-2ih8.onrender.com/api'
+    const envUrl = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_API_URL : ''
+    if (envUrl) return envUrl.replace(/\/$/, '')
+    return isDev ? 'http://localhost:9000/api' : ''
   }, [apiBase])
 
   useEffect(() => {
