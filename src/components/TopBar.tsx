@@ -30,13 +30,21 @@ const TopBar: React.FC = () => {
   const handleLogout = async () => {
     setLoading(true)
     try {
-      const safeApiBase = apiBase || 'http://localhost:9000/api'
-      const response = await fetch(`${safeApiBase.replace(/\/$/, '')}/auth/logout`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-      })
-      if (!response.ok) throw new Error('Fallo al cerrar sesión en el servidor')
+      // ⚠️ FIX: antes usaba 'http://localhost:9000/api' como fallback. Desde que
+      // se quitó el dominio hardcodeado de AppContext.tsx, apiBase puede quedar
+      // legítimamente vacío en producción si falta VITE_API_URL — apuntar a
+      // localhost en ese caso fallaría silenciosamente contra la máquina del
+      // usuario en vez de avisar del problema real de configuración.
+      if (!apiBase) {
+        console.warn('[BARB] No hay apiBase configurada; se omite el logout remoto.')
+      } else {
+        const response = await fetch(`${apiBase.replace(/\/$/, '')}/auth/logout`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        if (!response.ok) throw new Error('Fallo al cerrar sesión en el servidor')
+      }
     } catch (error) {
       console.warn("Logout warning:", error)
     } finally {

@@ -49,7 +49,7 @@ const mapApiEdge = (e: any): TopologyEdge => ({
 const PlantTopology: React.FC = () => {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const { setSelectedMachine, lang } = useAppContext()
+  const { setSelectedMachine, lang, apiBase } = useAppContext()
   const navigate = useNavigate()
   
   const t = useMemo(() => getTranslations(lang), [lang])
@@ -70,7 +70,10 @@ const PlantTopology: React.FC = () => {
     
     async function fetchTopology() {
       try {
-        const api = createApiService()
+        // ⚠️ FIX: antes se llamaba createApiService() sin argumentos, ignorando el
+        // apiBase real del contexto (el que el usuario puede cambiar en Configuración)
+        // y usando siempre el default interno de la función.
+        const api = createApiService(apiBase)
         const data = await api.topologia() 
         if (!controller.signal.aborted && data) {
           // Aplicamos el mapeo defensivo a los arreglos que vienen de la API
@@ -89,7 +92,7 @@ const PlantTopology: React.FC = () => {
     
     void fetchTopology()
     return () => controller.abort()
-  }, [])
+  }, [apiBase])
 
   const nodesDict = useMemo(() => {
     const dict = new Map<string, {x: number, y: number}>()

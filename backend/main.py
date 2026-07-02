@@ -2077,6 +2077,31 @@ def get_topologia():
         plantas = _query_all("SELECT planta_id, nombre FROM planta")
         disciplinas = _query_all("SELECT disciplina_id, nombre FROM disciplina")
         maquinas = _query_all("SELECT maquina_id, nombre, planta_id, disciplina_id FROM maquina")
+
+        # ⚠️ FIX: antes estado_actual estaba hardcodeado a "operativo" para TODAS
+        # las máquinas siempre, sin importar si tenían fallas reales. No existe una
+        # columna de status en MAQUINA, pero sí hay datos reales en orden_trabajo
+        # que permiten derivar un estado significativo: si la máquina tiene una OT
+        # abierta urgente/vencida -> falla; cualquier otra OT abierta -> alerta;
+        # sin OTs abiertas -> operativo.
+        machine_status_rows = _query_all(
+            """
+            SELECT
+                maquina_id,
+                BOOL_OR(estado NOT IN ('completed', 'cancelled') AND (priority = 'urgent' OR estado = 'overdue')) AS tiene_falla,
+                BOOL_OR(estado NOT IN ('completed', 'cancelled')) AS tiene_alerta
+            FROM orden_trabajo
+            GROUP BY maquina_id
+            """
+        )
+        machine_status = {}
+        for row in machine_status_rows:
+            if row["tiene_falla"]:
+                machine_status[row["maquina_id"]] = "falla"
+            elif row["tiene_alerta"]:
+                machine_status[row["maquina_id"]] = "alerta"
+            else:
+                machine_status[row["maquina_id"]] = "operativo"
         
         nodos = []
         conexiones = []
@@ -2130,10 +2155,8 @@ def get_topologia():
                 "icono": "🤖",
                 "pos_x": x_offset_maq,
                 "pos_y": 500,
-                "estado_actual": "operativo"
+                "estado_actual": machine_status.get(m["maquina_id"], "operativo")
             })
-            
-            # Conectamos la máquina a su disciplina correspondiente
             if m.get("disciplina_id"):
                 conexiones.append({
                     "conexion_id": f"conn_d{m['disciplina_id']}_{n_id}",
