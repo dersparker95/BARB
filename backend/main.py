@@ -14,7 +14,7 @@ from typing import Any, Optional
 import bcrypt
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
 from psycopg2.extras import RealDictCursor
@@ -805,6 +805,14 @@ class ChatRequest(BaseModel):
     # Limita el historial a las últimas 10 interacciones para evitar exceder el contexto del LLM.
     history: list[MessageItem] = Field(default_factory=list, max_length=10)
 
+
+class ChatDebugRequest(BaseModel):
+    sessionId: Optional[str] = None
+    machineId: Optional[str] = None
+    message: str = Field(..., min_length=1, max_length=4000)
+    attachments: list[Any] = Field(default_factory=list)
+    sensorData: Optional[dict] = None
+
 class ChatSessionRequest(BaseModel):
     title: str
     saved_by: Optional[str] = "operador"
@@ -878,6 +886,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from permisos import require_route, require_action, require_auth, get_sesion_actual  # noqa: E402
+
 
 @app.on_event("startup")
 async def startup_checks():
@@ -938,6 +948,26 @@ async def startup_checks():
             conn.commit()
             if actualizados:
                 print(f"🔒 {actualizados} contraseña(s) en texto plano fueron hasheadas automáticamente.")
+
+            # 5. TABLA DE SESIONES: soporta la validación real de tokens en permisos.py
+            # (antes /auth/login generaba un token que nunca se guardaba ni se validaba).
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sesion (
+                    token       VARCHAR(64) PRIMARY KEY,
+                    usuario_id  INTEGER NOT NULL REFERENCES usuario(usuario_id) ON DELETE CASCADE,
+                    creado_en   TIMESTAMP NOT NULL DEFAULT NOW(),
+                    expira_en   TIMESTAMP NOT NULL
+                );
+                """
+            )
+            conn.commit()
+
+            # 6. PREFERENCIAS DE USUARIO: columna JSONB para /user/preferences.
+            cursor.execute(
+                "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS preferencias JSONB DEFAULT '{}'::jsonb;"
+            )
+            conn.commit()
 
     except Exception as e:
         if conn: conn.rollback()
@@ -1118,8 +1148,14 @@ async def login(payload: LoginRequest):
     if not verify_password(password, str(user.get("password_hash") or "")):
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrecta")
 
+    token = secrets.token_hex(32)
+    _execute_write(
+        "INSERT INTO sesion (token, usuario_id, expira_en) VALUES (:token, :uid, NOW() + INTERVAL '24 hours')",
+        {"token": token, "uid": int(user["usuario_id"])},
+    )
+
     return {
-        "token": secrets.token_hex(32),
+        "token": token,
         "user": {
             "id": int(user["usuario_id"]),
             "name": str(user["nombre"]),
@@ -1130,11 +1166,14 @@ async def login(payload: LoginRequest):
 
 @app.post("/auth/logout")
 @app.post("/api/auth/logout")
-async def logout():
+async def logout(authorization: str = Header(default="", alias="Authorization")):
+    token = authorization.replace("Bearer ", "").strip()
+    if token:
+        _execute_write("DELETE FROM sesion WHERE token = :token", {"token": token})
     return {"status": "success"}
 
 
-@app.get("/api/usuarios")
+@app.get("/api/usuarios", dependencies=[Depends(require_action("ver_usuarios"))])
 async def list_users():
     """
     Retorna el directorio completo del personal técnico de la plataforma.
@@ -1158,7 +1197,7 @@ async def list_users():
         raise HTTPException(status_code=500, detail=f"Error al listar usuarios: {str(e)}")
 
 
-@app.post("/api/usuarios", status_code=201)
+@app.post("/api/usuarios", status_code=201, dependencies=[Depends(require_action("gestionar_usuarios"))])
 async def create_user(payload: UserCreateRequest):
     """
     Registra un nuevo usuario con contraseña cifrada mediante bcrypt.
@@ -1202,7 +1241,7 @@ async def create_user(payload: UserCreateRequest):
         raise HTTPException(status_code=500, detail=f"Error al crear USUARIO: {str(e)}")
 
 
-@app.put("/api/usuarios/{usuario_id}")
+@app.put("/api/usuarios/{usuario_id}", dependencies=[Depends(require_action("gestionar_usuarios"))])
 async def update_user(usuario_id: int, payload: UserUpdateRequest):
     """
     Aplica una actualización diferencial sobre los metadatos y credenciales del usuario.
@@ -1268,7 +1307,7 @@ async def update_user(usuario_id: int, payload: UserUpdateRequest):
         raise HTTPException(status_code=500, detail=f"Error al actualizar USUARIO: {str(e)}")
 
 
-@app.delete("/api/usuarios/{usuario_id}", status_code=204)
+@app.delete("/api/usuarios/{usuario_id}", status_code=204, dependencies=[Depends(require_action("gestionar_usuarios"))])
 async def delete_user(usuario_id: int):
     """
     Elimina permanentemente un registro de usuario (hard delete).
@@ -1310,7 +1349,7 @@ async def delete_user(usuario_id: int):
 # =============================================================================
 
 
-@app.get("/api/stats/financial-impact")
+@app.get("/api/stats/financial-impact", dependencies=[Depends(require_route("dashboard", solo_lectura=True))])
 def get_financial_impact(days: int | None = Query(default=None, ge=1)):
     """
     Calcula KPIs de desempeño y tendencias para el dashboard financiero.
@@ -1459,8 +1498,8 @@ def get_financial_impact(days: int | None = Query(default=None, ge=1)):
 # =============================================================================
 
 
-@app.get("/api/work-orders")
-@app.get("/api/work_orders")
+@app.get("/api/work-orders", dependencies=[Depends(require_auth)])
+@app.get("/api/work_orders", dependencies=[Depends(require_auth)])
 def get_work_orders():
     """
     Retorna el listado completo de OTs enriquecido con relaciones de máquina, planta, disciplina y conteo fotográfico.
@@ -1506,8 +1545,8 @@ def get_work_orders():
         return []
 
 
-@app.get("/api/work-orders/{numero_ot}")
-@app.get("/api/work_orders/{numero_ot}")
+@app.get("/api/work-orders/{numero_ot}", dependencies=[Depends(require_auth)])
+@app.get("/api/work_orders/{numero_ot}", dependencies=[Depends(require_auth)])
 def get_work_order(numero_ot: str):
     """
     Recupera una OT individual junto a su evidencia fotográfica asociada.
@@ -1528,8 +1567,8 @@ def get_work_order(numero_ot: str):
     return row_to_work_order(row, photos=photos)
 
 
-@app.put("/api/work-orders/{numero_ot}/status")
-@app.put("/api/work_orders/{numero_ot}/status")
+@app.put("/api/work-orders/{numero_ot}/status", dependencies=[Depends(require_action("cambiar_estado_ot"))])
+@app.put("/api/work_orders/{numero_ot}/status", dependencies=[Depends(require_action("cambiar_estado_ot"))])
 async def update_work_order_status(numero_ot: str, payload: WorkOrderStatusRequest):
     """
     Ejecuta una transición de estado en el ciclo de vida de la OT,
@@ -1595,8 +1634,8 @@ async def update_work_order_status(numero_ot: str, payload: WorkOrderStatusReque
         raise HTTPException(status_code=500, detail=f"Error al actualizar estado de OT: {str(e)}")
 
 
-@app.delete("/api/work-orders/{numero_ot}", status_code=204)
-@app.delete("/api/work_orders/{numero_ot}", status_code=204)
+@app.delete("/api/work-orders/{numero_ot}", status_code=204, dependencies=[Depends(require_action("eliminar_ot"))])
+@app.delete("/api/work_orders/{numero_ot}", status_code=204, dependencies=[Depends(require_action("eliminar_ot"))])
 async def delete_work_order(numero_ot: str):
     """
     Elimina una OT con su evidencia fotográfica asociada de forma cascada.
@@ -1639,8 +1678,8 @@ async def delete_work_order(numero_ot: str):
         raise HTTPException(status_code=500, detail=f"Error al eliminar OT: {str(e)}")
 
 
-@app.post("/api/work-orders")
-@app.post("/api/work_orders")
+@app.post("/api/work-orders", dependencies=[Depends(require_action("crear_ot"))])
+@app.post("/api/work_orders", dependencies=[Depends(require_action("crear_ot"))])
 async def create_work_order(request: Request):
     """
     Crea una OT desde un payload multipart/form-data o application/json,
@@ -1774,8 +1813,8 @@ async def create_work_order(request: Request):
 # =============================================================================
 
 
-@app.post("/api/documents/upload")
-@app.post("/documents/upload")
+@app.post("/api/documents/upload", dependencies=[Depends(require_action("subir_documentos"))])
+@app.post("/documents/upload", dependencies=[Depends(require_action("subir_documentos"))])
 async def upload_document(file: UploadFile = File(...)):
     """
     Acepta y persiste archivos PDF para su posterior indexación en el motor RAG.
@@ -1811,7 +1850,7 @@ async def upload_document(file: UploadFile = File(...)):
 # =============================================================================
 
 
-@app.get("/api/machines")
+@app.get("/api/machines", dependencies=[Depends(require_auth)])
 def get_machines():
     """
     Retorna el catálogo completo de máquinas registradas en el sistema.
@@ -1840,7 +1879,7 @@ def get_machines():
         return [{"id": 1, "name": "Planta Principal", "discipline_id": 1, "plant_id": 1}]
 
 
-@app.get("/api/disciplines")
+@app.get("/api/disciplines", dependencies=[Depends(require_auth)])
 @lru_cache(maxsize=1)
 def get_disciplines():
     """
@@ -1862,8 +1901,8 @@ def get_disciplines():
         return [{"id": 1, "name": "General"}]
 
 
-@app.get("/api/plants")
-@app.get("/api/plantas")
+@app.get("/api/plants", dependencies=[Depends(require_auth)])
+@app.get("/api/plantas", dependencies=[Depends(require_auth)])
 def get_plants():
     """
     Retorna el registro geográfico de clústeres operativos habilitados.
@@ -1887,7 +1926,7 @@ def get_plants():
         return [{"id": 1, "name": "Planta Central San Bernardo", "ubicacion": "San Bernardo, Región Metropolitana, Chile"}]
 
 
-@app.get("/api/technicians")
+@app.get("/api/technicians", dependencies=[Depends(require_auth)])
 @lru_cache(maxsize=1)
 def get_technicians():
     """
@@ -1915,8 +1954,8 @@ def get_technicians():
 # =============================================================================
 
 
-@app.post("/api/chat")
-@app.post("/chat")
+@app.post("/api/chat", dependencies=[Depends(require_route("docchat"))])
+@app.post("/chat", dependencies=[Depends(require_route("docchat"))])
 async def chat(payload: ChatRequest):
     """
     Delega una consulta al motor DeepSeek con historial de conversación y caché por hash de mensaje.
@@ -1982,12 +2021,68 @@ async def chat(payload: ChatRequest):
 
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error de comunicación con el motor de IA: {type(e).__name__}")
+
+
+@app.post("/api/chat/debug", dependencies=[Depends(require_route("debug"))])
+@app.post("/chat/debug", dependencies=[Depends(require_route("debug"))])
+async def chat_debug(payload: ChatDebugRequest):
+    """
+    Variante de /chat para la pantalla de Debug: fuerza contexto de diagnóstico
+    (máquina + datos de sensores) en el prompt del sistema. No usa caché porque
+    cada sesión de debug es contextual y no debe reutilizar respuestas de otras.
+
+    ## Args:
+    payload: sessionId, machineId, message, attachments y sensorData opcionales.
+
+    ## Returns:
+    Respuesta del LLM enfocada en diagnóstico.
+
+    ## Raises:
+    HTTPException(500): API Key de IA no configurada.
+    HTTPException(502): Error de comunicación con DeepSeek.
+    """
+    if not DEEPSEEK_API_KEY:
+        raise HTTPException(status_code=500, detail="API Key de IA no configurada en el servidor.")
+
+    system_content = (
+        _BARB_SYSTEM_PROMPT
+        + " Estás en modo DEBUG/diagnóstico: prioriza causas probables, pasos de verificación"
+        " y acciones correctivas concretas."
+    )
+    if payload.machineId:
+        system_content += f" Máquina en contexto: {payload.machineId}."
+    if payload.sensorData:
+        system_content += f" Datos de sensores actuales: {json.dumps(payload.sensorData, default=str)}."
+    if payload.attachments:
+        system_content += f" El usuario adjuntó {len(payload.attachments)} archivo(s) de referencia."
+
+    messages: list[dict] = [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": payload.message},
+    ]
+
+    try:
+        response = await ia_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=messages,
+            temperature=0.2,
+            max_tokens=1024,
+        )
+        reply = response.choices[0].message.content
+        return {
+            "reply": reply,
+            "sources": ["Base de Conocimiento BARB"],
+            "sessionId": payload.sessionId,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Error de comunicación con el motor de IA: {type(e).__name__}")
+
 # =============================================================================
 # ENDPOINTS — HISTORIAL DE CHAT Y FEEDBACK
 # =============================================================================
 
-@app.post("/api/chat-sessions")
-@app.post("/chat-sessions")
+@app.post("/api/chat-sessions", dependencies=[Depends(require_route("docchat"))])
+@app.post("/chat-sessions", dependencies=[Depends(require_route("docchat"))])
 async def save_chat_session(payload: ChatSessionRequest):
     """Guarda una sesión completa de chat (memoria RAG) en PostgreSQL."""
     conn = None
@@ -2018,7 +2113,8 @@ async def save_chat_session(payload: ChatSessionRequest):
     finally:
         if conn: release_db_connection(conn)
 
-@app.post("/api/reports/debug")
+@app.post("/api/reports/debug", dependencies=[Depends(require_route("report"))])
+@app.post("/reports/debug", dependencies=[Depends(require_route("report"))])
 def create_debug_report(payload: dict):
     """
     Guarda un reporte de diagnóstico (tabla REPORTE) generado desde la pantalla
@@ -2084,7 +2180,7 @@ def create_debug_report(payload: dict):
             release_db_connection(conn)
 
 
-@app.get("/api/chat-sessions")
+@app.get("/api/chat-sessions", dependencies=[Depends(require_route("history"))])
 async def get_chat_sessions():
     """Recupera el historial de todas las sesiones de chat guardadas."""
     try:
@@ -2096,7 +2192,7 @@ async def get_chat_sessions():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener sesiones: {str(e)}")
 
-@app.post("/api/chat-feedback")
+@app.post("/api/chat-feedback", dependencies=[Depends(require_route("docchat"))])
 async def save_chat_feedback(payload: ChatFeedbackRequest):
     """Guarda la calificación (👍 / 👎) de una respuesta de BARB con su contexto."""
     conn = None
@@ -2131,8 +2227,34 @@ async def save_chat_feedback(payload: ChatFeedbackRequest):
 # ENDPOINTS — TOPOLOGÍA AUTOMÁTICA
 # =============================================================================
 
-@app.get("/api/topologia")
-@app.get("/api/topology")
+@app.put("/api/user/preferences")
+@app.put("/user/preferences")
+def update_user_preferences(payload: dict, sesion: dict = Depends(get_sesion_actual)):
+    """
+    Guarda las preferencias (JSON libre: idioma, tema, notificaciones, etc.)
+    del usuario autenticado. No requiere permiso de acción específico: cada
+    usuario solo puede editar sus propias preferencias (usuario_id viene del
+    token de sesión, no del payload, para que nadie edite las de otro).
+
+    ## Args:
+    payload: Objeto JSON libre con las preferencias a guardar (se sobre-escribe completo).
+
+    ## Returns:
+    Preferencias guardadas.
+    """
+    try:
+        _execute_write(
+            "UPDATE usuario SET preferencias = :prefs WHERE usuario_id = :uid",
+            {"prefs": json.dumps(payload), "uid": sesion["usuario_id"]},
+        )
+        return {"status": "success", "preferencias": payload}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al guardar preferencias: {str(e)}")
+
+
+
+@app.get("/api/topologia", dependencies=[Depends(require_route("topology", solo_lectura=True))])
+@app.get("/api/topology", dependencies=[Depends(require_route("topology", solo_lectura=True))])
 def get_topologia():
     """
     Genera un mapa topológico dinámico leyendo las tablas maquina, planta y disciplina.

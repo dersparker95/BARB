@@ -52,6 +52,11 @@ ACCIONES: dict[str, dict[str, bool]] = {
     "cambiar_estado_ot":   {"operador": False, "tecnico": True,  "supervisor": True,  "engineer": True,  "gerente": True, "admin": True, "visitante": False},
     "eliminar_ot":         {"operador": False, "tecnico": False, "supervisor": True,  "engineer": True,  "gerente": True, "admin": True, "visitante": False},
     "subir_documentos":    {"operador": False, "tecnico": False, "supervisor": False, "engineer": True,  "gerente": True, "admin": True, "visitante": False},
+    # No estaba en la matriz original; gestión de usuarios (crear/editar/eliminar) queda
+    # restringida solo a admin por ser una acción sensible de administración del sistema.
+    "gestionar_usuarios":  {"operador": False, "tecnico": False, "supervisor": False, "engineer": False, "gerente": False, "admin": True, "visitante": False},
+    # Ver el directorio de usuarios (con email) también se limita a admin.
+    "ver_usuarios":        {"operador": False, "tecnico": False, "supervisor": False, "engineer": False, "gerente": False, "admin": True, "visitante": False},
 }
 
 
@@ -83,19 +88,57 @@ def puede_ejecutar_accion(rol: str, accion: str) -> bool:
 # y se consulta el rol REAL desde la base de datos en cada request, para no
 # confiar en un rol que el cliente pudiera manipular.
 
-def get_rol_actual(x_user_id: str = Header(..., alias="X-User-Id")) -> str:
+def get_sesion_actual(authorization: str = Header(..., alias="Authorization")) -> dict:
+    """
+    Igual que get_rol_actual pero devuelve también el usuario_id de la sesión,
+    necesario para endpoints que actúan "sobre el propio usuario" (ej. preferencias).
+    """
+    from main import _query_one
+
+    token = authorization.replace("Bearer ", "").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Falta el header Authorization: Bearer <token>.")
+
+    sesion = _query_one(
+        """
+        SELECT u.usuario_id, u.rol, u.activo
+        FROM sesion s
+        JOIN usuario u ON u.usuario_id = s.usuario_id
+        WHERE s.token = %(token)s AND s.expira_en > NOW()
+        """,
+        {"token": token},
+    )
+    if not sesion or not sesion.get("activo", True):
+        raise HTTPException(status_code=401, detail="Sesión inválida o expirada. Vuelve a iniciar sesión.")
+
+    return {"usuario_id": int(sesion["usuario_id"]), "rol": _normalizar_rol(sesion["rol"])}
+
+
+def get_rol_actual(authorization: str = Header(..., alias="Authorization")) -> str:
+    """
+    Resuelve el rol del usuario autenticado a partir del token de sesión real
+    guardado en la tabla `sesion` (creada en /auth/login). Rechaza tokens
+    inexistentes, expirados o de usuarios inactivos.
+    """
     from main import _query_one  # import diferido para evitar ciclo de importación
 
-    try:
-        usuario_id = int(x_user_id)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=401, detail="X-User-Id inválido o ausente.")
+    token = authorization.replace("Bearer ", "").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Falta el header Authorization: Bearer <token>.")
 
-    user = _query_one("SELECT rol, activo FROM usuario WHERE usuario_id = %(uid)s", {"uid": usuario_id})
-    if not user or not user.get("activo", True):
-        raise HTTPException(status_code=401, detail="Usuario no válido o inactivo.")
+    sesion = _query_one(
+        """
+        SELECT u.rol, u.activo
+        FROM sesion s
+        JOIN usuario u ON u.usuario_id = s.usuario_id
+        WHERE s.token = %(token)s AND s.expira_en > NOW()
+        """,
+        {"token": token},
+    )
+    if not sesion or not sesion.get("activo", True):
+        raise HTTPException(status_code=401, detail="Sesión inválida o expirada. Vuelve a iniciar sesión.")
 
-    return _normalizar_rol(user["rol"])
+    return _normalizar_rol(sesion["rol"])
 
 
 # =============================================================================
@@ -111,8 +154,8 @@ def require_route(ruta: str, solo_lectura: bool = False):
     solo_lectura: Si True, considera "ver" como acceso válido (endpoints GET).
                   Si False, "ver" se rechaza (endpoints que escriben datos).
     """
-    async def _dep(x_user_id: str = Header(..., alias="X-User-Id")):
-        rol_actual = get_rol_actual(x_user_id)
+    async def _dep(authorization: str = Header(..., alias="Authorization")):
+        rol_actual = get_rol_actual(authorization)
         permiso = puede_acceder_ruta(rol_actual, ruta)
         acceso_valido = permiso is True or (solo_lectura and permiso == "ver")
         if not acceso_valido:
@@ -125,10 +168,20 @@ def require_route(ruta: str, solo_lectura: bool = False):
 def require_action(accion: str):
     """Dependencia para proteger una acción (crear/editar/eliminar/subir) según ACCIONES."""
 
-    async def _dep(x_user_id: str = Header(..., alias="X-User-Id")):
-        rol_actual = get_rol_actual(x_user_id)
+    async def _dep(authorization: str = Header(..., alias="Authorization")):
+        rol_actual = get_rol_actual(authorization)
         if not puede_ejecutar_accion(rol_actual, accion):
             raise HTTPException(status_code=403, detail=f"El rol '{rol_actual}' no puede ejecutar '{accion}'.")
         return rol_actual
 
     return _dep
+
+
+async def require_auth(authorization: str = Header(..., alias="Authorization")) -> str:
+    """
+    Dependencia liviana: solo exige un usuario autenticado y válido (cualquier
+    rol, incluido visitante). Para datos de referencia de solo lectura que no
+    aparecen en la matriz de rutas/acciones (máquinas, plantas, disciplinas,
+    técnicos, listado de OTs).
+    """
+    return get_rol_actual(authorization)

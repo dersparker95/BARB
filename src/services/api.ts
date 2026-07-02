@@ -10,16 +10,30 @@ export type AuthLoginResponse = {
   }
 }
 
+// 🔐 TOKEN DE SESIÓN: se guarda tras el login y se adjunta a cada request protegido.
+const TOKEN_KEY = 'barb_token'
+
+export const getToken = () => localStorage.getItem(TOKEN_KEY)
+export const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token)
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY)
+
 // 🔥 BLINDAJE DE URL: Evitamos el error 404 por dobles barras (//)
+// y normalizamos el prefijo /api sin importar si VITE_API_URL ya lo incluye o no.
 const joinPath = (base: string, path: string) => {
   const cleanBase = base.replace(/\/$/, '')
+  const baseWithApi = cleanBase.endsWith('/api') ? cleanBase : `${cleanBase}/api`
   const cleanPath = path.startsWith('/') ? path : `/${path}`
-  return `${cleanBase}${cleanPath}`
+  return `${baseWithApi}${cleanPath}`
 }
 
 async function callAPI<T>(base: string, path: string, opts?: RequestInit): Promise<T> {
   const url = joinPath(base, path)
-  const headers = { 'Content-Type': 'application/json', ...(opts?.headers as Record<string, string>) }
+  const token = getToken()
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(opts?.headers as Record<string, string>),
+  }
   
   const res = await fetch(url, { credentials: 'include', ...opts, headers })
   
@@ -47,12 +61,21 @@ export const createApiService = (
 ) => {
   return {
     auth: {
-      login: async (email: string, password: string) =>
-        callAPI<AuthLoginResponse>(apiBase, '/auth/login', {
+      login: async (email: string, password: string) => {
+        const data = await callAPI<AuthLoginResponse>(apiBase, '/auth/login', {
           method: 'POST',
           body: JSON.stringify({ email, password }),
-        }),
-      logout: async () => callAPI<void>(apiBase, '/auth/logout', { method: 'POST' }),
+        })
+        setToken(data.token)
+        return data
+      },
+      logout: async () => {
+        try {
+          await callAPI<void>(apiBase, '/auth/logout', { method: 'POST' })
+        } finally {
+          clearToken()
+        }
+      },
     },
     health: async () => callAPI<any>(apiBase, '/health', { method: 'GET' }),
     
@@ -84,7 +107,10 @@ export const createApiService = (
       ) => {
         const res = await fetch(joinPath(apiBase, '/chat'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+          },
           body: JSON.stringify({ message, machine: machineId, language, history })
         });
 
@@ -130,7 +156,8 @@ export const createApiService = (
       documents: async (formData: FormData) => {
         const res = await fetch(joinPath(apiBase, '/documents/upload'), {
           method: 'POST',
-          body: formData, 
+          headers: { ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+          body: formData,
         });
         if (!res.ok) throw new Error(await res.text());
         return res.json();
