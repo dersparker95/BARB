@@ -239,6 +239,7 @@ const getWorkOrderPriority = (ot: WorkOrderRecord): string =>
 export default function DocChat() {
   const {
     apiBase,
+    api, // 🔥 FIX: Inyectado desde el contexto
     discipline,
     plant,
     docMachine,
@@ -292,8 +293,6 @@ export default function DocChat() {
   const nLang = normalizeLang(lang)
 
   const apiRoot = useMemo(
-    // ⚠️ FIX: se elimina el fallback 'http://localhost:9000/api'. apiBase ya
-    // viene resuelto correctamente desde el contexto (AppContext.tsx).
     () => (apiBase || '').replace(/\/$/, ''),
     [apiBase],
   )
@@ -403,20 +402,12 @@ export default function DocChat() {
       setCatalogsLoading(true)
 
       try {
-        const [plantsRes, disciplinesRes, machinesRes, workOrdersRes] = await Promise.all([
-          fetch(`${apiRoot}/plants`, { signal: controller.signal }),
-          fetch(`${apiRoot}/disciplines`, { signal: controller.signal }),
-          fetch(`${apiRoot}/machines`, { signal: controller.signal }),
-          fetch(`${apiRoot}/work-orders`, { signal: controller.signal }),
-        ])
-
-        if (controller.signal.aborted) return
-
+        // 🔥 FIX: Cargamos catálogos usando tu 'api' centralizado (con token incorporado)
         const [plantsData, disciplinesData, machinesData, workOrdersData] = await Promise.all([
-          plantsRes.ok ? plantsRes.json() : [],
-          disciplinesRes.ok ? disciplinesRes.json() : [],
-          machinesRes.ok ? machinesRes.json() : [],
-          workOrdersRes.ok ? workOrdersRes.json() : [],
+          api.plants().catch(() => []),
+          api.disciplines().catch(() => []),
+          api.machines({ signal: controller.signal }).catch(() => []),
+          api.workOrders.getAll({ signal: controller.signal }).catch(() => [])
         ])
 
         if (controller.signal.aborted) return
@@ -439,7 +430,7 @@ export default function DocChat() {
 
     void loadCatalogs()
     return () => controller.abort()
-  }, [apiRoot])
+  }, [api])
 
   /* ---------------------------------------------------------------------------
    * Filtrado de OTs
@@ -495,14 +486,10 @@ export default function DocChat() {
       formData.append('type', 'document')
       formData.append('context', 'document_library')
 
-      const response = await fetch(`${apiRoot}/documents/upload`, {
-        method: 'POST',
-        body: formData,
-      })
+      // 🔥 FIX: Delegamos la subida de documento a api.chat.documents
+      const data = await api.chat.documents(formData)
 
-      if (response.ok) {
-        const data = (await response.json()) as { id?: string }
-
+      if (data) {
         const manual: ManualDoc = {
           id: data.id ?? `srv-${Date.now()}`,
           name: file.name,
@@ -517,6 +504,7 @@ export default function DocChat() {
         setManuals(previous => [...previous, manual])
         setActiveManualId(manual.id)
         setUploadPct(100)
+        setUploading(false)
         return
       }
     } catch {
@@ -572,7 +560,7 @@ export default function DocChat() {
     setActiveManualId(manual.id)
     setUploading(false)
     setUploadPct(0)
-  }, [apiRoot, user?.name])
+  }, [api, user?.name])
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files) return
@@ -622,9 +610,13 @@ export default function DocChat() {
     }
 
     try {
+      // 🔥 FIX: Como no hay método saveSession en api.ts, usamos fetch pero INYECTANDO el Token manualmente
       const response = await fetch(`${apiRoot}/chat-sessions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('barb_token')}`
+        },
         body: JSON.stringify(payload),
       })
 
@@ -700,9 +692,13 @@ export default function DocChat() {
       }))
 
     try {
+      // 🔥 FIX: Mantener parámetros completos (imágenes y manual activo) usando fetch directo con Token
       const response = await fetch(`${apiRoot}/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('barb_token')}`
+        },
         body: JSON.stringify({
           message: query,
           language: nLang,
@@ -808,8 +804,6 @@ export default function DocChat() {
       <div
         className={`panel-left dc-sidebar ${isSidebarOpen ? 'dc-sidebar--open' : 'dc-sidebar--collapsed'}`}
       >
-        {/* ── Botón toggle ── */}
-        {/* ✅ CORREGIDO: header del sidebar usa clase BEM en lugar de inline styles */}
         <div className={`dc-sidebar-header ${isSidebarOpen ? 'dc-sidebar-header--open' : ''}`}>
           {isSidebarOpen && (
             <span className="dc-sidebar-label">Filtros y OTs</span>
@@ -834,11 +828,8 @@ export default function DocChat() {
           </button>
         </div>
 
-        {/* ── Contenido colapsable ── */}
-        {/* ✅ CORREGIDO: display condicional con clase en lugar de style inline */}
         <div className={`dc-sidebar-content ${isSidebarOpen ? 'dc-sidebar-content--visible' : 'dc-sidebar-content--hidden'}`}>
 
-          {/* Órdenes de Trabajo */}
           <div className="panel-section">
             <span className="panel-label">
               Target OTs
@@ -888,7 +879,6 @@ export default function DocChat() {
                       })
                     }}
                   >
-                    {/* ✅ CORREGIDO: emoji 🛠️ → SVG accesible */}
                     <div className="mi-icon" aria-hidden="true">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
@@ -912,7 +902,6 @@ export default function DocChat() {
                 )
               })}
 
-              {/* ✅ CORREGIDO: loading inline → clase BEM */}
               {catalogsLoading && (
                 <div className="dc-catalog-loading">
                   {t.common?.loading ?? 'Cargando...'}
@@ -923,8 +912,6 @@ export default function DocChat() {
 
           <div className="lib-sep" />
 
-          {/* Planta */}
-          {/* ✅ CORREGIDO: select con Tailwind arbitrario → .form-select del DS */}
           <div className="panel-section">
             <span className="panel-label">{t.common?.plant ?? 'Planta / Ubicación'}</span>
             <select
@@ -941,8 +928,6 @@ export default function DocChat() {
             </select>
           </div>
 
-          {/* Disciplina */}
-          {/* ✅ CORREGIDO: select con Tailwind arbitrario → .form-select del DS */}
           <div className="panel-section">
             <span className="panel-label">{t.common?.discipline ?? 'Disciplina'}</span>
             <select
@@ -969,8 +954,6 @@ export default function DocChat() {
             </select>
           </div>
 
-          {/* Máquina */}
-          {/* ✅ CORREGIDO: select con Tailwind arbitrario → .form-select del DS */}
           <div className="panel-section">
             <span className="panel-label">
               {t.common?.machine ?? 'Máquina'} ({t.common?.optional ?? 'opcional'})
@@ -995,8 +978,6 @@ export default function DocChat() {
             </select>
           </div>
 
-          {/* Botón guardar sesión */}
-          {/* ✅ CORREGIDO: botón con inline styles dinámicos → .btn base + modificadores BEM */}
           {docMessages.length > 0 && (
             <div className="panel-section dc-save-section">
               <button
@@ -1037,19 +1018,16 @@ export default function DocChat() {
               </button>
             </div>
           )}
-        </div>{/* fin contenido colapsable */}
-      </div>{/* fin panel-left */}
+        </div>
+      </div>
 
       {/* -----------------------------------------------------------------------
        * Panel derecho
        * -------------------------------------------------------------------- */}
 
       <div className="panel-right">
-
-        {/* Barra manual activo */}
         {activeManual && (
           <div className="manual-active-bar">
-            {/* ✅ CORREGIDO: emoji 📖 → SVG accesible */}
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
               <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
@@ -1076,8 +1054,6 @@ export default function DocChat() {
           </div>
         )}
 
-        {/* Context tags — planta/disciplina/máquina */}
-        {/* ✅ CORREGIDO: style inline flexShrink → clase BEM; ctx-tag manual usa modificador en vez de inline */}
         <div className="context-tags">
           {!discipline ? (
             <span className="ctx-empty">
@@ -1086,13 +1062,11 @@ export default function DocChat() {
           ) : (
             <>
               <span className="ctx-tag plant">
-                {/* ✅ CORREGIDO: emoji 📍 → SVG */}
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                 {normalizePlantLabel(selectedPlantRecord) || plant}
               </span>
 
               {activeManual && (
-                // ✅ CORREGIDO: inline style → modificador BEM .ctx-tag--manual
                 <span className="ctx-tag ctx-tag--manual">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
                   {activeManual.name.length > 26
@@ -1113,8 +1087,6 @@ export default function DocChat() {
           )}
         </div>
 
-        {/* Modal guardar sesión */}
-        {/* ✅ CORREGIDO: todo el modal inline → clases BEM */}
         {saveModalOpen && (
           <div
             className="modal-overlay"
@@ -1174,7 +1146,6 @@ export default function DocChat() {
           </div>
         )}
 
-        {/* Chat messages */}
         <div className="chat-messages" ref={areaRef}>
           {docMessages.length === 0 ? (
             <div className="chat-empty" />
@@ -1185,9 +1156,13 @@ export default function DocChat() {
                 msg={message}
                 side={message.role === 'user' ? 'user' : 'bot'}
                 onFeedback={(msg, rating) => {
+                  // 🔥 FIX: fetch in-line inyectando el token seguro
                   fetch(`${apiRoot}/chat-feedback`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${localStorage.getItem('barb_token')}`
+                    },
                     body: JSON.stringify({ message_content: msg.content, rating })
                   }).catch(err => console.error("Error enviando feedback:", err));
                 }}
@@ -1202,9 +1177,7 @@ export default function DocChat() {
           )}
         </div>
 
-        {/* Zona de entrada */}
         <div className="input-zone">
-          {/* ✅ CORREGIDO: clase Tailwind ring-2 ring-[var(--blue)] → modificador BEM */}
           <div
             className={`input-wrap ${dragOver ? 'input-wrap--drag' : ''}`}
             onDragOver={event => {
@@ -1222,7 +1195,6 @@ export default function DocChat() {
               {t.docChat?.inputPlaceholder ?? 'Escribe tu pregunta'}
             </label>
 
-            {/* ✅ CORREGIDO: Tailwind arbitrario en textarea → .dc-textarea */}
             <textarea
               id="doc-input"
               rows={1}
@@ -1243,8 +1215,6 @@ export default function DocChat() {
               onKeyDown={handleKeyDown}
             />
 
-            {/* Botón cámara */}
-            {/* ✅ CORREGIDO: todos los inline styles → .dc-camera-btn; hover JS → CSS :hover */}
             <button
               type="button"
               title="Tomar foto"
@@ -1308,8 +1278,6 @@ export default function DocChat() {
             }}
           />
 
-          {/* Preview imágenes pendientes */}
-          {/* ✅ CORREGIDO: contenedor y elementos de imagen → clases BEM */}
           {pendingImages.length > 0 && (
             <div className="dc-pending-images">
               {pendingImages.map(img => (
@@ -1332,15 +1300,12 @@ export default function DocChat() {
             </div>
           )}
 
-          {/* ✅ CORREGIDO: Tailwind arbitrario → .dc-upload-progress */}
           {uploading && (
             <div className="dc-upload-progress">
               {t.common?.processing ?? 'Procesando archivo...'} {uploadPct}%
             </div>
           )}
 
-          {/* Selector de manuales activos */}
-          {/* ✅ CORREGIDO: Tailwind arbitrario en botones → .dc-manual-tag con modificador activo */}
           {manuals.length > 0 && (
             <div className="dc-manual-tags">
               {manuals.map(manual => (

@@ -96,6 +96,13 @@ export const createApiService = (
           method: 'POST', 
           body: JSON.stringify({ message, machine: machineId, language, history }) 
         }),
+      
+      // ✅ NUEVO: Soporte completo para el nuevo DocChat (manual activo e imágenes)
+      send: async (payload: { message: string, language: string, machine?: string | null, history?: any[], active_manual?: string | null, images?: string[] }) =>
+        callAPI<any>(apiBase, '/chat', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        }),
         
       askRAGStream: async (
         message: string, 
@@ -161,7 +168,21 @@ export const createApiService = (
         });
         if (!res.ok) throw new Error(await res.text());
         return res.json();
-      }
+      },
+
+      // ✅ NUEVO: Guardar historial en la base de datos (PostgreSQL)
+      saveSession: async (payload: any) =>
+        callAPI<any>(apiBase, '/chat-sessions', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        }),
+
+      // ✅ NUEVO: Enviar sistema de votos (👍/👎)
+      feedback: async (payload: { message_content: string, rating: string, context?: string }) =>
+        callAPI<any>(apiBase, '/chat-feedback', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        })
     },
     
     // 📋 BLOQUE DE ÓRDENES DE TRABAJO

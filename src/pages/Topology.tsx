@@ -2,7 +2,6 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '../context/AppContext'
 import { useNavigate } from 'react-router-dom'
-import { createApiService } from '../services/api'
 import { getTranslations } from '../utils/i18n'
 
 type TopologyNode = {
@@ -27,7 +26,6 @@ const INITIAL_VB = { x: -100, y: -50, w: 1200, h: 800 }
 const NODE_W = 130
 const NODE_H = 85
 
-// NORMALIZADORES DEFENSIVOS (A prueba de cambios en la API)
 const mapApiNode = (n: any): TopologyNode => ({
   nodo_id: n.nodo_id ?? n.id,
   maquina_id: n.maquina_id ?? n.machine_id ?? n.machineId ?? '',
@@ -49,7 +47,9 @@ const mapApiEdge = (e: any): TopologyEdge => ({
 const PlantTopology: React.FC = () => {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const { setSelectedMachine, lang, apiBase } = useAppContext()
+  
+  // 🔥 FIX: Extraemos 'api' del contexto
+  const { setSelectedMachine, lang, api } = useAppContext()
   const navigate = useNavigate()
   
   const t = useMemo(() => getTranslations(lang), [lang])
@@ -57,7 +57,6 @@ const PlantTopology: React.FC = () => {
   const [viewBox, setViewBox] = useState(INITIAL_VB)
   const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; node?: TopologyNode }>({ visible: false, x: 0, y: 0 })
   
-  // ESTADOS PARA EL ARRASTRE (PANNING)
   const [isPanning, setIsPanning] = useState(false)
   const [startPan, setStartPan] = useState({ x: 0, y: 0 })
   
@@ -70,13 +69,9 @@ const PlantTopology: React.FC = () => {
     
     async function fetchTopology() {
       try {
-        // ⚠️ FIX: antes se llamaba createApiService() sin argumentos, ignorando el
-        // apiBase real del contexto (el que el usuario puede cambiar en Configuración)
-        // y usando siempre el default interno de la función.
-        const api = createApiService(apiBase)
+        // 🔥 FIX: Utilizamos el api centralizado con token
         const data = await api.topologia() 
         if (!controller.signal.aborted && data) {
-          // Aplicamos el mapeo defensivo a los arreglos que vienen de la API
           const rawNodes = Array.isArray(data.nodos) ? data.nodos : (Array.isArray(data.nodes) ? data.nodes : [])
           const rawEdges = Array.isArray(data.conexiones) ? data.conexiones : (Array.isArray(data.edges) ? data.edges : [])
           
@@ -92,7 +87,7 @@ const PlantTopology: React.FC = () => {
     
     void fetchTopology()
     return () => controller.abort()
-  }, [apiBase])
+  }, [api])
 
   const nodesDict = useMemo(() => {
     const dict = new Map<string, {x: number, y: number}>()
@@ -105,7 +100,6 @@ const PlantTopology: React.FC = () => {
     return dict
   }, [nodes])
 
-  // FUNCIONES PARA MANEJAR EL MOUSE (ARRASTRE)
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.topo-node')) return;
     setIsPanning(true);
@@ -136,7 +130,7 @@ const PlantTopology: React.FC = () => {
   };
 
   const handleNodeClick = (node: TopologyNode, e: React.MouseEvent) => {
-    e.stopPropagation(); // EVITA QUE EL CLICK SE CONFUNDA CON ARRASTRE
+    e.stopPropagation(); 
     const rect = containerRef.current?.getBoundingClientRect()
     const cx = e.clientX - (rect?.left || 0)
     const cy = e.clientY - (rect?.top || 0)

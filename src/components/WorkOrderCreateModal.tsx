@@ -1,6 +1,5 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { createApiService } from '../services/api'
 import { showToast } from './Toast'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
@@ -63,8 +62,7 @@ async function dataUrlToFile(dataUrl: string, fileName: string): Promise<File> {
 }
 
 const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onClose, onCreate }) => {
-  const { apiBase, lang } = useAppContext()
-  const api = useMemo(() => createApiService(apiBase.replace(/\/$/, '')), [apiBase])
+  const { lang, api } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
 
   const [form, setForm] = useState<WorkOrderCreatePayload>({ ...INITIAL_FORM })

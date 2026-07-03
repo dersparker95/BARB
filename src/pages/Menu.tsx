@@ -25,11 +25,37 @@ const EMPTY_UPLOAD: UploadFormState = {
 
 const ACCEPTED_FILE_TYPES = '.pdf,.doc,.docx,.txt,.md,.xls,.xlsx,.png,.jpg,.jpeg'
 
-// ⚠️ FIX: se elimina MACHINE_OPTIONS_BY_DISCIPLINE, un catálogo 100% inventado
-// ('Motor Drive D1', 'Pump E4', etc.) sin ninguna relación con las máquinas
-// reales de /api/machines. El dropdown ahora se llena con datos reales del
-// backend, filtrados por disciplina usando discipline_id (ver fetchMachines).
 type MachineOption = { value: string; label: string }
+
+const MACHINE_OPTIONS_BY_DISCIPLINE: Record<Exclude<UploadCategory, 'all'>, MachineOption[]> = {
+  electrical: [
+    { value: 'motor_drive_d1', label: 'Motor Drive D1' },
+    { value: 'mcc_01', label: 'MCC-01' },
+    { value: 'tablero_fuerza_a', label: 'Tablero de Fuerza A' },
+  ],
+  mechanical: [
+    { value: 'pump_e4', label: 'Pump E4' },
+    { value: 'chancador_primario', label: 'Chancador Primario' },
+    { value: 'harnero_vibratorio', label: 'Harnero Vibratorio' },
+  ],
+  hydraulic: [
+    { value: 'pump_e4', label: 'Pump E4' },
+    { value: 'unidad_hidraulica_h1', label: 'Unidad Hidráulica H1' },
+  ],
+  pneumatic: [
+    { value: 'compresor_p1', label: 'Compresor Principal P1' },
+    { value: 'linea_aire_a1', label: 'Línea de Aire A1' },
+  ],
+  automation: [
+    { value: 'plc_linea_1', label: 'PLC Línea 1' },
+    { value: 'hmi_central', label: 'HMI Central' },
+  ],
+}
+
+const getMachineOptions = (discipline: UploadCategory): MachineOption[] => {
+  if (discipline === 'all') return []
+  return MACHINE_OPTIONS_BY_DISCIPLINE[discipline]
+}
 
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`
@@ -38,7 +64,8 @@ const formatFileSize = (bytes: number): string => {
 }
 
 const Menu: React.FC = () => {
-  const { user, lang, apiBase } = useAppContext()
+  // 🔥 FIX: Extraemos api del contexto
+  const { user, lang, api } = useAppContext()
   const navigate = useNavigate()
   
   const t = useMemo(() => getTranslations(lang), [lang])
@@ -49,31 +76,6 @@ const Menu: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false)
   const [isDragActive, setIsDragActive] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-
-  // ⚠️ FIX: máquinas reales del backend en vez del catálogo inventado. No hay
-  // una forma confiable de mapear UploadCategory (electrical/mechanical/...) a
-  // discipline_id real sin también cargar /disciplines y cruzar nombres, así
-  // que — para no adivinar datos — se listan todas las máquinas reales una vez
-  // que se elige cualquier disciplina distinta de "General".
-  const [machines, setMachines] = useState<MachineOption[]>([])
-  const [machinesLoading, setMachinesLoading] = useState(false)
-
-  useEffect(() => {
-    if (!apiBase) return
-    const controller = new AbortController()
-    setMachinesLoading(true)
-    fetch(`${apiBase.replace(/\/$/, '')}/machines`, { signal: controller.signal })
-      .then(res => (res.ok ? res.json() : []))
-      .then(data => {
-        const list = Array.isArray(data) ? data : []
-        setMachines(list.map((m: any) => ({ value: String(m.id), label: m.name || `Máquina ${m.id}` })))
-      })
-      .catch(err => { if (err.name !== 'AbortError') console.error('Error cargando máquinas:', err) })
-      .finally(() => setMachinesLoading(false))
-    return () => controller.abort()
-  }, [apiBase])
-
-  const machineOptions = useMemo(() => (uploadForm.discipline === 'all' ? [] : machines), [uploadForm.discipline, machines])
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -94,6 +96,7 @@ const Menu: React.FC = () => {
   }
 
   const canSubmit = uploadForm.title.trim().length > 0 && uploadForm.file !== null && !isUploading
+  const machineOptions = useMemo(() => getMachineOptions(uploadForm.discipline), [uploadForm.discipline])
 
   useEffect(() => {
     if (uploadForm.discipline === 'all') {
@@ -144,24 +147,8 @@ const Menu: React.FC = () => {
       formData.append('machine', uploadForm.machine)
       formData.append('notes', uploadForm.notes.trim())
 
-      if (!apiBase) {
-        const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV
-        if (!isDev) {
-          throw new Error(
-            nLang === 'en'
-              ? 'API not configured. Contact your administrator.'
-              : 'API no configurada. Contacta a tu administrador.'
-          )
-        }
-      }
-
-      const safeApiBase = (apiBase ?? 'http://localhost:9000/api').replace(/\/$/, '')
-      const response = await fetch(`${safeApiBase}/documents/upload`, {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!response.ok) throw new Error(await response.text().catch(() => response.statusText))
+      // 🔥 FIX: Utilizamos el endpoint nativo de tu api.ts con protección Bearer
+      await api.chat.documents(formData)
 
       showToast(t.common?.success || '📄 Documento enviado correctamente')
       setUploadForm(EMPTY_UPLOAD)
@@ -183,7 +170,7 @@ const Menu: React.FC = () => {
       <div className="menu-grid">
         <button className="menu-card" onClick={() => navigate('/docchat')}>
           <div className="menu-card-icon blue">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1a5fa8" strokeWidth="2" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
               <line x1="16" y1="13" x2="8" y2="13" />
@@ -199,7 +186,7 @@ const Menu: React.FC = () => {
 
         <button className="menu-card" onClick={() => navigate('/topology')}>
           <div className="menu-card-icon green">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1a7a50" strokeWidth="2" aria-hidden="true">
               <circle cx="12" cy="5" r="3" />
               <circle cx="5" cy="19" r="3" />
               <circle cx="19" cy="19" r="3" />
@@ -214,27 +201,11 @@ const Menu: React.FC = () => {
           </div>
         </button>
 
-        {/* 🔥 NUEVO BOTÓN: Historial de Diagnósticos (Solo Administradores) */}
-        {user?.role === 'admin' && (
-          <button className="menu-card menu-card--warning" onClick={() => navigate('/history')}>
-            <div className="menu-card-icon orange">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
-              </svg>
-            </div>
-            <div className="menu-card-text">
-              <h3>{t.menu?.historyTitle || (nLang === 'en' ? 'Diagnostic History' : 'Historial de Diagnósticos')}</h3>
-              <p>{t.menu?.historyDescription || (nLang === 'en' ? 'Review previous AI sessions' : 'Revisa consultas y sesiones previas')}</p>
-            </div>
-          </button>
-        )}
-
         {user?.role === 'admin' && (
           <>
-            <button className="menu-card admin-only menu-card--purple" onClick={() => navigate('/dashboard')}>
+            <button className="menu-card admin-only" onClick={() => navigate('/dashboard')} style={{ borderColor: 'rgba(94,61,179,0.3)' }}>
               <div className="menu-card-icon purple">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#5e3db3" strokeWidth="2" aria-hidden="true">
                   <rect x="3" y="3" width="7" height="7" />
                   <rect x="14" y="3" width="7" height="7" />
                   <rect x="3" y="14" width="7" height="7" />
@@ -244,7 +215,7 @@ const Menu: React.FC = () => {
               <div className="menu-card-text">
                 <h3>
                   {t.menu?.dashboardTitle || 'Dashboard'}{' '}
-                  <span className="menu-card-badge">
+                  <span style={{ fontSize: '10px', background: 'var(--purple-bg)', color: 'var(--purple)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600, marginLeft: '4px' }}>
                     {t.menu?.adminBadge || 'ADMIN'}
                   </span>
                 </h3>
@@ -252,9 +223,9 @@ const Menu: React.FC = () => {
               </div>
             </button>
 
-            <button className="menu-card admin-only menu-card--blue" onClick={openUpload}>
+            <button className="menu-card admin-only" onClick={openUpload} style={{ borderColor: 'rgba(26,95,168,0.22)' }}>
               <div className="menu-card-icon blue">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1a5fa8" strokeWidth="2" aria-hidden="true">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />
@@ -271,19 +242,19 @@ const Menu: React.FC = () => {
 
       {uploadOpen && (
         <div className="modal-overlay open" onClick={event => { if (event.target === event.currentTarget) closeUpload() }} role="presentation">
-          <div className="modal-box modal-box--wide" role="dialog" aria-modal="true" aria-labelledby="modal-upload-title">
+          <div className="modal-box" style={{ maxWidth: 620 }} role="dialog" aria-modal="true" aria-labelledby="modal-upload-title">
             <div className="modal-header">
               <div>
                 <h2 id="modal-upload-title">{t.menu?.uploadTitle || (nLang === 'en' ? 'Document upload' : 'Subida de documentos')}</h2>
-                <div className="modal-header-sub">
+                <div style={{ marginTop: 4, fontSize: 12, color: 'var(--ink3)' }}>
                   {t.menu?.uploadDescription || 'Sube archivos al repositorio documental'}
                 </div>
               </div>
               <button className="modal-close" onClick={closeUpload} aria-label={t.common?.close || 'Cerrar'} disabled={isUploading}>✕</button>
             </div>
 
-            <form onSubmit={handleUploadSubmit} className="modal-body upload-modal-body">
-              <div className="upload-field">
+            <form onSubmit={handleUploadSubmit} className="modal-body" style={{ display: 'grid', gap: 14 }}>
+              <div style={{ display: 'grid', gap: 6 }}>
                 <label className="sr-only" htmlFor="upload-title">{t.common?.documentName || 'Nombre'}</label>
                 <input
                   id="upload-title"
@@ -296,7 +267,7 @@ const Menu: React.FC = () => {
                 />
               </div>
 
-              <div className="upload-field">
+              <div style={{ display: 'grid', gap: 6 }}>
                 <label className="sr-only" htmlFor="upload-discipline">{t.common?.discipline || 'Disciplina'}</label>
                 <select
                   id="upload-discipline"
@@ -315,7 +286,7 @@ const Menu: React.FC = () => {
                 </select>
               </div>
 
-              <div className="upload-field">
+              <div style={{ display: 'grid', gap: 6 }}>
                 <label className="sr-only" htmlFor="upload-machine">{t.common?.machine || 'Máquina'}</label>
                 <select
                   id="upload-machine"
@@ -326,11 +297,9 @@ const Menu: React.FC = () => {
                   disabled={isUploading || uploadForm.discipline === 'all'}
                 >
                   <option value="">
-                    {uploadForm.discipline === 'all'
-                      ? (nLang === 'en' ? 'Select a discipline first' : 'Selecciona primero una disciplina')
-                      : machinesLoading
-                        ? (nLang === 'en' ? 'Loading machines...' : 'Cargando máquinas...')
-                        : (nLang === 'en' ? 'Select machine...' : 'Seleccionar máquina...')}
+                    {uploadForm.discipline === 'all' 
+                      ? (nLang === 'en' ? 'Select a discipline first' : 'Selecciona primero una disciplina') 
+                      : (nLang === 'en' ? 'Select machine...' : 'Seleccionar máquina...')}
                   </option>
                   {machineOptions.map(option => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -338,22 +307,23 @@ const Menu: React.FC = () => {
                 </select>
               </div>
 
-              <div className="upload-field">
+              <div style={{ display: 'grid', gap: 6 }}>
                 <label className="sr-only" htmlFor="upload-notes">{t.common?.internalNotes || 'Notas'}</label>
                 <textarea
                   id="upload-notes"
-                  className="report-textarea"
+                  className="form-input"
                   value={uploadForm.notes}
                   onChange={event => setUploadForm(prev => ({ ...prev, notes: event.target.value }))}
                   placeholder={t.common?.internalNotes || (nLang === 'en' ? 'Internal notes' : 'Notas internas')}
                   aria-label={t.common?.internalNotes || 'Notas'}
                   rows={4}
+                  style={{ resize: 'vertical', minHeight: 96 }}
                   disabled={isUploading}
                 />
               </div>
 
-              <div className="upload-field">
-                <div className="upload-field-label">{t.common?.file || 'Archivo'}</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)' }}>{t.common?.file || 'Archivo'}</div>
 
                 <div
                   role="button"
@@ -371,33 +341,40 @@ const Menu: React.FC = () => {
                     event.preventDefault(); setIsDragActive(false); if (isUploading) return;
                     handleFiles(event.dataTransfer.files)
                   }}
-                  className={`upload-dropzone ${isDragActive ? 'upload-dropzone--active' : ''} ${isUploading ? 'upload-dropzone--disabled' : ''}`}
+                  style={{
+                    border: '2px dashed var(--border)', borderRadius: 16, padding: 16, minHeight: 148,
+                    background: isDragActive ? 'var(--blue-bg)' : 'var(--surface)',
+                    boxShadow: isDragActive ? '0 0 0 2px rgba(26,95,168,0.12) inset' : 'none',
+                    cursor: isUploading ? 'not-allowed' : 'pointer',
+                    transition: 'background 160ms ease, box-shadow 160ms ease, border-color 160ms ease',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
                 >
                   <input ref={fileInputRef} type="file" accept={ACCEPTED_FILE_TYPES} className="hidden" disabled={isUploading}
                     onChange={event => { handleFiles(event.target.files); event.currentTarget.value = '' }}
                   />
 
                   {!uploadForm.file ? (
-                    <div className="upload-dropzone-empty">
-                      <div aria-hidden="true" className="upload-dropzone-icon">
+                    <div style={{ textAlign: 'center', display: 'grid', gap: 8, justifyItems: 'center' }}>
+                      <div aria-hidden="true" style={{ width: 56, height: 56, borderRadius: 999, border: '2px solid var(--blue)', background: 'white', display: 'grid', placeItems: 'center', color: 'var(--blue)', fontSize: 22, boxShadow: '4px 4px 0 0 rgba(0,0,0,0.08)' }}>
                         ⤴
                       </div>
-                      <div className="upload-dropzone-title">{nLang === 'en' ? 'Drag and drop' : 'Arrastra tu archivo aquí'}</div>
-                      <div className="upload-dropzone-hint">{nLang === 'en' ? 'or click to select' : 'o haz clic para seleccionar'}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--ink)' }}>{nLang === 'en' ? 'Drag and drop' : 'Arrastra tu archivo aquí'}</div>
+                      <div style={{ fontSize: 12, color: 'var(--ink3)' }}>{nLang === 'en' ? 'or click to select' : 'o haz clic para seleccionar'}</div>
                     </div>
                   ) : (
-                    <div className="upload-file-preview">
-                      <div className="upload-file-preview-info">
-                        <div aria-hidden="true" className="upload-file-preview-icon">
+                    <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                        <div aria-hidden="true" style={{ width: 54, height: 54, borderRadius: 14, border: '2px solid var(--ink)', background: 'white', display: 'grid', placeItems: 'center', fontSize: 22, boxShadow: '5px 5px 0 0 rgba(0,0,0,0.1)', flexShrink: 0 }}>
                           📎
                         </div>
-                        <div className="upload-file-preview-meta">
-                          <div className="upload-file-preview-name">{uploadForm.file.name}</div>
-                          <div className="upload-file-preview-size">{formatFileSize(uploadForm.file.size)}</div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, color: 'var(--ink)', lineHeight: 1.3, wordBreak: 'break-word' }}>{uploadForm.file.name}</div>
+                          <div style={{ marginTop: 4, fontSize: 12, color: 'var(--ink3)' }}>{formatFileSize(uploadForm.file.size)}</div>
                         </div>
                       </div>
 
-                      <div className="upload-file-preview-actions">
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <button type="button" className="btn btn-outline btn-sm" disabled={isUploading} onClick={event => { event.stopPropagation(); fileInputRef.current?.click() }}>
                           {t.common?.replace || (nLang === 'en' ? 'Change' : 'Cambiar')}
                         </button>
@@ -411,20 +388,20 @@ const Menu: React.FC = () => {
               </div>
 
               {uploadError && (
-                <div role="alert" className="upload-error">
+                <div role="alert" style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.08)', color: '#b91c1c', fontSize: 12, lineHeight: 1.5 }}>
                   {uploadError}
                 </div>
               )}
 
-              <div className="upload-hint">
+              <div style={{ fontSize: 12, color: 'var(--ink3)' }}>
                 {isUploading ? (t.common?.processing || 'Preparando...') : (t.menu?.uploadHint || 'El archivo se guardará seguro.')}
               </div>
 
-              <div className="modal-footer modal-footer--flush">
+              <div className="modal-footer" style={{ padding: 0, borderTop: 'none', marginTop: 4 }}>
                 <button className="btn btn-primary" type="submit" disabled={isUploading || !canSubmit}>
                   {isUploading ? (
-                    <span className="upload-submit-loading">
-                      <span className="spinning" aria-hidden="true">⟳</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <span className="animate-spin" aria-hidden="true">⟳</span>
                       {t.common?.loading || (nLang === 'en' ? 'Uploading…' : 'Subiendo…')}
                     </span>
                   ) : (

@@ -6,7 +6,8 @@ import ChatBubble, { Thinking } from '../components/ChatBubble'
 import { getTranslations, normalizeLang } from '../utils/i18n'
 
 export default function DebugChat() {
-  const { apiBase, user, lang } = useAppContext()
+  // 🔥 FIX: Extraemos api y apiBase
+  const { apiBase, user, lang, api } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
   const nLang = normalizeLang(lang)
 
@@ -22,33 +23,26 @@ export default function DebugChat() {
   const [selectedMachineId, setSelectedMachineId] = useState(null)
 
   const areaRef = useRef(null)
-
-  const apiRoot = useMemo(() => {
-    if (apiBase) return apiBase.replace(/\/$/, '')
-    // ⚠️ FIX: se elimina el dominio de Render hardcodeado. Se usa VITE_API_URL
-    // (misma estrategia que AppContext.tsx/Dashboard.tsx) en vez de un dominio
-    // fijo o un localhost adivinado.
-    const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV
-    const envUrl = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_API_URL : ''
-    if (envUrl) return envUrl.replace(/\/$/, '')
-    return isDev ? 'http://localhost:9000/api' : ''
-  }, [apiBase])
+  
+  // URL limpia sólo para el feedback in-line
+  const apiRoot = (apiBase || '').replace(/\/$/, '')
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // 🔥 FIX: Consulta con token nativo
         const [machRes, otRes] = await Promise.all([
-          fetch(`${apiRoot}/machines`),
-          fetch(`${apiRoot}/work-orders`)
+          api.machines(),
+          api.workOrders.getAll()
         ])
-        if (machRes.ok) setMachines(await machRes.json())
-        if (otRes.ok) setWorkOrders(await otRes.json())
+        if (machRes) setMachines(machRes)
+        if (otRes) setWorkOrders(otRes.data || otRes)
       } catch (error) {
         console.error("Error cargando datos para Debug:", error)
       }
     }
     fetchData()
-  }, [apiRoot])
+  }, [api])
 
   useEffect(() => {
     if (location.state && typeof location.state === 'object' && location.state.machineId) {
@@ -76,18 +70,15 @@ export default function DebugChat() {
     setMessages(prev => [...prev, { role: 'user', content: query }])
 
     try {
-      const response = await fetch(`${apiRoot}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: query,
-          language: nLang,
-          machine: selectedMachine?.name || 'general'
-        }),
-      })
+      // 🔥 FIX: Utilizamos tu askRAG estructurado
+      const data = await api.chat.askRAG(
+        query, 
+        selectedMachine?.name || 'general', 
+        [], 
+        nLang
+      )
 
-      if (response.ok) {
-        const data = await response.json()
+      if (data && data.reply) {
         setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Error de conexión con el motor de IA.' }])
@@ -215,9 +206,13 @@ export default function DebugChat() {
                 msg={msg}
                 side={msg.role === 'user' ? 'user' : 'bot'}
                 onFeedback={(msgData, rating) => {
+                  // 🔥 FIX: fetch in-line con el token recuperado localmente
                   fetch(`${apiRoot}/chat-feedback`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${localStorage.getItem('barb_token')}`
+                    },
                     body: JSON.stringify({
                       message_content: msgData.content,
                       rating,
