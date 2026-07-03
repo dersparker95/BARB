@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Spinner from '../components/Spinner'
 import { useAppContext } from '../context/AppContext'
-import { createApiService } from '../services/api'
 import { Role } from '../types'
 import { getTranslations } from '../utils/i18n'
 
@@ -10,27 +9,15 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState<string | null>(null) // 🔥 Ahora el error es un string descriptivo
+  const [error, setError] = useState<string | null>(null)
 
-  const { setUser, apiBase, setLoading, loading, dark, setDark, lang } = useAppContext()
+  const { setUser, setLoading, loading, dark, setDark, lang, api } = useAppContext()
   const navigate = useNavigate()
 
-  // ⚠️ FIX: se elimina el fallback 'http://localhost:9000/api'. Si apiBase está
-  // vacío (falta VITE_API_URL en producción), es mejor que el login falle con un
-  // error claro de red que intentar silenciosamente contra localhost.
-  const api = useMemo(() => createApiService(apiBase ? apiBase.replace(/\/$/, '') : apiBase), [apiBase])
   const t = useMemo(() => getTranslations(lang), [lang])
-
-  // Nota: la sincronización de `dark` con el DOM (clase .dark/.light en
-  // <html>) vive centralizada en AppContext.tsx, ya que ese Provider
-  // envuelve toda la app y persiste durante la navegación. Tenerla
-  // duplicada aquí hacía que el toggle de tema solo funcionara mientras
-  // el usuario estuviera en la pantalla de Login.
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    // 🔥 BLINDAJE FRONTEND 1: Limpieza de espacios y validación de longitud
     const cleanUser = email.trim()
     const cleanPassword = password.trim()
 
@@ -45,7 +32,6 @@ const Login: React.FC = () => {
     setError(null)
 
     try {
-      // 🔥 Enviamos el usuario limpio (sin espacios accidentales al inicio o final)
       const resp = await api.auth.login(cleanUser, cleanPassword)
       if (!resp?.user) throw new Error('Respuesta de login inválida')
 
@@ -64,7 +50,6 @@ const Login: React.FC = () => {
         token: resp.token,
       })
 
-      // BLINDAJE FRONTEND 2: Fallback seguro si el rol no existe
       const destination = destByRole[String(resp.user.role).toLowerCase()] || '/menu'
       navigate(destination, { replace: true })
     } catch {
@@ -76,8 +61,6 @@ const Login: React.FC = () => {
   }
 
   const isSubmitDisabled = loading || !email.trim() || !password.trim()
-  
-  // Variables seguras para internacionalización
   const connectingText = t.common?.connecting || 'Conectando...'
   const hidePassText = t.login?.hidePassword || 'Ocultar contraseña'
   const showPassText = t.login?.showPassword || 'Mostrar contraseña'
@@ -109,7 +92,7 @@ const Login: React.FC = () => {
             <input
               id="emailInput"
               value={email}
-              maxLength={100} // 🔥 PREVENCIÓN: Limita payloads inmensos
+              maxLength={100}
               onChange={(e) => {
                 setEmail(e.target.value)
                 if (error) setError(null)
@@ -127,7 +110,7 @@ const Login: React.FC = () => {
               <input
                 id="passwordInput"
                 value={password}
-                maxLength={100} // 🔥 PREVENCIÓN: Limita payloads inmensos
+                maxLength={100}
                 onChange={(e) => {
                   setPassword(e.target.value)
                   if (error) setError(null)
@@ -162,7 +145,6 @@ const Login: React.FC = () => {
             </div>
           </div>
 
-          {/* 🔥 Ahora el mensaje de error es dinámico */}
           {error && (
             <div className="login-error" role="alert">
               {error}

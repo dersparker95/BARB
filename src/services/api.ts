@@ -38,6 +38,16 @@ async function callAPI<T>(base: string, path: string, opts?: RequestInit): Promi
   const res = await fetch(url, { credentials: 'include', ...opts, headers })
   
   if (!res.ok) {
+    // 🔥 FASE 1: Intercepción de sesión expirada (401)
+    if (res.status === 401) {
+      console.warn("⚠️ Sesión expirada o inválida. Forzando cierre de sesión...")
+      clearToken()
+      // Redirigimos al login solo si no estamos ya en esa pantalla
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+
     const text = await res.text().catch(() => '')
     throw new Error(text || res.statusText)
   }

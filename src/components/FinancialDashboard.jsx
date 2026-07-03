@@ -33,10 +33,10 @@ function StatCard({ icon: Icon, label, value, subtitle, highlightColor, badgeTyp
 }
 
 export default function FinancialDashboard({ timeRange }) {
-  const { lang } = useAppContext()
+  const { lang, api } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
   
-  const { financials, trend14Days, machines, isLoading } = useFinancialStats(timeRange)
+  const { financials, trend14Days, machines, isLoading } = useFinancialStats(timeRange, api)
   const [machineView, setMachineView] = useState('ots')
 
   const topMachines = useMemo(() => {
@@ -62,7 +62,6 @@ export default function FinancialDashboard({ timeRange }) {
 
   return (
     <section style={{ marginBottom: 24 }}>
-      {/* SECCIÓN DE ROI */}
       <div style={{ background: 'linear-gradient(135deg, var(--surface) 0%, var(--bg-body) 100%)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, marginBottom: 16 }}>
         <div style={{ marginBottom: 16 }}>
           <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: 'var(--ink1)' }}>{t.financial?.roiTitle || 'ROI'}</h2>
@@ -87,7 +86,6 @@ export default function FinancialDashboard({ timeRange }) {
         </div>
       </div>
 
-      {/* TARJETAS DE MÉTRICAS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
         <StatCard 
           icon={TimerReset} 
@@ -127,10 +125,8 @@ export default function FinancialDashboard({ timeRange }) {
         />
       </div>
 
-      {/* GRÁFICOS: TENDENCIAS Y TOP MÁQUINAS */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
         
-        {/* Gráfico de Tendencias */}
         {trend14Days && trend14Days.length > 0 && (
           <div style={{ flex: '1 1 400px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
             <h3 style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink1)', marginBottom: 4 }}>{t.financial?.healthTitle || 'Tendencias'}</h3>
@@ -152,7 +148,6 @@ export default function FinancialDashboard({ timeRange }) {
           </div>
         )}
 
-        {/* Gráfico de Máquinas */}
         {topMachines && topMachines.length > 0 && (
           <div style={{ flex: '1 1 400px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
