@@ -178,10 +178,10 @@ body {
 .msg.user { flex-direction:row-reverse; align-self:flex-end; }
 .msg.bot  { align-self:flex-start; }
 .msg-avatar { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:10px; font-weight:500; flex-shrink:0; }
-.msg-avatar.bot  { background:var(--ink); color:#fff; }
-.msg-avatar.user { background:var(--blue); color:#fff; }
+.msg-avatar.bot  { background:var(--ink); color:var(--on-color); }
+.msg-avatar.user { background:var(--blue); color:var(--on-color); }
 .msg-bubble { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:13px 16px; font-size:13.5px; line-height:1.7; color:var(--ink); max-width:640px; }
-.msg.user .msg-bubble { background:var(--blue); color:#fff; border-color:var(--blue); }
+.msg.user .msg-bubble { background:var(--blue); color:var(--on-color); border-color:var(--blue); }
 .msg-time { font-family:var(--mono); font-size:10px; color:var(--ink3); margin-top:4px; }
 .msg.user .msg-time { text-align:right; }
 
@@ -200,7 +200,7 @@ body {
 .input-zone { padding:14px 20px 18px; border-top:1px solid var(--border); background:var(--surface); flex-shrink:0; }
 .input-wrap { display:flex; gap:10px; align-items:flex-end; background:var(--surface2); border:1.5px solid var(--border); border-radius:var(--radius); padding:10px 14px; transition:border-color 0.15s; }
 .input-wrap:focus-within { border-color:var(--blue); }
-.send-btn { width:34px; height:34px; border-radius:8px; border:none; background:var(--blue); color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.15s, transform 0.15s; flex-shrink:0; }
+.send-btn { width:34px; height:34px; border-radius:8px; border:none; background:var(--blue); color:var(--on-color); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.15s, transform 0.15s; flex-shrink:0; }
 .send-btn:hover:not(:disabled) { background:var(--blue-dark); transform:scale(1.05); }
 .send-btn:disabled { opacity:0.45; cursor:not-allowed; }
 .input-hint { font-family:var(--mono); font-size:10px; color:var(--ink3); margin-top:6px; }
@@ -327,7 +327,7 @@ body {
 .topbar-logo { display:flex; align-items:center; gap:8px; }
 .logo-mark {
   font-family: var(--serif); font-weight:700; font-size:18px;
-  color:#fff; background:var(--accent);
+  color:var(--on-color); background:var(--accent);
   padding:2px 9px; border-radius:5px; letter-spacing:-0.01em;
 }
 .topbar-title { font-size:15px; font-weight:600; color:var(--ink); }
@@ -350,9 +350,9 @@ body {
   transition:border-color 0.15s;
 }
 .form-select:focus { border-color:var(--blue); }
-.btn-primary { background:var(--blue); color:#fff; width:100%; }
+.btn-primary { background:var(--blue); color:var(--on-color); width:100%; }
 .btn-primary:hover { background:var(--blue-dark); }
-.btn-green { background:var(--green); color:#fff; }
+.btn-green { background:var(--green); color:var(--on-color); }
 .btn-green:hover { background:var(--green-dark); }
 .btn-lg { padding:14px 24px; font-size:15px; }
 
@@ -429,7 +429,7 @@ body {
 .camera-btn:hover { border-color:var(--border2); color:var(--ink); }
 .report-btn {
   width:100%; padding:12px; border-radius:var(--radius-sm);
-  background:var(--green); color:#fff; border:none; cursor:pointer;
+  background:var(--green); color:var(--on-color); border:none; cursor:pointer;
   font-size:13px; font-weight:600; display:flex; align-items:center;
   justify-content:center; gap:8px; transition:background 0.15s;
 }
@@ -815,7 +815,7 @@ body {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 16px; height: 16px;
   border-radius: 8px; padding: 0 5px;
-  background: var(--blue); color: #fff;
+  background: var(--blue); color:var(--on-color);
   font-size: 9px; font-weight: 700;
   font-family: var(--mono); margin-left: 6px;
   vertical-align: middle;
@@ -869,7 +869,7 @@ body {
 }
 .action-item { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; }
 .action-num {
-  background: var(--green); color: #fff;
+  background: var(--green); color:var(--on-color);
   width: 16px; height: 16px; border-radius: 50%;
   font-size: 10px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
@@ -992,7 +992,7 @@ body {
 
 .btn-primary {
   background: var(--blue);
-  color: #fff;
+  color:var(--on-color);
   width: 100%;
 }
 
@@ -1034,7 +1034,7 @@ body {
   height: 16px;
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #ffffff;
+  border-top-color:var(--on-color);
   animation: spinner-rotate 0.8s linear infinite;
   flex-shrink: 0;
 }
@@ -1769,7 +1769,7 @@ body {
   padding: 12px;
   border-radius: var(--radius-sm);
   font-size: 12px;
-  color: #fff;
+  color:var(--on-color);
 }
  
 .dash-tooltip-title {
@@ -2012,7 +2012,7 @@ body {
  
 .dc-save-btn--idle {
   background: var(--blue);
-  color: #fff;
+  color:var(--on-color);
 }
  
 .dc-save-btn--idle:hover {
@@ -2159,7 +2159,7 @@ body {
   height: 18px;
   border-radius: 50%;
   background: var(--red);
-  color: #fff;
+  color:var(--on-color);
   border: none;
   font-size: 10px;
   font-weight: 700;
@@ -2454,4 +2454,654 @@ body {
   font-weight: 500;
   color: var(--ink);
 }
- 
+/* ----------------------------------------------------------
+   ChatBubble — NUEVO, agregar a index.css
+   Reemplaza clases Tailwind arbitrarias y estilos inline
+   de ChatBubble.tsx
+   ---------------------------------------------------------- */
+
+.msg-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
+.msg-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  padding: 0 4px;
+}
+
+/* Sources (citas de manuales) */
+.msg-sources {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  opacity: 0.9;
+}
+
+.msg-sources-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+}
+
+.msg-source-tag {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--blue-bg);
+  color: var(--blue);
+  border: 1px solid var(--blue-alpha);
+}
+
+.msg-elapsed {
+  font-size: 10px;
+  color: var(--ink3);
+  margin-top: 8px;
+}
+
+/* Markdown seguro (negritas / líneas) */
+.md-line {
+  display: block;
+  min-height: 14px;
+  margin-bottom: 4px;
+}
+
+.md-strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* Feedback (👍 / 👎) */
+.feedback-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.feedback-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  opacity: 0.6;
+  filter: grayscale(100%);
+  transition: opacity 0.2s ease, filter 0.2s ease, transform 0.2s ease;
+}
+
+.feedback-btn:hover {
+  opacity: 1;
+  filter: grayscale(0%);
+  transform: scale(1.1);
+}
+
+.feedback-msg {
+  font-size: 10px;
+}
+
+.feedback-msg--good {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.feedback-msg--bad {
+  color: var(--ink3);
+}
+/* ----------------------------------------------------------
+   FinancialDashboard — NUEVO, agregar a index.css
+   Reemplaza los style={{}} inline de FinancialDashboard.jsx
+   ---------------------------------------------------------- */
+
+/* ⚠️ FIX previo requerido: estos tokens ya existen en el sistema
+   pero solo estaban definidos en modo oscuro (.dark / prefers dark).
+   Agrégalos también dentro de :root (modo claro) si no lo hiciste
+   ya al aplicar el bloque anterior:
+   --cyan: #0e7490;
+   --cyan-bg: #ecfeff;
+   --blue-dark: #1347a8;
+   --green-dark: #145e3d;
+   --red-dark: #9f2a1f;
+   (valores tomados de la guía de estilos, sección 1) */
+
+.fin-section {
+  margin-bottom: 24px;
+}
+
+.fin-loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--ink3);
+}
+
+/* ROI card */
+.fin-roi-card {
+  background: linear-gradient(135deg, var(--surface) 0%, var(--bg2) 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.fin-roi-header {
+  margin-bottom: 16px;
+}
+
+.fin-roi-title {
+  font-size: 18px;
+  font-weight: 900;
+  margin: 0;
+  color: var(--ink);
+}
+
+.fin-roi-subtitle {
+  font-size: 12px;
+  color: var(--ink3);
+  margin-top: 4px;
+}
+
+.fin-roi-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.fin-roi-box {
+  flex: 1 1 200px;
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+}
+
+.fin-roi-box--without {
+  background: var(--red-bg);
+  border: 1px solid var(--red);
+}
+
+.fin-roi-box--with {
+  background: var(--green-bg);
+  border: 1px solid var(--green);
+}
+
+.fin-roi-box-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.fin-roi-box--without .fin-roi-box-label { color: var(--red-dark); }
+.fin-roi-box--with .fin-roi-box-label { color: var(--green-dark); }
+
+.fin-roi-box-value {
+  font-size: 24px;
+  font-weight: 900;
+  margin: 4px 0;
+}
+
+.fin-roi-box--without .fin-roi-box-value { color: var(--red); }
+.fin-roi-box--with .fin-roi-box-value { color: var(--green); }
+
+.fin-roi-vs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 24px;
+  color: var(--ink3);
+}
+
+.fin-roi-total {
+  flex: 1 1 100%;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fin-roi-total-label {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fin-roi-total-value {
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--accent);
+}
+
+/* Stat cards */
+.fin-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.fin-stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  gap: 16px;
+  box-shadow: var(--shadow);
+}
+
+.fin-stat-body {
+  flex: 1;
+}
+
+.fin-stat-head {
+  display: flex;
+  align-items: center;
+}
+
+.fin-stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+
+.fin-stat-value {
+  margin-top: 8px;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--stat-color, var(--ink));
+}
+
+.fin-stat-sub {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--ink2);
+}
+
+.fin-stat-icon {
+  color: var(--stat-color, var(--ink));
+  background: var(--bg2);
+  padding: 10px;
+  border-radius: 12px;
+  height: fit-content;
+}
+
+.fin-stat--cyan   { --stat-color: var(--cyan); }
+.fin-stat--green  { --stat-color: var(--green); }
+.fin-stat--red    { --stat-color: var(--red); }
+.fin-stat--purple { --stat-color: var(--purple); }
+
+/* Badge */
+.fin-badge {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.fin-badge--est {
+  background: var(--blue-bg);
+  color: var(--blue);
+  border: 1px solid var(--blue-alpha);
+}
+
+.fin-badge--real {
+  background: var(--green-bg);
+  color: var(--green);
+  border: 1px solid var(--green-dark);
+}
+
+/* Charts */
+.fin-charts-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.fin-chart-card {
+  flex: 1 1 400px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.fin-chart-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.fin-chart-subtitle {
+  font-size: 11px;
+  color: var(--ink3);
+  margin-bottom: 16px;
+}
+
+.fin-chart-wrap {
+  width: 100%;
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.fin-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+/* ----------------------------------------------------------
+   HelpModal — NUEVO, agregar a index.css
+   Reemplaza: className="text-sm leading-relaxed text-gray-700/200" (Tailwind + dark manual)
+   ---------------------------------------------------------- */
+.help-modal-content {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink2);
+}
+/* ----------------------------------------------------------
+   SettingsModal — NUEVO, agregar a index.css
+   Reemplaza style={{ fontFamily, fontSize, maxWidth, padding }} inline
+   ---------------------------------------------------------- */
+
+.settings-version {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink2);
+}
+
+.form-select--compact {
+  max-width: 150px;
+}
+
+.form-input--compact {
+  max-width: 190px;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 5px 8px;
+}
+/* ----------------------------------------------------------
+   TicketDetailModal — NUEVO, agregar a index.css
+   Reemplaza style={{ maxWidth, padding, color, fontSize, etc. }} inline
+   ---------------------------------------------------------- */
+
+.ot-detail-modal-title {
+  font-size: 17px;
+}
+
+.modal-body--compact {
+  padding: 20px;
+}
+
+.ot-detail-description {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--ink2);
+  line-height: 1.6;
+}
+
+.ot-detail-actions {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Prioridad de la OT — cubre las 4 ramas del enum */
+.ot-priority {
+  font-weight: 600;
+}
+
+.ot-priority--low    { color: var(--ink3); }
+.ot-priority--medium { color: var(--amber); }
+.ot-priority--high   { color: var(--red); }
+.ot-priority--urgent { color: var(--red); text-decoration: underline; text-underline-offset: 2px; }
+
+/* Botón azul sólido, tamaño compacto (no ancho 100% como .btn-primary) */
+.btn-blue {
+  background: var(--blue);
+  color: var(--on-color);
+  border: 1px solid var(--blue);
+}
+
+.btn-blue:hover {
+  background: var(--blue-dark);
+  border-color: var(--blue-dark);
+}
+
+/* Botón outline en rojo, para acciones destructivas */
+.btn-danger {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.btn-danger:hover {
+  background: var(--red-bg);
+}
+/* ----------------------------------------------------------
+   TicketTable — NUEVO, agregar a index.css
+   Reemplaza STATUS_COLORS (Tailwind slate hardcodeado) y estilos inline
+   ---------------------------------------------------------- */
+
+.ot-table-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--ink3);
+  font-size: 13px;
+}
+
+.ot-table tbody tr {
+  cursor: pointer;
+}
+
+.ot-table-id {
+  color: var(--accent);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ot-table-title-cell {
+  min-width: 220px;
+}
+
+.ot-table-title {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.ot-table-subtitle {
+  color: var(--ink3);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+/* Faltaban estos 4 estados en .ot-badge (solo existían open/in_progress/completed/done/closed) */
+.ot-badge.pending   { background: var(--surface2); color: var(--ink3); border: 1px solid var(--border); }
+.ot-badge.assigned  { background: var(--blue-bg); color: var(--blue); }
+.ot-badge.cancelled { background: var(--red-bg); color: var(--red); }
+.ot-badge.overdue   { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); }
+
+/* ----------------------------------------------------------
+   TopBar — NUEVO, agregar a index.css
+   Faltaba la clase .topbar-select usada por el <select> de idioma
+   ---------------------------------------------------------- */
+.topbar-select {
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.topbar-select:focus {
+  border-color: var(--blue);
+}
+/* ----------------------------------------------------------
+   WorkOrderCreateModal — NUEVO, agregar a index.css
+   Reemplaza estilos inline y Tailwind arbitrario ('py-3', maxWidth, etc.)
+   Reutiliza .modal-header-sub, .ot-detail-field, .ot-detail-label,
+   .form-input, .form-select, .report-textarea, .btn, .modal-* existentes.
+   ---------------------------------------------------------- */
+
+.modal-box--form {
+  max-width: 780px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-body--form {
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.form-error-banner {
+  padding: 12px;
+  background: var(--red-bg);
+  border: 1px solid var(--red);
+  color: var(--red-dark);
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.wo-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.ot-detail-field--relative {
+  position: relative;
+}
+
+.wo-form-section {
+  margin-top: 16px;
+}
+
+.wo-form-label {
+  margin-bottom: 6px;
+}
+
+/* Dropdown de búsqueda de máquina */
+.wo-machine-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  max-height: 220px;
+  overflow: auto;
+}
+
+.wo-machine-dropdown-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: var(--ink3);
+}
+
+.wo-machine-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+  font-size: 14px;
+  background: none;
+  cursor: pointer;
+}
+
+.wo-machine-dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.wo-machine-dropdown-item:hover {
+  background: var(--surface2);
+}
+
+/* Foto adjunta */
+.wo-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wo-photo-preview {
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.wo-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wo-photo-empty {
+  font-size: 12px;
+  color: var(--ink3);
+}
+
+/* Footer */
+.modal-footer--split {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.wo-submit-btn {
+  min-width: 120px;
+}
+/* ----------------------------------------------------------
+   Layout — NUEVO, agregar a index.css
+   Reemplaza className="flex flex-col h-[100dvh] overflow-hidden
+   bg-[var(--bg-body)] text-[var(--ink)] transition-colors duration-200"
+   (Tailwind arbitrario, además var(--bg-body) no existe → var(--bg))
+   ---------------------------------------------------------- */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}

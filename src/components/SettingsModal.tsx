@@ -11,83 +11,61 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
     setDark,
     setLang,
     apiBase,
-    lmBase,
     setApiBase,
-    setLmBase,
   } = useAppContext()
 
   const t = useMemo(() => getTranslations(lang), [lang])
   const [localApi, setLocalApi] = useState(apiBase)
-  const [localLm, setLocalLm] = useState(lmBase)
   const [localLang, setLocalLang] = useState(normalizeLang(lang))
-  
+
   // Estado para bloquear el botón mientras se hace el ping real al servidor
   const [isTesting, setIsTesting] = useState(false)
 
   useEffect(() => {
     if (!isOpen) return
     setLocalApi(apiBase)
-    setLocalLm(lmBase)
     setLocalLang(normalizeLang(lang))
-  }, [apiBase, lang, lmBase, isOpen])
+  }, [apiBase, lang, isOpen])
 
   if (!isOpen) return null
 
   const handleSave = () => {
     const nextApi = localApi.trim()
-    const nextLm = localLm.trim()
 
     if (nextApi) setApiBase(nextApi)
-    if (nextLm) setLmBase(nextLm)
     setLang(localLang)
 
     showToast(t.settings?.savedLocally || 'Cambios guardados localmente')
     onClose()
   }
 
-  // 🔥 ADIÓS HARDCODEO: Ahora sí hacemos un ping real a FastAPI y a LM Studio
   const testConnections = async () => {
     setIsTesting(true)
     showToast(t.settings?.testingConnections || 'Probando conexiones...')
-    
+
     let apiStatus = '❌ Offline'
-    let lmStatus = '❌ Offline'
 
     try {
-      // 1. Probamos tu FastAPI
-      const apiRes = await fetch(`${localApi.replace(/\/$/, '')}/health`, { 
-        method: 'GET', 
-        signal: AbortSignal.timeout(3000) 
+      const apiRes = await fetch(`${localApi.replace(/\/$/, '')}/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(3000)
       })
       if (apiRes.ok) apiStatus = '✅ Online'
     } catch (e) {
       console.warn("API Test Failed", e)
     }
 
-    try {
-      // 2. Probamos LM Studio (Tiene un endpoint estándar /models)
-      const lmRes = await fetch(`${localLm.replace(/\/$/, '')}/models`, { 
-        method: 'GET', 
-        signal: AbortSignal.timeout(3000) 
-      })
-      if (lmRes.ok) lmStatus = '✅ Online'
-    } catch (e) {
-      console.warn("LM Studio Test Failed", e)
-    }
-
     setIsTesting(false)
-    showToast(`API: ${apiStatus} | IA Local: ${lmStatus}`)
+    showToast(`API: ${apiStatus}`)
   }
 
   return (
     <div className="modal-overlay open" onClick={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <div
-        className={`modal-box ${dark ? 'bg-slate-900 text-gray-100 border border-slate-700' : ''}`}
-      >
+      <div className="modal-box">
         <div className="modal-header">
-          <h2 className={dark ? 'text-gray-100' : ''}>{t.settings?.title || 'Configuración'}</h2>
+          <h2>{t.settings?.title || 'Configuración'}</h2>
           <button
-            className={`modal-close ${dark ? 'bg-slate-700 text-gray-100' : ''}`}
+            className="modal-close"
             onClick={onClose}
             aria-label={t.common?.close || 'Cerrar'}
           >
@@ -97,11 +75,11 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
 
         <div className="modal-body">
           <div className="settings-section">
-            <h3 className={dark ? 'text-gray-100' : ''}>{t.settings?.appearanceLanguage || 'Apariencia e Idioma'}</h3>
+            <h3>{t.settings?.appearanceLanguage || 'Apariencia e Idioma'}</h3>
             <div className="settings-block">
               <div className="settings-row">
                 <div>
-                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.settings?.darkTheme || 'Tema Oscuro'}</div>
+                  <div className="sr-label">{t.settings?.darkTheme || 'Tema Oscuro'}</div>
                 </div>
                 <label className="toggle" aria-label={t.settings?.darkTheme || 'Tema Oscuro'}>
                   <input
@@ -117,14 +95,13 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
 
               <div className="settings-row">
                 <div>
-                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.common?.language || 'Idioma'}</div>
+                  <div className="sr-label">{t.common?.language || 'Idioma'}</div>
                 </div>
                 <select
-                  className={`form-select ${dark ? 'bg-slate-800 border-slate-600 text-gray-100' : ''}`}
+                  className="form-select form-select--compact"
                   value={localLang}
                   title={t.common?.language || 'Idioma'}
                   aria-label={t.common?.language || 'Idioma'}
-                  style={{ maxWidth: 150 }}
                   onChange={(event) => setLocalLang(normalizeLang(event.target.value))}
                 >
                   <option value="en">English</option>
@@ -135,67 +112,51 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
           </div>
 
           <div className="settings-section">
-            <h3 className={dark ? 'text-gray-100' : ''}>{t.settings?.account || 'Cuenta'}</h3>
+            <h3>{t.settings?.account || 'Cuenta'}</h3>
             <div className="settings-block">
               <div className="settings-row">
                 <div>
-                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.common?.username || 'Usuario'}</div>
-                  <div className={`sr-sub ${dark ? 'text-gray-300' : ''}`}>{user?.name || t.settings?.guest || 'Invitado'}</div>
+                  <div className="sr-label">{t.common?.username || 'Usuario'}</div>
+                  <div className="sr-sub">{user?.name || t.settings?.guest || 'Invitado'}</div>
                 </div>
               </div>
               <div className="settings-row">
                 <div>
-                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.common?.role || 'Rol'}</div>
-                  <div className={`sr-sub capitalize ${dark ? 'text-gray-300' : ''}`}>{user?.role || '—'}</div>
+                  <div className="sr-label">{t.common?.role || 'Rol'}</div>
+                  <div className="sr-sub capitalize">{user?.role || '—'}</div>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="settings-section">
-            <h3 className={dark ? 'text-gray-100' : ''}>{t.settings?.systemConnections || 'Conexiones de Sistema'}</h3>
+            <h3>{t.settings?.systemConnections || 'Conexiones de Sistema'}</h3>
             <div className="settings-block">
               <div className="settings-row">
-                <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.settings?.appVersion || 'Versión'}</div>
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: dark ? 'var(--ink2)' : 'var(--ink2)' }}>3.1.0 (Producción)</div>
+                <div className="sr-label">{t.settings?.appVersion || 'Versión'}</div>
+                <div className="settings-version">3.1.0 (Producción)</div>
               </div>
 
               <div className="settings-row">
                 <div>
-                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.settings?.fastApiEndpoint || 'Backend API'}</div>
+                  <div className="sr-label">{t.settings?.fastApiEndpoint || 'Backend API'}</div>
                 </div>
                 <input
-                  className={`form-input ${dark ? 'bg-slate-800 border-slate-600 text-gray-100 placeholder:text-gray-400' : ''}`}
+                  className="form-input form-input--compact"
                   value={localApi}
                   onChange={(event) => setLocalApi(event.target.value)}
                   title={t.settings?.fastApiEndpoint || 'Backend API'}
                   aria-label={t.settings?.fastApiEndpoint || 'Backend API'}
                   placeholder="http://localhost:9000/api"
-                  style={{ maxWidth: 190, fontFamily: 'var(--mono)', fontSize: 10, padding: '5px 8px' }}
                 />
               </div>
 
               <div className="settings-row">
                 <div>
-                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.settings?.lmStudioEndpoint || 'Cerebro IA'}</div>
+                  <div className="sr-label">{t.settings?.testConnections || 'Probar Red'}</div>
                 </div>
-                <input
-                  className={`form-input ${dark ? 'bg-slate-800 border-slate-600 text-gray-100 placeholder:text-gray-400' : ''}`}
-                  value={localLm}
-                  onChange={(event) => setLocalLm(event.target.value)}
-                  title={t.settings?.lmStudioEndpoint || 'Cerebro IA'}
-                  aria-label={t.settings?.lmStudioEndpoint || 'Cerebro IA'}
-                  placeholder="http://localhost:1234/v1"
-                  style={{ maxWidth: 190, fontFamily: 'var(--mono)', fontSize: 10, padding: '5px 8px' }}
-                />
-              </div>
-
-              <div className="settings-row">
-                <div>
-                  <div className={`sr-label ${dark ? 'text-gray-200' : ''}`}>{t.settings?.testConnections || 'Probar Red'}</div>
-                </div>
-                <button 
-                  className={`btn btn-sm btn-outline ${dark ? 'text-gray-100 border-slate-600 hover:bg-slate-800' : ''}`} 
+                <button
+                  className="btn btn-sm btn-outline"
                   onClick={testConnections}
                   disabled={isTesting}
                 >
@@ -208,7 +169,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
 
         <div className="modal-footer">
           <button className="btn btn-primary" onClick={handleSave}>{t.settings?.saveChanges || 'Guardar'}</button>
-          <button className={`btn btn-outline ${dark ? 'text-gray-100 border-slate-600 hover:bg-slate-800' : ''}`} onClick={onClose}>
+          <button className="btn btn-outline" onClick={onClose}>
             {t.common?.cancel || 'Cancelar'}
           </button>
         </div>
