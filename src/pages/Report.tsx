@@ -8,7 +8,7 @@ const Report: React.FC = () => {
   const navigate = useNavigate()
   
   // 🔥 BLINDAJE: Conectamos el idioma y evitamos el Spanglish
-  const { selectedMachine, sessionStart, getDebugMessages, lang, apiBase, user } = useAppContext()
+  const { selectedMachine, sessionStart, getDebugMessages, lang, apiBase, api, user } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
   const nLang = normalizeLang(lang)
 
@@ -53,24 +53,19 @@ const Report: React.FC = () => {
 
     setIsSending(true)
     try {
-      const response = await fetch(`${apiBase.replace(/\/$/, '')}/reports/debug`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          maquina_id: Number(selectedMachine),
-          tecnico_id: Number(user.id),
-          issue_description: issueDescription,
-          resolution: actionsTaken || null,
-          additional_notes: preventiveActions || null,
-          severity,
-          downtime_minutes: elapsed > 0 ? elapsed : null,
-        }),
+      // ⚠️ FIX: antes esto era un fetch() manual directo, sin el header
+      // Authorization que ahora exige el backend (protegido por rol) y sin el
+      // prefijo /api consistente. Se usa api.reports.send(), que ya adjunta
+      // el token de sesión automáticamente (ver services/api.ts).
+      await api.reports.send({
+        maquina_id: Number(selectedMachine),
+        tecnico_id: Number(user.id),
+        issue_description: issueDescription,
+        resolution: actionsTaken || null,
+        additional_notes: preventiveActions || null,
+        severity,
+        downtime_minutes: elapsed > 0 ? elapsed : null,
       })
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(err.detail || `HTTP ${response.status}`)
-      }
 
       showToast(t.common?.success || (nLang === 'en' ? '✅ Report sent to central repository' : '✅ Reporte enviado a repositorio central'))
       navigate(-1)

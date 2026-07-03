@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { AppContextValue, Message, Role, User } from '../types'
-import { createApiService } from '../services/api'
+import { createApiService, setToken, clearToken } from '../services/api'
 
 // === LÓGICA DE PERSISTENCIA DE SESIÓN ===
 type StoredAuth = {
@@ -193,6 +193,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (typeof window === 'undefined') return
     if (!user || !user.token) {
       window.localStorage.removeItem(AUTH_STORAGE_KEY)
+      clearToken()
       return
     }
     const payload: StoredAuth = {
@@ -201,6 +202,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       savedAt: Date.now(),
     }
     window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(payload))
+    // Mantiene sincronizado el token que usa api.ts (callAPI) internamente para
+    // el header Authorization, sin importar si el usuario vino de un login nuevo
+    // o de la sesión persistida al recargar la página.
+    setToken(user.token)
   }, [user])
 
   useEffect(() => { if (typeof window !== 'undefined') window.localStorage.setItem('barb.currentScreen', currentScreen) }, [currentScreen])
@@ -276,6 +281,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     docMessages, pushDocMessage, clearDocMessages, appendToLastDocMessage,
     debugMessagesByMachine, getDebugMessages, pushDebugMessage,
     user, setUser, login, logout,
+    api: authService, // 🚀 Servicio API centralizado, disponible para toda la app
     apiBase, setApiBase,  // 🚀 ¡Agregados!
     lmBase, setLmBase,    // 🚀 ¡Agregados!
     loading, setLoading,

@@ -85,7 +85,7 @@ export const createApiService = (
         method: 'GET',
       }),
     plants: async () => callAPI<any>(apiBase, '/plants', { method: 'GET' }),
-    machines: async () => callAPI<any>(apiBase, '/machines', { method: 'GET' }),
+    machines: async (opts?: RequestInit) => callAPI<any>(apiBase, '/machines', { method: 'GET', ...opts }),
     technicians: async () => callAPI<any>(apiBase, '/technicians', { method: 'GET' }),
     topologia: async () => callAPI<any>(apiBase, '/topologia', { method: 'GET' }),
     
@@ -166,7 +166,7 @@ export const createApiService = (
     
     // 📋 BLOQUE DE ÓRDENES DE TRABAJO
     workOrders: {
-      getAll: async () => callAPI<any>(apiBase, '/work-orders', { method: 'GET' }),
+      getAll: async (opts?: RequestInit) => callAPI<any>(apiBase, '/work-orders', { method: 'GET', ...opts }),
       
       create: async (payload: any) => 
         callAPI<any>(apiBase, '/work-orders', { 
@@ -180,7 +180,19 @@ export const createApiService = (
           // no PATCH. Con PATCH, cualquier código que use esta función recibía 405.
           method: 'PUT',
           body: JSON.stringify({ status })
-        })
+        }),
+
+      delete: async (orderId: number | string) =>
+        callAPI<void>(apiBase, `/work-orders/${orderId}`, { method: 'DELETE' })
+    },
+
+    stats: {
+      financialImpact: async (days?: number | 'all', opts?: RequestInit) =>
+        callAPI<any>(
+          apiBase,
+          `/stats/financial-impact${days && days !== 'all' ? `?days=${days}` : ''}`,
+          { method: 'GET', ...opts }
+        ),
     },
 
     reports: {

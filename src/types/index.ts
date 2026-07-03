@@ -83,6 +83,9 @@ export interface AppState {
 }
 
 export interface AppContextValue extends AppState {
+  // Servicio API centralizado (ya vinculado al apiBase actual y con el token de
+  // sesión adjunto automáticamente). Úsalo en vez de hacer fetch() manual.
+  api: any
   setCurrentScreen: (s: string) => void
   setDark: (v: boolean) => void
   setLang: (l: string) => void

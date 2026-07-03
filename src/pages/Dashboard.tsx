@@ -36,11 +36,6 @@ interface ApiWorkOrder {
 
 interface ApiMachine { id: number; name: string; discipline_id: number; plant_id?: number }
 
-// ⚠️ FIX: se elimina el dominio de Render hardcodeado. apiBase (del contexto) es
-// la fuente principal; si no está disponible, se usa VITE_API_URL definida en el
-// entorno de build (Vercel → Settings → Environment Variables). Sin esto, cambiar
-// de backend requería tocar código en vez de una variable de entorno.
-const API_URL = import.meta.env.VITE_API_URL || ''
 const CHART_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#84cc16']
 
 const ensureUTC = (d?: string | null) => { if (!d) return undefined; return d.endsWith('Z') || d.includes('+') ? d : d + 'Z' }
@@ -91,19 +86,8 @@ const Block: React.FC<{ title: string; subtitle?: string; children: React.ReactN
 )
 
 export default function Dashboard() {
-  const { lang, apiBase } = useAppContext()
+  const { lang, apiBase, api } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
-
-  // Centraliza la resolución de la URL base del backend (evita repetir esta
-  // lógica en cada fetch, y avisa en consola si no hay configuración disponible).
-  const safeApi = useMemo(() => {
-    const resolved = apiBase ? apiBase.replace(/\/$/, '') : API_URL
-    if (!resolved) {
-      console.warn('[BARB] No hay apiBase (contexto) ni VITE_API_URL configurada. Las llamadas al backend van a fallar.')
-    }
-    return resolved
-  }, [apiBase])
-
 
   const [tickets, setTickets] = useState<WorkOrder[]>([])
   const [machines, setMachines] = useState<ApiMachine[]>([])
@@ -130,24 +114,24 @@ export default function Dashboard() {
   const loadData = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true)
     try {
-      const [resOts, resMach] = await Promise.all([
-        fetch(`${safeApi}/work-orders`, { signal }),
-        fetch(`${safeApi}/machines`, { signal })
+      // ⚠️ FIX: antes esto eran 2 fetch() manuales sin el header Authorization
+      // que ahora exige el backend, y sin el prefijo /api consistente.
+      // api.workOrders.getAll()/api.machines() ya adjuntan el token de sesión.
+      const [rawData, machinesData] = await Promise.all([
+        api.workOrders.getAll({ signal } as RequestInit),
+        api.machines({ signal } as RequestInit)
       ])
 
-      if (resMach.ok) setMachines(await resMach.json())
-      if (resOts.ok) {
-        const rawData = await resOts.json();
-        const ticketsArray = Array.isArray(rawData) ? rawData : (rawData.data || []);
-        setTickets(ticketsArray.map(mapApiWorkOrder))
-      }
+      setMachines(machinesData)
+      const ticketsArray = Array.isArray(rawData) ? rawData : (rawData.data || []);
+      setTickets(ticketsArray.map(mapApiWorkOrder))
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       showToast(t.common?.error || 'Error de conexión al cargar el Dashboard')
     } finally {
       setIsLoading(false)
     }
-  }, [apiBase, t.common])
+  }, [api, t.common])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -382,21 +366,16 @@ export default function Dashboard() {
         onClose={() => setIsCreateOpen(false)}
         onCreate={async (p) => {
           try {
-            const response = await fetch(`${safeApi}/work-orders`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                title: p.title,
-                maquina_id: Number(p.machine),
-                tecnico_id: Number(p.tecnicoId),
-                priority: p.priority,
-                status: p.status,
-                description: p.description,
-                disciplina_id: Number(p.disciplinaId)
-              })
+            // ⚠️ FIX: antes era un fetch() manual sin Authorization ni prefijo /api.
+            await api.workOrders.create({
+              title: p.title,
+              maquina_id: Number(p.machine),
+              tecnico_id: Number(p.tecnicoId),
+              priority: p.priority,
+              status: p.status,
+              description: p.description,
+              disciplina_id: Number(p.disciplinaId)
             });
-
-            if (!response.ok) throw new Error("Error del servidor");
 
             showToast(t.common?.success || "Orden creada con éxito", "success");
             loadData();
@@ -412,12 +391,8 @@ export default function Dashboard() {
         onClose={() => setSelectedTicket(null)}
         onUpdateStatus={async (id, s) => {
           try {
-            const response = await fetch(`${safeApi}/work-orders/${id}/status`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: s })
-            });
-            if (!response.ok) throw new Error("Error actualizando");
+            // ⚠️ FIX: antes era un fetch() manual sin Authorization ni prefijo /api.
+            await api.workOrders.updateStatus(id, s);
             loadData();
             setSelectedTicket(null);
             showToast(t.common?.success || "Estado actualizado");
@@ -427,8 +402,8 @@ export default function Dashboard() {
         }}
         onDelete={async (id) => {
           try {
-            const response = await fetch(`${safeApi}/work-orders/${id}`, { method: 'DELETE' });
-            if (!response.ok) throw new Error("Error borrando");
+            // ⚠️ FIX: antes era un fetch() manual sin Authorization ni prefijo /api.
+            await api.workOrders.delete(id);
             loadData();
             setSelectedTicket(null);
           } catch (error) {

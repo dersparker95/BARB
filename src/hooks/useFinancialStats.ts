@@ -48,40 +48,27 @@ export default function useFinancialStats(timeRange?: number | 'all') {
     machines: []
   });
   const [isLoading, setIsLoading] = useState(true);
-  const { apiBase } = useAppContext();
+  const { apiBase, api } = useAppContext();
 
   useEffect(() => {
     // 🛡️ ESCUDO ANTI-FUGAS DE MEMORIA: Prepara la cancelación si el usuario cambia de pantalla rápido
     const controller = new AbortController();
 
-    // ⚠️ FIX: apiBase puede venir undefined/null mientras el contexto todavía no
-    // termina de inicializar (ej. primer render antes de resolver config). Antes
-    // esto hacía crashear el hook con "Cannot read properties of undefined
-    // (reading 'replace')". Ahora se usa VITE_API_URL como respaldo (misma
-    // estrategia que Dashboard.tsx) y, si tampoco existe, se aborta el fetch
-    // limpiamente en vez de tirar una excepción no controlada.
-    const resolvedBase = apiBase || import.meta.env.VITE_API_URL || ''
-    if (!resolvedBase) {
-      console.warn('[BARB] useFinancialStats: no hay apiBase ni VITE_API_URL configurada, se omite el fetch.')
+    // ⚠️ FIX: antes esto era un fetch() manual sin el header Authorization que
+    // ahora exige el backend, y sin el prefijo /api consistente. Se usa
+    // api.stats.financialImpact(), que ya adjunta el token de sesión y normaliza
+    // la URL (ver services/api.ts). Se mantiene el guard de apiBase vacío para
+    // no lanzar cuando el contexto todavía no terminó de inicializar.
+    if (!apiBase) {
+      console.warn('[BARB] useFinancialStats: no hay apiBase configurada, se omite el fetch.')
       setIsLoading(false)
       return
     }
 
     setIsLoading(true);
 
-    // Normalizamos la URL para evitar el error de la doble barra "//"
-    const safeApi = resolvedBase.replace(/\/$/, '');
-
-    const url = timeRange && timeRange !== 'all' 
-      ? `${safeApi}/stats/financial-impact?days=${timeRange}`
-      : `${safeApi}/stats/financial-impact`;
-
-    fetch(url, { signal: controller.signal })
-      .then(res => {
-        if (!res.ok) throw new Error('Error en respuesta del servidor');
-        return res.json();
-      })
-      .then(json => {
+    api.stats.financialImpact(timeRange, { signal: controller.signal })
+      .then((json: any) => {
         // Si el usuario ya se fue de la pantalla, no intentamos actualizar el estado
         if (controller.signal.aborted) return;
 
@@ -91,7 +78,7 @@ export default function useFinancialStats(timeRange?: number | 'all') {
           machines: Array.isArray(json?.machines) ? json.machines : []
         });
       })
-      .catch(err => {
+      .catch((err: any) => {
         // Ignoramos el error si fue provocado por cancelar la petición intencionalmente
         if (err.name === 'AbortError') return;
         console.error("Error cargando stats financieras:", err);
@@ -106,7 +93,7 @@ export default function useFinancialStats(timeRange?: number | 'all') {
     return () => {
       controller.abort();
     };
-  }, [apiBase, timeRange]);
+  }, [apiBase, api, timeRange]);
 
   return {
     financials: data.financials,
