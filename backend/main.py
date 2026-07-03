@@ -889,6 +889,8 @@ app.add_middleware(
 from permisos import require_route, require_action, require_auth, get_sesion_actual  # noqa: E402
 
 
+import os
+
 @app.on_event("startup")
 async def startup_checks():
     """Valida dependencias y auto-construye la base de datos leyendo un archivo SQL local."""
@@ -968,6 +970,11 @@ async def startup_checks():
                 "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS preferencias JSONB DEFAULT '{}'::jsonb;"
             )
             conn.commit()
+
+            # 7. LIMPIEZA DE SESIONES: Borra tokens expirados para no saturar la BD
+            cursor.execute("DELETE FROM sesion WHERE expira_en < NOW();")
+            conn.commit()
+            print("🧹 Sesiones expiradas eliminadas de la base de datos.")
 
     except Exception as e:
         if conn: conn.rollback()
