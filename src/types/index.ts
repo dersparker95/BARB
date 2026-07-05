@@ -1,5 +1,5 @@
 // 🔥 BLINDAJE: Agregados los roles de Login y el truco de autocompletado
-export type Role = 'gerente' | 'admin' | 'tecnico' | 'operador' | 'engineer' | 'supervisor' | (string & {})
+export type Role = 'gerente' | 'admin' | 'tecnico' | 'operador' | 'engineer' | 'supervisor' | 'visitante' | (string & {})
 
 export interface User {
   id: string | number // 🛠️ SQL envía números (1, 2), React a veces usa strings ('1')

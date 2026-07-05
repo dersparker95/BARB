@@ -889,8 +889,6 @@ app.add_middleware(
 from permisos import require_route, require_action, require_auth, get_sesion_actual  # noqa: E402
 
 
-import os
-
 @app.on_event("startup")
 async def startup_checks():
     """Valida dependencias y auto-construye la base de datos leyendo un archivo SQL local."""
@@ -971,10 +969,17 @@ async def startup_checks():
             )
             conn.commit()
 
-            # 7. LIMPIEZA DE SESIONES: Borra tokens expirados para no saturar la BD
+            # 7. LIMPIEZA DE SESIONES EXPIRADAS: la tabla `sesion` no tenía ningún
+            # mecanismo de purga — crecía indefinidamente con tokens vencidos que
+            # ya nunca se podían usar (permisos.py los rechaza por expira_en < NOW()
+            # en cada request), pero seguían ocupando espacio para siempre. Se
+            # ejecuta en cada arranque del servidor, que en Render free tier
+            # ocurre con la frecuencia suficiente para mantener la tabla acotada.
             cursor.execute("DELETE FROM sesion WHERE expira_en < NOW();")
+            eliminadas = cursor.rowcount
             conn.commit()
-            print("🧹 Sesiones expiradas eliminadas de la base de datos.")
+            if eliminadas:
+                print(f"🧹 {eliminadas} sesión(es) expirada(s) eliminadas de la tabla sesion.")
 
     except Exception as e:
         if conn: conn.rollback()

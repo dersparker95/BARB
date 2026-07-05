@@ -5,6 +5,7 @@ import { WO_STATUSES, WO_STATUS_LABEL, type WOStatus } from '../services/workOrd
 import { showToast } from './Toast'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
+import { canPerformAction } from '../utils/permissions'
 
 interface Props {
   ticket: WorkOrder | null
@@ -18,18 +19,24 @@ interface Props {
 // "Media" sin distinguirse ni resaltar en rojo. Se cubre el enum completo.
 const PRIORITY_LABEL_ES: Record<string, string> = { low: 'Baja', medium: 'Media', high: 'Alta', urgent: 'Urgente' }
 const PRIORITY_LABEL_EN: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent' }
+const PRIORITY_COLOR: Record<string, string> = {
+  low: 'var(--ink3)',
+  medium: 'var(--amber)',
+  high: '#ef4444',
+  urgent: '#dc2626',
+}
 
 const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, onDelete }) => {
-  const { lang } = useAppContext()
+  const { lang, user } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
 
   if (!ticket) return null
 
   const statusOrder = WO_STATUSES || ['pending', 'assigned', 'in_progress', 'completed', 'cancelled', 'overdue']
-
+  
   // 🔥 BLINDAJE: Normalizamos el estado por si el backend lo envía en mayúsculas
   const currentStatus = String(ticket.status || 'pending').toLowerCase() as WOStatus
-
+  
   // Si el estado no existe en la lista, asumimos 0 para que no rompa el array
   const rawIndex = statusOrder.indexOf(currentStatus)
   const currentIndex = rawIndex >= 0 ? rawIndex : 0
@@ -43,10 +50,8 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
   const exportPdf = () => {
     const w = window.open('', '_blank')
     if (!w) return
-
+    
     // 🔥 MEJORA: Un reporte de impresión mucho más limpio y corporativo que un simple JSON
-    // Nota: este HTML vive en una ventana aparte sin acceso al index.css de la app,
-    // por eso usa valores fijos en vez de var() — es la única excepción permitida.
     const html = `
       <div style="font-family: Arial, sans-serif; padding: 40px; color: #333;">
         <h1 style="border-bottom: 2px solid #2563eb; padding-bottom: 10px;">Orden de Trabajo: ${ticket.id}</h1>
@@ -65,7 +70,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
     `
     w.document.write(html)
     w.document.close()
-
+    
     // Pequeño timeout para asegurar que el navegador renderice el HTML antes de lanzar la ventana de impresión
     setTimeout(() => {
       w.print()
@@ -92,25 +97,26 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
   const priorityKey = String(ticket.priority || 'medium').toLowerCase()
   const priorityLabels = lang === 'en' ? PRIORITY_LABEL_EN : PRIORITY_LABEL_ES
   const priorityLabel = t.common?.[priorityKey] || priorityLabels[priorityKey] || priorityLabels.medium
+  const priorityColor = PRIORITY_COLOR[priorityKey] || PRIORITY_COLOR.medium
 
   return (
     <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal-box modal-box--wide">
+      <div className="modal-box" style={{ maxWidth: 640 }}>
         <div className="modal-header">
           <div>
             <div className="ot-detail-num">{ticket.id}</div>
-            <h2 className="ot-detail-modal-title">{ticket.title || 'Sin Título'}</h2>
+            <h2 style={{ fontSize: 17 }}>{ticket.title || 'Sin Título'}</h2>
           </div>
           <button className="modal-close" onClick={onClose} aria-label={t.common?.close || 'Cerrar'}>✕</button>
         </div>
 
-        <div className="modal-body modal-body--compact">
+        <div className="modal-body" style={{ padding: 20 }}>
           <div className="ot-timeline-strip">
             {statusOrder.map((s, i) => {
               const done = i < currentIndex
               const active = s === currentStatus
               const isLast = i === statusOrder.length - 1
-
+              
               // Intentamos buscar la etiqueta en el i18n, si no, en el array estático, si no, usamos el string.
               const label = t.statuses?.[s] || WO_STATUS_LABEL?.[s] || s
 
@@ -144,36 +150,41 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
             </div>
             <div className="ot-detail-field">
               <div className="ot-detail-label">{t.common?.priority || 'Prioridad'}</div>
-              <div className={`ot-detail-val ot-priority ot-priority--${priorityKey}`}>
+              <div className="ot-detail-val" style={{ fontWeight: 600, color: priorityColor }}>
                 {priorityLabel}
               </div>
             </div>
           </div>
 
-          <div className="ot-detail-description">
+          <div style={{ marginTop: 10, fontSize: 13, color: 'var(--ink2)', lineHeight: 1.6 }}>
             <strong>{t.common?.description || 'Descripción'}:</strong> {ticket.description || 'Sin detalles adicionales.'}
           </div>
 
-          <div className="ot-detail-actions">
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: 10 }}>
             <button className="btn btn-outline btn-sm" onClick={onClose}>
               {t.common?.close || 'Cerrar'}
             </button>
-            <button className="btn btn-sm btn-blue" onClick={exportPdf}>
+            <button className="btn btn-sm" style={{ background: 'var(--blue)', color: '#fff', borderColor: 'var(--blue)' }} onClick={exportPdf}>
               📄 {lang === 'en' ? 'Export PDF' : 'Exportar PDF'}
             </button>
-            <button
-              className="btn btn-sm btn-outline"
-              disabled={currentIndex === statusOrder.length - 1}
-              onClick={() => { advance(); showToast(`OT Avanzada →`); }}
-            >
-              {lang === 'en' ? 'Advance Status →' : 'Avanzar estado →'}
-            </button>
-            <button
-              className="btn btn-sm btn-outline btn-danger ml-auto"
-              onClick={() => { void handleDelete() }}
-            >
-              {lang === 'en' ? 'Delete OT' : 'Eliminar OT'}
-            </button>
+            {canPerformAction(user?.role, 'cambiar_estado_ot') && (
+              <button 
+                className="btn btn-sm btn-outline" 
+                disabled={currentIndex === statusOrder.length - 1} 
+                onClick={() => { advance(); showToast(`OT Avanzada →`); }}
+              >
+                {lang === 'en' ? 'Advance Status →' : 'Avanzar estado →'}
+              </button>
+            )}
+            {canPerformAction(user?.role, 'eliminar_ot') && (
+              <button 
+                className="btn btn-sm btn-outline" 
+                style={{ color: 'var(--red)', borderColor: 'var(--red)', marginLeft: 'auto' }} 
+                onClick={() => { void handleDelete() }}
+              >
+                {lang === 'en' ? 'Delete OT' : 'Eliminar OT'}
+              </button>
+            )}
           </div>
         </div>
       </div>

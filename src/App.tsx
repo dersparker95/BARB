@@ -6,7 +6,7 @@ import Layout from './layout/Layout'
 import Login from './pages/Login'
 import Forbidden from './pages/Forbidden'
 import { useAppContext } from './context/AppContext'
-import type { Role } from './types'
+import { canAccessPage, AppPage } from './utils/permissions'
 
 // 🦥 CARGA PEREZOSA (Lazy Loading para optimizar la RAM y la red)
 const Dashboard = React.lazy(() => import('./pages/Dashboard'))
@@ -20,12 +20,15 @@ const Report = React.lazy(() => import('./pages/Report'))
 const SessionHistory = React.lazy(() => import('./pages/SessionHistory'))
 
 type GuardProps = {
-  allowedRoles: Role[]
+  page: AppPage
   children: React.ReactElement
 }
 
-// 🛡️ GUARDIA ÚNICO DE SEGURIDAD: Simplificado y centralizado
-const RoleGuard: React.FC<GuardProps> = ({ allowedRoles, children }) => {
+// 🛡️ GUARDIA ÚNICO DE SEGURIDAD: ahora consulta permissions.ts directamente
+// (espejo de permisos.py en el backend) en vez de arrays de roles hardcodeados
+// o precalculados. Agregar una página o rol nuevo solo requiere tocar
+// permissions.ts/permisos.py — nada aquí.
+const RoleGuard: React.FC<GuardProps> = ({ page, children }) => {
   const { user } = useAppContext()
   const location = useLocation()
 
@@ -33,23 +36,11 @@ const RoleGuard: React.FC<GuardProps> = ({ allowedRoles, children }) => {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
-  if (!allowedRoles.includes(user.role)) {
+  if (!canAccessPage(user.role, page)) {
     return <Navigate to="/403" replace />
   }
 
   return children
-}
-
-// 🔥 MAPEO COMPLETO DE ROLES: Incluyendo engineer y supervisor
-const routeRoles = (path: string): Role[] => {
-  const managementRoles: Role[] = ['gerente', 'admin', 'engineer', 'supervisor']
-  const allRoles: Role[] = ['tecnico', 'operador', 'gerente', 'admin', 'engineer', 'supervisor']
-
-  if (path.startsWith('/dashboard')) return managementRoles
-  if (path.startsWith('/report')) return managementRoles
-  
-  // El resto de módulos operativos son accesibles por toda la planta
-  return allRoles
 }
 
 const RootRedirect: React.FC = () => <Navigate to="/login" replace />
@@ -79,7 +70,7 @@ export default function App() {
           <Route
             path="/dashboard"
             element={
-              <RoleGuard allowedRoles={routeRoles('/dashboard')}>
+              <RoleGuard page="/dashboard">
                 <Dashboard />
               </RoleGuard>
             }
@@ -87,7 +78,7 @@ export default function App() {
           <Route
             path="/menu"
             element={
-              <RoleGuard allowedRoles={routeRoles('/menu')}>
+              <RoleGuard page="/menu">
                 <Menu />
               </RoleGuard>
             }
@@ -95,7 +86,7 @@ export default function App() {
           <Route
             path="/docchat"
             element={
-              <RoleGuard allowedRoles={routeRoles('/docchat')}>
+              <RoleGuard page="/docchat">
                 <DocChat />
               </RoleGuard>
             }
@@ -103,7 +94,7 @@ export default function App() {
           <Route
             path="/debug"
             element={
-              <RoleGuard allowedRoles={routeRoles('/debug')}>
+              <RoleGuard page="/debug">
                 <Debug />
               </RoleGuard>
             }
@@ -111,7 +102,7 @@ export default function App() {
           <Route
             path="/topology"
             element={
-              <RoleGuard allowedRoles={routeRoles('/topology')}>
+              <RoleGuard page="/topology">
                 <Topology />
               </RoleGuard>
             }
@@ -119,7 +110,7 @@ export default function App() {
           <Route
             path="/memory/:machineId"
             element={
-              <RoleGuard allowedRoles={routeRoles('/memory/')}>
+              <RoleGuard page="/memory">
                 <MachineMemory />
               </RoleGuard>
             }
@@ -127,7 +118,7 @@ export default function App() {
           <Route
             path="/report"
             element={
-              <RoleGuard allowedRoles={routeRoles('/report')}>
+              <RoleGuard page="/report">
                 <Report />
               </RoleGuard>
             }
@@ -136,7 +127,7 @@ export default function App() {
           <Route
             path="/history"
             element={
-              <RoleGuard allowedRoles={routeRoles('/history')}>
+              <RoleGuard page="/history">
                 <SessionHistory />
               </RoleGuard>
             }
