@@ -32,6 +32,10 @@ except ImportError:
 # =============================================================================
 # CONFIGURACIÓN DE ENTORNO
 # =============================================================================
+#
+# Carga variables de entorno y define rutas y parámetros base utilizados
+# por el resto de la aplicación.
+#
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -44,6 +48,10 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # =============================================================================
 # MOTORES Y CLIENTES
 # =============================================================================
+#
+# Inicializa los motores de base de datos y los clientes externos
+# (HTTP, IA) reutilizados durante todo el ciclo de vida del servicio.
+#
 
 # SQLAlchemy se mantiene para endpoints legacy; psycopg2 pool para el resto.
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=5, max_overflow=15)
@@ -82,11 +90,12 @@ def get_db_connection():
     Obtiene una conexión activa desde el pool de hilos de PostgreSQL.
     Inicializa el pool si no existe.
 
-    ## Returns:
-    Objeto de conexión psycopg2.
+    Returns:
+        Objeto de conexión psycopg2.
 
-    ## Raises:
-    psycopg2.OperationalError: Si no puede establecer conexión con el servidor.
+    Raises:
+        psycopg2.OperationalError:
+            Si no puede establecer conexión con el servidor.
     """
     global db_pool
     if db_pool is None:
@@ -98,8 +107,9 @@ def release_db_connection(conn) -> None:
     """
     Devuelve una conexión al pool o la cierra si el pool no está disponible.
 
-    ## Args:
-    conn: Conexión psycopg2 a liberar.
+    Args:
+        conn:
+            Conexión psycopg2 a liberar.
     """
     global db_pool
     if db_pool is not None:
@@ -112,15 +122,18 @@ def _query_all(sql: str, params: Optional[dict] = None) -> list[dict]:
     """
     Ejecuta una consulta SQL y retorna todos los registros como lista de diccionarios.
 
-    ## Args:
-    sql: Sentencia SQL a ejecutar.
-    params: Parámetros de interpolación.
+    Args:
+        sql:
+            Sentencia SQL a ejecutar.
+        params:
+            Parámetros de interpolación.
 
-    ## Returns:
-    Lista de registros recuperados.
+    Returns:
+        Lista de registros recuperados.
 
-    ## Raises:
-    psycopg2.DatabaseError: Error de ejecución en la consulta SQL.
+    Raises:
+        psycopg2.DatabaseError:
+            Error de ejecución en la consulta SQL.
     """
     conn = get_db_connection()
     try:
@@ -135,12 +148,14 @@ def _query_one(sql: str, params: Optional[dict] = None) -> dict | None:
     """
     Ejecuta una consulta SQL y retorna el primer registro coincidente.
 
-    ## Args:
-    sql: Sentencia SQL a ejecutar.
-    params: Parámetros de interpolación.
+    Args:
+        sql:
+            Sentencia SQL a ejecutar.
+        params:
+            Parámetros de interpolación.
 
-    ## Returns:
-    Diccionario con el registro o None si no hay resultados.
+    Returns:
+        Diccionario con el registro o None si no hay resultados.
     """
     rows = _query_all(sql, params)
     return rows[0] if rows else None
@@ -150,12 +165,15 @@ def _execute_write(query: str, params: Optional[dict] = None) -> Any:
     """
     Ejecuta una sentencia SQL de escritura (INSERT, UPDATE, DELETE) con confirmación transaccional.
 
-    ## Args:
-    query: Sentencia SQL con parámetros nombrados (SQLAlchemy text).
-    params: Valores de interpolación.
+    Args:
+        query:
+            Sentencia SQL con parámetros nombrados (SQLAlchemy text).
+        params:
+            Valores de interpolación.
 
-    ## Raises:
-    HTTPException(500): Si la escritura falla en base de datos.
+    Raises:
+        HTTPException(500):
+            Si la escritura falla en base de datos.
     """
     try:
         with engine.connect() as conn:
@@ -169,14 +187,18 @@ def _execute_write(query: str, params: Optional[dict] = None) -> Any:
 # =============================================================================
 # CACHÉ REDIS
 # =============================================================================
+#
+# Centraliza la conexión y las operaciones de lectura/escritura sobre
+# el sistema de caché Redis.
+#
 
 
 def get_redis_client() -> Redis | None:
     """
     Inicializa y retorna la conexión al servidor Redis.
 
-    ## Returns:
-    Cliente Redis activo o None si el servicio no está disponible.
+    Returns:
+        Cliente Redis activo o None si el servicio no está disponible.
     """
     global redis_client, redis_ready
     if Redis is None:
@@ -198,11 +220,12 @@ def cache_get(key: str) -> Any | None:
     """
     Recupera y deserializa un valor almacenado en Redis.
 
-    ## Args:
-    key: Identificador único del recurso en caché.
+    Args:
+        key:
+            Identificador único del recurso en caché.
 
-    ## Returns:
-    Estructura de datos deserializada o None si la clave no existe.
+    Returns:
+        Estructura de datos deserializada o None si la clave no existe.
     """
     client = get_redis_client()
     if not client:
@@ -218,10 +241,13 @@ def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> None:
     """
     Serializa y almacena un valor en Redis con tiempo de expiración.
 
-    ## Args:
-    key: Identificador único del recurso.
-    value: Datos a almacenar (deben ser serializables a JSON).
-    ttl_seconds: Tiempo de vida en segundos (por defecto 300).
+    Args:
+        key:
+            Identificador único del recurso.
+        value:
+            Datos a almacenar (deben ser serializables a JSON).
+        ttl_seconds:
+            Tiempo de vida en segundos (por defecto 300).
     """
     client = get_redis_client()
     if not client:
@@ -235,17 +261,22 @@ def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> None:
 # =============================================================================
 # SEGURIDAD Y NORMALIZACIÓN
 # =============================================================================
+#
+# Agrupa utilidades de cifrado de contraseñas, normalización de valores
+# de dominio y conversiones seguras de tipos.
+#
 
 
 def hash_password(raw_password: str) -> str:
     """
     Aplica bcrypt a una contraseña en texto plano.
 
-    ## Args:
-    raw_password: Contraseña proporcionada por el usuario.
+    Args:
+        raw_password:
+            Contraseña proporcionada por el usuario.
 
-    ## Returns:
-    Hash criptográfico seguro.
+    Returns:
+        Hash criptográfico seguro.
     """
     return bcrypt.hashpw(raw_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
@@ -255,12 +286,14 @@ def verify_password(raw_password: str, stored_password: str) -> bool:
     Verifica si una contraseña en texto plano corresponde al hash almacenado.
     Soporta hashes bcrypt y contraseñas en texto plano (legacy).
 
-    ## Args:
-    raw_password: Contraseña del intento de acceso.
-    stored_password: Hash almacenado en base de datos.
+    Args:
+        raw_password:
+            Contraseña del intento de acceso.
+        stored_password:
+            Hash almacenado en base de datos.
 
-    ## Returns:
-    True si las credenciales coinciden.
+    Returns:
+        True si las credenciales coinciden.
     """
     stored = (stored_password or "").strip()
     if stored.startswith("$2"):
@@ -280,11 +313,12 @@ def ensure_passwords_hashed(cursor) -> int:
     en cada arranque sin riesgo de doble-hasheo, porque sólo toca filas cuyo
     valor no empieza con '$2' (prefijo estándar de bcrypt).
 
-    ## Args:
-    cursor: Cursor psycopg2 activo (debe soportar RealDictCursor o tupla).
+    Args:
+        cursor:
+            Cursor psycopg2 activo (debe soportar RealDictCursor o tupla).
 
-    ## Returns:
-    Cantidad de usuarios actualizados.
+    Returns:
+        Cantidad de usuarios actualizados.
     """
     cursor.execute("SELECT usuario_id, password_hash FROM usuario")
     usuarios = cursor.fetchall()
@@ -307,11 +341,12 @@ def serialize_user(user: dict) -> dict:
     Filtra y estandariza un registro de usuario para su exposición vía API.
     Excluye campos sensibles como password_hash.
 
-    ## Args:
-    user: Registro crudo obtenido de base de datos.
+    Args:
+        user:
+            Registro crudo obtenido de base de datos.
 
-    ## Returns:
-    Diccionario de usuario sanitizado.
+    Returns:
+        Diccionario de usuario sanitizado.
     """
     return {
         "usuario_id": int(user["usuario_id"]),
@@ -327,17 +362,18 @@ def normalize_priority(value: str | None) -> str:
     """
     Normaliza el valor de prioridad de una OT al conjunto válido del enum prioridad_ot.
 
-    ⚠️ Antes esta normalización reutilizaba normalize_db_status() (pensada para
-    el campo 'estado'), lo cual funcionaba solo por casualidad: como valores como
-    'low'/'medium'/'high'/'urgent' no están en el mapa de estados, la función
+    Anteriormente esta normalización reutilizaba normalize_db_status() (pensada
+    para el campo 'estado'), lo cual funcionaba solo por casualidad: como valores
+    como 'low'/'medium'/'high'/'urgent' no están en el mapa de estados, la función
     los devolvía tal cual sin tocarlos. Cualquier cambio futuro en esa función
     (pensada para otro dominio) podía romper 'priority' sin relación aparente.
 
-    ## Args:
-    value: Prioridad en formato libre.
+    Args:
+        value:
+            Prioridad en formato libre.
 
-    ## Returns:
-    Clave de prioridad normalizada (low/medium/high/urgent).
+    Returns:
+        Clave de prioridad normalizada (low/medium/high/urgent).
     """
     raw = (value or "").strip().lower()
     mapping = {
@@ -355,11 +391,12 @@ def normalize_db_status(value: str | None) -> str:
     """
     Normaliza variaciones semánticas de estados operativos al conjunto estándar de la base de datos.
 
-    ## Args:
-    value: Estado en formato libre.
+    Args:
+        value:
+            Estado en formato libre.
 
-    ## Returns:
-    Clave de estado normalizado.
+    Returns:
+        Clave de estado normalizado.
     """
     raw = (value or "").strip().lower()
     mapping = {
@@ -384,11 +421,12 @@ def humanize_status(value: str | None) -> str:
     """
     Traduce claves de estado de sistema a etiquetas legibles para interfaces de usuario.
 
-    ## Args:
-    value: Clave de estado normalizado.
+    Args:
+        value:
+            Clave de estado normalizado.
 
-    ## Returns:
-    Etiqueta de estado capitalizada.
+    Returns:
+        Etiqueta de estado capitalizada.
     """
     raw = (value or "").strip().lower()
     mapping = {
@@ -406,11 +444,12 @@ def parse_optional_datetime(value: Any) -> datetime | None:
     """
     Convierte cadenas, timestamps o valores nulos en objetos datetime nativos.
 
-    ## Args:
-    value: Valor crudo representando una fecha/hora.
+    Args:
+        value:
+            Valor crudo representando una fecha/hora.
 
-    ## Returns:
-    Objeto datetime o None si el valor es inválido o vacío.
+    Returns:
+        Objeto datetime o None si el valor es inválido o vacío.
     """
     if value in (None, "", "null"):
         return None
@@ -427,15 +466,18 @@ def safe_int(value: Any, field_name: str) -> int:
     """
     Convierte un valor a entero disparando errores HTTP descriptivos si falla.
 
-    ## Args:
-    value: Valor numérico crudo.
-    field_name: Nombre del campo para mensajes de error.
+    Args:
+        value:
+            Valor numérico crudo.
+        field_name:
+            Nombre del campo para mensajes de error.
 
-    ## Returns:
-    Valor numérico validado.
+    Returns:
+        Valor numérico validado.
 
-    ## Raises:
-    HTTPException(400): Si el valor es nulo, vacío o no convertible a entero.
+    Raises:
+        HTTPException(400):
+            Si el valor es nulo, vacío o no convertible a entero.
     """
     if value in (None, "", "null"):
         raise HTTPException(status_code=400, detail=f"El campo '{field_name}' es obligatorio.")
@@ -449,12 +491,14 @@ def safe_text(value: Any, default: str = "") -> str:
     """
     Extrae texto de forma segura garantizando ausencia de excepciones por valores nulos.
 
-    ## Args:
-    value: Variable objetivo.
-    default: Cadena de respaldo si el valor es nulo.
+    Args:
+        value:
+            Variable objetivo.
+        default:
+            Cadena de respaldo si el valor es nulo.
 
-    ## Returns:
-    Texto saneado sin espacios perimetrales.
+    Returns:
+        Texto saneado sin espacios perimetrales.
     """
     if value is None:
         return default
@@ -465,11 +509,12 @@ def iso_z(val) -> str | None:
     """
     Estandariza fechas a formato ISO 8601 con sufijo UTC explícito (Z).
 
-    ## Args:
-    val: Objeto datetime o cadena de fecha.
+    Args:
+        val:
+            Objeto datetime o cadena de fecha.
 
-    ## Returns:
-    Cadena de fecha formateada o None si no se provee valor.
+    Returns:
+        Cadena de fecha formateada o None si no se provee valor.
     """
     if not val:
         return None
@@ -482,18 +527,24 @@ def iso_z(val) -> str | None:
 # =============================================================================
 # MAPEADORES DE DOMINIO — ÓRDENES DE TRABAJO
 # =============================================================================
+#
+# Convierte registros relacionales de Órdenes de Trabajo en las
+# estructuras de dominio consumidas por la API.
+#
 
 
 def row_to_work_order(row: dict, photos: list[dict] | None = None) -> dict:
     """
     Convierte un registro relacional plano en la estructura JSON jerárquica de una Orden de Trabajo.
 
-    ## Args:
-    row: Registro unificado proveniente de JOINs.
-    photos: Colección de evidencias fotográficas pre-procesadas.
+    Args:
+        row:
+            Registro unificado proveniente de JOINs.
+        photos:
+            Colección de evidencias fotográficas pre-procesadas.
 
-    ## Returns:
-    Representación de dominio de la OT lista para entrega vía API.
+    Returns:
+        Representación de dominio de la OT lista para entrega vía API.
     """
     photo_list = photos or row.get("photos") or []
     return {
@@ -535,11 +586,12 @@ def fetch_work_order_row(numero_ot: str) -> dict | None:
     """
     Recupera una Orden de Trabajo con sus relaciones consolidadas (máquina, planta, técnico).
 
-    ## Args:
-    numero_ot: Código único de identificación de la OT.
+    Args:
+        numero_ot:
+            Código único de identificación de la OT.
 
-    ## Returns:
-    Diccionario con datos relacionales cruzados o None si la OT no existe.
+    Returns:
+        Diccionario con datos relacionales cruzados o None si la OT no existe.
     """
     return _query_one(
         """
@@ -588,11 +640,12 @@ def fetch_work_order_photos(ot_id: int) -> list[dict]:
     """
     Recupera los metadatos y rutas de todas las fotografías asociadas a una OT.
 
-    ## Args:
-    ot_id: Identificador primario de la OT.
+    Args:
+        ot_id:
+            Identificador primario de la OT.
 
-    ## Returns:
-    Colección de registros de evidencia visual.
+    Returns:
+        Colección de registros de evidencia visual.
     """
     rows = _query_all(
         """
@@ -621,14 +674,16 @@ def parse_work_order_status(value: str | None) -> str:
     """
     Valida que el estado propuesto pertenezca al conjunto de transiciones permitidas.
 
-    ## Args:
-    value: Estado propuesto.
+    Args:
+        value:
+            Estado propuesto.
 
-    ## Returns:
-    Estado auditado y validado.
+    Returns:
+        Estado auditado y validado.
 
-    ## Raises:
-    HTTPException(400): Si el estado propuesto no está dentro del conjunto permitido.
+    Raises:
+        HTTPException(400):
+            Si el estado propuesto no está dentro del conjunto permitido.
     """
     db_status = normalize_db_status(value)
     allowed = {"pending", "assigned", "in_progress", "completed", "cancelled", "overdue"}
@@ -640,22 +695,30 @@ def parse_work_order_status(value: str | None) -> str:
 # =============================================================================
 # GESTIÓN DE ARCHIVOS
 # =============================================================================
+#
+# Centraliza la persistencia, validación y limpieza de archivos
+# subidos por los usuarios (fotografías y documentos).
+#
 
 
 def store_upload_file(file: UploadFile, destination_dir: Path, prefix: str) -> dict:
     """
     Persiste un archivo en el sistema de archivos generando un nombre único para evitar colisiones.
 
-    ## Args:
-    file: Archivo recibido desde la solicitud HTTP.
-    destination_dir: Directorio de destino absoluto.
-    prefix: Prefijo categórico para el nombre del archivo.
+    Args:
+        file:
+            Archivo recibido desde la solicitud HTTP.
+        destination_dir:
+            Directorio de destino absoluto.
+        prefix:
+            Prefijo categórico para el nombre del archivo.
 
-    ## Returns:
-    Diccionario con file_id, stored_name, stored_path y original_name.
+    Returns:
+        Diccionario con file_id, stored_name, stored_path y original_name.
 
-    ## Raises:
-    IOError: Si los permisos del sistema de archivos deniegan la escritura.
+    Raises:
+        IOError:
+            Si los permisos del sistema de archivos deniegan la escritura.
     """
     original_name = Path(file.filename or "file").name
     suffix = Path(original_name).suffix.lower() or ".bin"
@@ -677,16 +740,20 @@ async def save_ot_photos(numero_ot: str, ot_id: int, images: list[UploadFile]) -
     Procesa fotográficamente una OT de forma transaccional: valida tipos MIME,
     persiste archivos e inserta metadatos en BD. Ejecuta rollback físico si la transacción falla.
 
-    ## Args:
-    numero_ot: Identificador público de la OT (usado para estructura de carpetas).
-    ot_id: Clave primaria de la OT.
-    images: Archivos multimedia a procesar.
+    Args:
+        numero_ot:
+            Identificador público de la OT (usado para estructura de carpetas).
+        ot_id:
+            Clave primaria de la OT.
+        images:
+            Archivos multimedia a procesar.
 
-    ## Returns:
-    Registros fotográficos creados exitosamente.
+    Returns:
+        Registros fotográficos creados exitosamente.
 
-    ## Raises:
-    HTTPException(415): Si un archivo no cumple con los tipos MIME permitidos (JPEG/PNG/WEBP).
+    Raises:
+        HTTPException(415):
+            Si un archivo no cumple con los tipos MIME permitidos (JPEG/PNG/WEBP).
     """
     saved_photos: list[dict] = []
     if not images:
@@ -750,8 +817,9 @@ def delete_ot_files(ot_id: int) -> None:
     Elimina físicamente todos los archivos asociados a una OT y limpia directorios vacíos.
     Suprime errores de sistema de archivos para no bloquear transacciones de BD.
 
-    ## Args:
-    ot_id: Clave primaria de la OT objetivo.
+    Args:
+        ot_id:
+            Clave primaria de la OT objetivo.
     """
     rows = _query_all(
         "SELECT file_path FROM ot_foto WHERE ot_id = %(ot_id)s",
@@ -779,6 +847,10 @@ def delete_ot_files(ot_id: int) -> None:
 # =============================================================================
 # MODELOS PYDANTIC
 # =============================================================================
+#
+# Define los esquemas de entrada utilizados para validar los payloads
+# recibidos por los endpoints.
+#
 
 
 class LoginRequest(BaseModel):
@@ -828,7 +900,7 @@ class ChatSessionRequest(BaseModel):
 class ChatFeedbackRequest(BaseModel):
     message_content: str
     rating: str
-    context: Optional[str] = "General" # Añadimos el contexto
+    context: Optional[str] = "General"
 
 class UserCreateRequest(BaseModel):
     nombre: str
@@ -853,13 +925,17 @@ class WorkOrderStatusRequest(BaseModel):
 # =============================================================================
 # CONSTANTES DE NEGOCIO
 # =============================================================================
-# ⚠️ Deben coincidir con BARB_BUSINESS en frontend/src/hooks/useFinancialStats.ts
+#
+# Parámetros de negocio compartidos entre backend y frontend para el
+# cálculo de indicadores financieros y de SLA.
+#
+# Debe coincidir con BARB_BUSINESS en frontend/src/hooks/useFinancialStats.ts
 # para que las cifras de ahorro y SLA mostradas en el dashboard sean consistentes
 # entre lo que calcula el backend y lo que el frontend usa para su propia UI.
 SLA_TARGET_MINUTES = 24 * 60  # 24 horas, expresado en minutos (frontend usa SLA_TARGET: 24)
-# ⚠️ Se usa $2000/min (no BARB_BUSINESS.avgDowntimeCost=5000) porque el texto ya
-# visible al usuario en i18n.ts dice explícitamente "Based on US$2,000/min of
-# operational downtime" (financial.roiSubtitle) y la fórmula original del backend
+# Se usa $2000/min (no BARB_BUSINESS.avgDowntimeCost=5000) porque el texto ya
+# visible al usuario en i18n.ts indica explícitamente un costo de US$2,000/min de
+# inactividad operativa (financial.roiSubtitle) y la fórmula original del backend
 # ya usaba este mismo valor. Mantenerlo evita mostrar una cifra que contradiga
 # el texto que el usuario ya lee en pantalla.
 DOWNTIME_COST_PER_MINUTE = 2000
@@ -868,6 +944,10 @@ DOWNTIME_COST_PER_MINUTE = 2000
 # =============================================================================
 # APLICACIÓN Y CORS
 # =============================================================================
+#
+# Instancia la aplicación FastAPI y configura la política de CORS y
+# los módulos de autenticación y permisos.
+#
 
 app = FastAPI(title="BARB Plant Memory API", version="1.5.0")
 
@@ -899,7 +979,7 @@ async def startup_checks():
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            # 1. VERIFICACIÓN DE SEGURIDAD: Comprobamos si la BD ya tiene tablas
+            # Verifica si la base de datos ya tiene tablas creadas.
             cursor.execute("""
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables 
@@ -909,11 +989,11 @@ async def startup_checks():
             """)
             db_exists = cursor.fetchone()['exists']
 
-            # 2. INYECCIÓN: Si la BD está vacía, leemos y ejecutamos tu archivo SQL
+            # Si la BD está vacía, lee y ejecuta el archivo SQL de inicialización.
             if not db_exists:
                 print("⚙️ Base de datos vacía detectada. Buscando archivo SQL...")
                 
-                # 👇 AQUI ESTA LA MAGIA DE LA RUTA: Entramos a la carpeta initScripts
+                # Construye la ruta al script de inicialización dentro de initScripts.
                 base_dir = os.path.dirname(__file__) 
                 sql_file_path = os.path.join(base_dir, 'initScripts', '01_tablas.sql')
                 
@@ -925,7 +1005,7 @@ async def startup_checks():
                     conn.commit()
                     print("✅ Tablas y datos inyectados exitosamente desde el archivo SQL.")
                     
-                    # 3. VERIFICACIÓN DEL ADMIN: Nos aseguramos de que puedas entrar
+                    # Garantiza la existencia de un usuario administrador inicial.
                     cursor.execute("SELECT COUNT(*) as total FROM usuario")
                     row = cursor.fetchone()
                     if row and row['total'] == 0:
@@ -941,16 +1021,18 @@ async def startup_checks():
             else:
                 print("✅ La base de datos ya está estructurada. Omitiendo lectura del SQL.")
 
-            # 4. REPARACIÓN DE CONTRASEÑAS: se ejecuta SIEMPRE (exista o no la tabla
-            # previamente), porque el seed SQL puede traer passwords en texto plano
-            # (ej. 'admin123') y eso rompe el login aunque la tabla ya existiera.
+            # Repara contraseñas en texto plano. Se ejecuta siempre (exista o no la
+            # tabla previamente), porque el seed SQL puede traer passwords sin
+            # cifrar (ej. 'admin123'), lo que rompería el login aunque la tabla
+            # ya existiera.
             actualizados = ensure_passwords_hashed(cursor)
             conn.commit()
             if actualizados:
                 print(f"🔒 {actualizados} contraseña(s) en texto plano fueron hasheadas automáticamente.")
 
-            # 5. TABLA DE SESIONES: soporta la validación real de tokens en permisos.py
-            # (antes /auth/login generaba un token que nunca se guardaba ni se validaba).
+            # Crea la tabla de sesiones, que soporta la validación real de tokens en
+            # permisos.py (antes /auth/login generaba un token que nunca se
+            # guardaba ni se validaba).
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sesion (
@@ -963,18 +1045,18 @@ async def startup_checks():
             )
             conn.commit()
 
-            # 6. PREFERENCIAS DE USUARIO: columna JSONB para /user/preferences.
+            # Agrega la columna JSONB de preferencias utilizada por /user/preferences.
             cursor.execute(
                 "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS preferencias JSONB DEFAULT '{}'::jsonb;"
             )
             conn.commit()
 
-            # 7. LIMPIEZA DE SESIONES EXPIRADAS: la tabla `sesion` no tenía ningún
-            # mecanismo de purga — crecía indefinidamente con tokens vencidos que
-            # ya nunca se podían usar (permisos.py los rechaza por expira_en < NOW()
-            # en cada request), pero seguían ocupando espacio para siempre. Se
-            # ejecuta en cada arranque del servidor, que en Render free tier
-            # ocurre con la frecuencia suficiente para mantener la tabla acotada.
+            # Purga sesiones expiradas. La tabla `sesion` no tenía mecanismo de
+            # limpieza y crecía indefinidamente con tokens vencidos que ya nunca
+            # se podían usar (permisos.py los rechaza por expira_en < NOW() en
+            # cada request). Se ejecuta en cada arranque del servidor, lo que en
+            # Render free tier ocurre con frecuencia suficiente para mantener la
+            # tabla acotada.
             cursor.execute("DELETE FROM sesion WHERE expira_en < NOW();")
             eliminadas = cursor.rowcount
             conn.commit()
@@ -1003,10 +1085,13 @@ def force_reset_db(x_admin_token: str = Header(default="", alias="X-Admin-Token"
     Protegido por token: requiere el header X-Admin-Token con el valor
     configurado en la variable de entorno ADMIN_RESET_TOKEN de Render.
 
-    ## Raises:
-    HTTPException(403): Token ausente o incorrecto.
-    HTTPException(404): No se encontró el archivo 01_tablas.sql.
-    HTTPException(500): Falla al ejecutar el script o al hashear contraseñas.
+    Raises:
+        HTTPException(403):
+            Token ausente o incorrecto.
+        HTTPException(404):
+            No se encontró el archivo 01_tablas.sql.
+        HTTPException(500):
+            Falla al ejecutar el script o al hashear contraseñas.
     """
     expected_token = (os.getenv("ADMIN_RESET_TOKEN") or "").strip()
     received_token = (x_admin_token or "").strip()
@@ -1052,10 +1137,15 @@ def force_reset_db(x_admin_token: str = Header(default="", alias="X-Admin-Token"
 # =============================================================================
 # ENDPOINTS — SALUD Y DIAGNÓSTICO
 # =============================================================================
+#
+# Expone rutas de verificación de estado para la base de datos, el
+# caché y el motor de inteligencia artificial.
+#
 
 
 @app.get("/")
 async def root():
+    """Endpoint raíz para confirmar que el servicio está en línea."""
     return {"service": "BARB API", "status": "online"}
 
 
@@ -1065,8 +1155,8 @@ async def health():
     """
     Verifica conectividad con PostgreSQL mediante una sentencia trivial.
 
-    ## Returns:
-    Estado operativo del servicio.
+    Returns:
+        Estado operativo del servicio.
     """
     try:
         with engine.connect() as conn:
@@ -1081,8 +1171,8 @@ async def health_redis():
     """
     Comprueba disponibilidad del sistema de caché Redis.
 
-    ## Returns:
-    Estado en línea/fuera de línea del cliente Redis.
+    Returns:
+        Estado en línea/fuera de línea del cliente Redis.
     """
     client = get_redis_client()
     if not client:
@@ -1098,8 +1188,8 @@ async def health_llm():
     """
     Verifica disponibilidad combinada de la base de datos y la API key del motor de IA.
 
-    ## Returns:
-    Mapa topológico del estado del sistema RAG.
+    Returns:
+        Mapa topológico del estado del sistema RAG.
     """
     db_status = await health()
     has_key = bool(os.getenv("DEEPSEEK_API_KEY"))
@@ -1120,6 +1210,10 @@ async def health_llm():
 # =============================================================================
 # ENDPOINTS — AUTENTICACIÓN Y USUARIOS
 # =============================================================================
+#
+# Gestiona el ciclo de sesión y el mantenimiento del directorio de
+# usuarios de la plataforma.
+#
 
 
 @app.post("/auth/login")
@@ -1128,15 +1222,18 @@ async def login(payload: LoginRequest):
     """
     Autentica un usuario verificando sus credenciales cifradas y su estado activo.
 
-    ## Args:
-    payload: Estructura con email y contraseña.
+    Args:
+        payload:
+            Estructura con email y contraseña.
 
-    ## Returns:
-    Token de sesión e información pública del perfil del usuario.
+    Returns:
+        Token de sesión e información pública del perfil del usuario.
 
-    ## Raises:
-    HTTPException(400): Credenciales incompletas.
-    HTTPException(401): Credenciales incorrectas o perfil desactivado.
+    Raises:
+        HTTPException(400):
+            Credenciales incompletas.
+        HTTPException(401):
+            Credenciales incorrectas o perfil desactivado.
     """
     email = payload.email.strip().lower()
     password = payload.password
@@ -1179,6 +1276,16 @@ async def login(payload: LoginRequest):
 @app.post("/auth/logout")
 @app.post("/api/auth/logout")
 async def logout(authorization: str = Header(default="", alias="Authorization")):
+    """
+    Invalida la sesión asociada al token recibido en el encabezado Authorization.
+
+    Args:
+        authorization:
+            Encabezado con el token en formato 'Bearer {token}'.
+
+    Returns:
+        Confirmación del cierre de sesión.
+    """
     token = authorization.replace("Bearer ", "").strip()
     if token:
         _execute_write("DELETE FROM sesion WHERE token = :token", {"token": token})
@@ -1190,11 +1297,12 @@ async def list_users():
     """
     Retorna el directorio completo del personal técnico de la plataforma.
 
-    ## Returns:
-    Colección de usuarios serializados.
+    Returns:
+        Colección de usuarios serializados.
 
-    ## Raises:
-    HTTPException(500): Error de conectividad con PostgreSQL.
+    Raises:
+        HTTPException(500):
+            Error de conectividad con PostgreSQL.
     """
     try:
         rows = _query_all(
@@ -1214,14 +1322,16 @@ async def create_user(payload: UserCreateRequest):
     """
     Registra un nuevo usuario con contraseña cifrada mediante bcrypt.
 
-    ## Args:
-    payload: Datos del nuevo usuario.
+    Args:
+        payload:
+            Datos del nuevo usuario.
 
-    ## Returns:
-    Representación sanitizada del usuario creado.
+    Returns:
+        Representación sanitizada del usuario creado.
 
-    ## Raises:
-    HTTPException(500): Error relacional o transaccional.
+    Raises:
+        HTTPException(500):
+            Error relacional o transaccional.
     """
     conn = None
     try:
@@ -1258,16 +1368,20 @@ async def update_user(usuario_id: int, payload: UserUpdateRequest):
     """
     Aplica una actualización diferencial sobre los metadatos y credenciales del usuario.
 
-    ## Args:
-    usuario_id: Clave primaria del usuario.
-    payload: Campos a modificar (todos opcionales).
+    Args:
+        usuario_id:
+            Clave primaria del usuario.
+        payload:
+            Campos a modificar (todos opcionales).
 
-    ## Returns:
-    Registro actualizado bajo serialización autorizada.
+    Returns:
+        Registro actualizado bajo serialización autorizada.
 
-    ## Raises:
-    HTTPException(404): Usuario inexistente.
-    HTTPException(500): Error transaccional en base de datos.
+    Raises:
+        HTTPException(404):
+            Usuario inexistente.
+        HTTPException(500):
+            Error transaccional en base de datos.
     """
     conn = None
     try:
@@ -1324,12 +1438,15 @@ async def delete_user(usuario_id: int):
     """
     Elimina permanentemente un registro de usuario (hard delete).
 
-    ## Args:
-    usuario_id: Clave interna del usuario a eliminar.
+    Args:
+        usuario_id:
+            Clave interna del usuario a eliminar.
 
-    ## Raises:
-    HTTPException(404): Usuario no encontrado.
-    HTTPException(500): Violación de integridad referencial u error SQL.
+    Raises:
+        HTTPException(404):
+            Usuario no encontrado.
+        HTTPException(500):
+            Violación de integridad referencial u error SQL.
     """
     conn = None
     try:
@@ -1359,6 +1476,10 @@ async def delete_user(usuario_id: int):
 # =============================================================================
 # ENDPOINTS — ESTADÍSTICAS FINANCIERAS
 # =============================================================================
+#
+# Calcula los indicadores de desempeño y ahorro mostrados en el
+# dashboard financiero.
+#
 
 
 @app.get("/api/stats/financial-impact", dependencies=[Depends(require_route("dashboard", solo_lectura=True))])
@@ -1366,19 +1487,20 @@ def get_financial_impact(days: int | None = Query(default=None, ge=1)):
     """
     Calcula KPIs de desempeño y tendencias para el dashboard financiero.
 
-    ⚠️ Anteriormente esta función tenía @lru_cache(maxsize=1), lo que la dejaba
-    congelada con el primer resultado calculado en la vida del proceso — nunca
+    Anteriormente esta función tenía @lru_cache(maxsize=1), lo que la dejaba
+    congelada con el primer resultado calculado en la vida del proceso: nunca
     reflejaba OTs nuevas. Se quitó el cache para que siempre refleje datos reales.
-    También antes ignoraba el filtro de rango de fechas que el frontend sí manda
+    También ignoraba antes el filtro de rango de fechas que el frontend sí envía
     (?days=7/30/90); ahora se aplica al SQL.
 
-    ## Args:
-    days: Ventana de días hacia atrás a considerar (None = histórico completo).
+    Args:
+        days:
+            Ventana de días hacia atrás a considerar (None = histórico completo).
 
-    ## Returns:
-    Objeto con la forma exacta que espera useFinancialStats.ts:
-    financials (KPIs agregados), trend14Days (serie de 14 días) y
-    machines (ranking de máquinas por volumen y ahorro).
+    Returns:
+        Objeto con la forma exacta que espera useFinancialStats.ts:
+        financials (KPIs agregados), trend14Days (serie de 14 días) y
+        machines (ranking de máquinas por volumen y ahorro).
     """
     date_filter = "AND ot.fecha_creacion >= NOW() - (:days || ' days')::interval" if days else ""
     params = {"days": days} if days else {}
@@ -1451,10 +1573,10 @@ def get_financial_impact(days: int | None = Query(default=None, ge=1)):
 
         # Ahorro estimado: minutos de downtime resueltos por BARB * costo por minuto de inactividad.
         ahorro_generado = downtime_evitado * DOWNTIME_COST_PER_MINUTE
-        # ⚠️ FIX: 'efficiency' antes era % de OTs completadas sobre el total (tasa de
-        # cierre), lo cual no coincidía con el subtítulo de la UI ("Optimización
-        # hacia SLA") ni con slaCompliance por máquina (que sí mide SLA). Ahora usa
-        # la misma definición: % de OTs completadas dentro del SLA objetivo.
+        # 'efficiency' antes representaba el % de OTs completadas sobre el total
+        # (tasa de cierre), lo cual no coincidía con el subtítulo de la UI
+        # ("Optimización hacia SLA") ni con slaCompliance por máquina (que sí mide
+        # SLA). Ahora usa la misma definición: % de OTs completadas dentro del SLA.
         efficiency = round(100.0 * completadas_en_sla / total_completadas, 1) if total_completadas > 0 else 0.0
         # MTBF simplificado: horas transcurridas en la ventana / fallas registradas (mínimo 2 para ser significativo).
         mtbf_hours = None
@@ -1508,6 +1630,10 @@ def get_financial_impact(days: int | None = Query(default=None, ge=1)):
 # =============================================================================
 # ENDPOINTS — ÓRDENES DE TRABAJO
 # =============================================================================
+#
+# Expone el ciclo de vida completo de las Órdenes de Trabajo: consulta,
+# creación, cambio de estado y eliminación.
+#
 
 
 @app.get("/api/work-orders", dependencies=[Depends(require_auth)])
@@ -1516,8 +1642,8 @@ def get_work_orders():
     """
     Retorna el listado completo de OTs enriquecido con relaciones de máquina, planta, disciplina y conteo fotográfico.
 
-    ## Returns:
-    Lista de Órdenes de Trabajo para paneles frontend.
+    Returns:
+        Lista de Órdenes de Trabajo para paneles frontend.
     """
     query = text(
         """
@@ -1563,14 +1689,16 @@ def get_work_order(numero_ot: str):
     """
     Recupera una OT individual junto a su evidencia fotográfica asociada.
 
-    ## Args:
-    numero_ot: Folio único de dominio de la OT.
+    Args:
+        numero_ot:
+            Folio único de dominio de la OT.
 
-    ## Returns:
-    Representación completa de la OT.
+    Returns:
+        Representación completa de la OT.
 
-    ## Raises:
-    HTTPException(404): OT no encontrada.
+    Raises:
+        HTTPException(404):
+            OT no encontrada.
     """
     row = fetch_work_order_row(numero_ot)
     if not row:
@@ -1586,16 +1714,20 @@ async def update_work_order_status(numero_ot: str, payload: WorkOrderStatusReque
     Ejecuta una transición de estado en el ciclo de vida de la OT,
     registrando automáticamente fechas de inicio y cierre según corresponda.
 
-    ## Args:
-    numero_ot: Folio de la OT a mutar.
-    payload: Nuevo estado solicitado.
+    Args:
+        numero_ot:
+            Folio de la OT a mutar.
+        payload:
+            Nuevo estado solicitado.
 
-    ## Returns:
-    OT actualizada con su estado definitivo.
+    Returns:
+        OT actualizada con su estado definitivo.
 
-    ## Raises:
-    HTTPException(404): OT no encontrada.
-    HTTPException(500): Error transaccional en PostgreSQL.
+    Raises:
+        HTTPException(404):
+            OT no encontrada.
+        HTTPException(500):
+            Error transaccional en PostgreSQL.
     """
     desired_status = parse_work_order_status(payload.status)
     current = fetch_work_order_row(numero_ot)
@@ -1652,12 +1784,15 @@ async def delete_work_order(numero_ot: str):
     """
     Elimina una OT con su evidencia fotográfica asociada de forma cascada.
 
-    ## Args:
-    numero_ot: Folio de dominio de la OT a eliminar.
+    Args:
+        numero_ot:
+            Folio de dominio de la OT a eliminar.
 
-    ## Raises:
-    HTTPException(404): OT no encontrada.
-    HTTPException(500): Error transaccional en base de datos.
+    Raises:
+        HTTPException(404):
+            OT no encontrada.
+        HTTPException(500):
+            Error transaccional en base de datos.
     """
     current = fetch_work_order_row(numero_ot)
     if not current:
@@ -1700,15 +1835,18 @@ async def create_work_order(request: Request):
     El número de OT se genera con formato OT-{AÑO}-{id:04d} post-inserción
     para garantizar secuencialidad basada en la clave primaria.
 
-    ## Args:
-    request: Solicitud HTTP con cabecera Content-Type definiendo el modo de lectura.
+    Args:
+        request:
+            Solicitud HTTP con cabecera Content-Type definiendo el modo de lectura.
 
-    ## Returns:
-    OT creada con conteo y arreglo de fotografías adjuntas.
+    Returns:
+        OT creada con conteo y arreglo de fotografías adjuntas.
 
-    ## Raises:
-    HTTPException(415): Content-Type no soportado.
-    HTTPException(500): Error en el pipeline transaccional o en operaciones de archivos.
+    Raises:
+        HTTPException(415):
+            Content-Type no soportado.
+        HTTPException(500):
+            Error en el pipeline transaccional o en operaciones de archivos.
     """
     content_type = (request.headers.get("content-type") or "").lower()
     payload: dict[str, Any] = {}
@@ -1823,6 +1961,10 @@ async def create_work_order(request: Request):
 # =============================================================================
 # ENDPOINTS — DOCUMENTOS
 # =============================================================================
+#
+# Gestiona la carga de documentos utilizados por el motor de
+# conocimiento RAG.
+#
 
 
 @app.post("/api/documents/upload", dependencies=[Depends(require_action("subir_documentos"))])
@@ -1831,14 +1973,16 @@ async def upload_document(file: UploadFile = File(...)):
     """
     Acepta y persiste archivos PDF para su posterior indexación en el motor RAG.
 
-    ## Args:
-    file: Archivo recibido desde el cliente HTTP.
+    Args:
+        file:
+            Archivo recibido desde el cliente HTTP.
 
-    ## Returns:
-    Metadatos de localización del archivo persistido.
+    Returns:
+        Metadatos de localización del archivo persistido.
 
-    ## Raises:
-    HTTPException(415): Si el archivo no es de tipo application/pdf.
+    Raises:
+        HTTPException(415):
+            Si el archivo no es de tipo application/pdf.
     """
     content_type = (file.content_type or "").strip().lower()
     if content_type != "application/pdf":
@@ -1860,6 +2004,10 @@ async def upload_document(file: UploadFile = File(...)):
 # =============================================================================
 # ENDPOINTS — CATÁLOGOS (MÁQUINAS, PLANTAS, DISCIPLINAS, TÉCNICOS)
 # =============================================================================
+#
+# Expone los catálogos de referencia consultados por el frontend para
+# poblar selectores y filtros.
+#
 
 
 @app.get("/api/machines", dependencies=[Depends(require_auth)])
@@ -1867,8 +2015,8 @@ def get_machines():
     """
     Retorna el catálogo completo de máquinas registradas en el sistema.
 
-    ## Returns:
-    Lista de máquinas con id, nombre, discipline_id y plant_id.
+    Returns:
+        Lista de máquinas con id, nombre, discipline_id y plant_id.
     """
     try:
         rows = _query_all(
@@ -1897,8 +2045,8 @@ def get_disciplines():
     """
     Retorna las disciplinas de mantenimiento disponibles (mecánica, eléctrica, etc.).
 
-    ## Returns:
-    Lista de disciplinas con id y nombre.
+    Returns:
+        Lista de disciplinas con id y nombre.
     """
     try:
         rows = _query_all(
@@ -1919,8 +2067,8 @@ def get_plants():
     """
     Retorna el registro geográfico de clústeres operativos habilitados.
 
-    ## Returns:
-    Lista de plantas con id, nombre y ubicación.
+    Returns:
+        Lista de plantas con id, nombre y ubicación.
     """
     try:
         rows = _query_all(
@@ -1944,8 +2092,8 @@ def get_technicians():
     """
     Retorna los técnicos activos disponibles para asignación de órdenes de trabajo.
 
-    ## Returns:
-    Lista de técnicos con id, nombre, email y rol.
+    Returns:
+        Lista de técnicos con id, nombre, email y rol.
     """
     try:
         rows = _query_all(
@@ -1964,6 +2112,10 @@ def get_technicians():
 # =============================================================================
 # ENDPOINTS — INTELIGENCIA ARTIFICIAL (DeepSeek)
 # =============================================================================
+#
+# Integra el motor conversacional DeepSeek para el asistente BARB y su
+# variante de diagnóstico.
+#
 
 
 @app.post("/api/chat", dependencies=[Depends(require_route("docchat"))])
@@ -1975,15 +2127,18 @@ async def chat(payload: ChatRequest):
     La clave de caché incluye idioma y mensaje para evitar colisiones entre usuarios con distintos idiomas.
     El historial se inyecta al contexto del LLM para mantener coherencia conversacional.
 
-    ## Args:
-    payload: Prompt del usuario con idioma, historial y contexto de máquina opcional.
+    Args:
+        payload:
+            Prompt del usuario con idioma, historial y contexto de máquina opcional.
 
-    ## Returns:
-    Respuesta del LLM con fuentes de referencia.
+    Returns:
+        Respuesta del LLM con fuentes de referencia.
 
-    ## Raises:
-    HTTPException(500): API Key de IA no configurada.
-    HTTPException(502): Error de comunicación con DeepSeek.
+    Raises:
+        HTTPException(500):
+            API Key de IA no configurada.
+        HTTPException(502):
+            Error de comunicación con DeepSeek.
     """
     if not DEEPSEEK_API_KEY:
         raise HTTPException(status_code=500, detail="API Key de IA no configurada en el servidor.")
@@ -2043,15 +2198,18 @@ async def chat_debug(payload: ChatDebugRequest):
     (máquina + datos de sensores) en el prompt del sistema. No usa caché porque
     cada sesión de debug es contextual y no debe reutilizar respuestas de otras.
 
-    ## Args:
-    payload: sessionId, machineId, message, attachments y sensorData opcionales.
+    Args:
+        payload:
+            sessionId, machineId, message, attachments y sensorData opcionales.
 
-    ## Returns:
-    Respuesta del LLM enfocada en diagnóstico.
+    Returns:
+        Respuesta del LLM enfocada en diagnóstico.
 
-    ## Raises:
-    HTTPException(500): API Key de IA no configurada.
-    HTTPException(502): Error de comunicación con DeepSeek.
+    Raises:
+        HTTPException(500):
+            API Key de IA no configurada.
+        HTTPException(502):
+            Error de comunicación con DeepSeek.
     """
     if not DEEPSEEK_API_KEY:
         raise HTTPException(status_code=500, detail="API Key de IA no configurada en el servidor.")
@@ -2092,6 +2250,10 @@ async def chat_debug(payload: ChatDebugRequest):
 # =============================================================================
 # ENDPOINTS — HISTORIAL DE CHAT Y FEEDBACK
 # =============================================================================
+#
+# Persiste las sesiones de conversación y la retroalimentación de los
+# usuarios sobre las respuestas del asistente.
+#
 
 @app.post("/api/chat-sessions", dependencies=[Depends(require_route("docchat"))])
 @app.post("/chat-sessions", dependencies=[Depends(require_route("docchat"))])
@@ -2134,12 +2296,12 @@ def create_debug_report(payload: dict):
     (reports.send -> POST /reports/debug) pero el formulario de Report.tsx
     nunca lo invocaba realmente, así que ningún reporte se guardaba jamás.
 
-    ## Args:
-    payload: maquina_id, tecnico_id, issue_description, severity (requeridos),
-             resolution, actions_taken, additional_notes, downtime_minutes (opcionales).
+    Args:
+        payload:
+            maquina_id, tecnico_id, issue_description, severity (requeridos), resolution, actions_taken, additional_notes, downtime_minutes (opcionales).
 
-    ## Returns:
-    report_number y reporte_id del registro creado.
+    Returns:
+        report_number y reporte_id del registro creado.
     """
     maquina_id = payload.get("maquina_id")
     tecnico_id = payload.get("tecnico_id")
@@ -2206,13 +2368,13 @@ async def get_chat_sessions():
 
 @app.post("/api/chat-feedback", dependencies=[Depends(require_route("docchat"))])
 async def save_chat_feedback(payload: ChatFeedbackRequest):
-    """Guarda la calificación (👍 / 👎) de una respuesta de BARB con su contexto."""
+    """Guarda la calificación (positiva o negativa) de una respuesta de BARB con su contexto."""
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            # Si la tabla no tiene la columna context, no fallará, pero idealmente 
-            # en un entorno de DB formal añadirías la columna ALTER TABLE.
+            # Crea la tabla si no existe; en un entorno de BD ya establecido esto
+            # sería una migración ALTER TABLE en lugar de un CREATE TABLE IF NOT EXISTS.
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS chat_feedback (
@@ -2238,6 +2400,10 @@ async def save_chat_feedback(payload: ChatFeedbackRequest):
 # =============================================================================
 # ENDPOINTS — TOPOLOGÍA AUTOMÁTICA
 # =============================================================================
+#
+# Genera dinámicamente el mapa topológico de plantas, disciplinas y
+# máquinas a partir de los datos operativos.
+#
 
 @app.put("/api/user/preferences")
 @app.put("/user/preferences")
@@ -2248,11 +2414,12 @@ def update_user_preferences(payload: dict, sesion: dict = Depends(get_sesion_act
     usuario solo puede editar sus propias preferencias (usuario_id viene del
     token de sesión, no del payload, para que nadie edite las de otro).
 
-    ## Args:
-    payload: Objeto JSON libre con las preferencias a guardar (se sobre-escribe completo).
+    Args:
+        payload:
+            Objeto JSON libre con las preferencias a guardar (se sobre-escribe completo).
 
-    ## Returns:
-    Preferencias guardadas.
+    Returns:
+        Preferencias guardadas.
     """
     try:
         _execute_write(
@@ -2273,17 +2440,14 @@ def get_topologia():
     No requiere tablas de coordenadas manuales.
     """
     try:
-        # Extraemos los datos básicos de la BD
+        # Datos básicos de plantas, disciplinas y máquinas.
         plantas = _query_all("SELECT planta_id, nombre FROM planta")
         disciplinas = _query_all("SELECT disciplina_id, nombre FROM disciplina")
         maquinas = _query_all("SELECT maquina_id, nombre, planta_id, disciplina_id FROM maquina")
 
-        # ⚠️ FIX: antes estado_actual estaba hardcodeado a "operativo" para TODAS
-        # las máquinas siempre, sin importar si tenían fallas reales. No existe una
-        # columna de status en MAQUINA, pero sí hay datos reales en orden_trabajo
-        # que permiten derivar un estado significativo: si la máquina tiene una OT
-        # abierta urgente/vencida -> falla; cualquier otra OT abierta -> alerta;
-        # sin OTs abiertas -> operativo.
+        # No existe columna de status en MAQUINA, así que el estado se deriva de
+        # las órdenes de trabajo abiertas: si tiene una OT urgente/vencida -> falla;
+        # cualquier otra OT abierta -> alerta; sin OTs abiertas -> operativo.
         machine_status_rows = _query_all(
             """
             SELECT
