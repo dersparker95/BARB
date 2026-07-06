@@ -1,380 +1,195 @@
-# BARB
+# 🛠️ BARB — Industrial Maintenance & Predictive AI Platform
 
-Sistema web para gestión industrial con:
+**BARB** es un MVP de grado empresarial diseñado para la gestión de mantenimiento industrial, monitoreo topológico de plantas y diagnóstico predictivo. El sistema integra un motor **RAG (Retrieval-Augmented Generation)** impulsado por IA para asistir a técnicos interactuando con manuales, telemetría y el historial de Órdenes de Trabajo (OTs).
 
-- **Frontend:** React + Vite
-- **Backend:** FastAPI + Python
-- **Base de datos:** PostgreSQL
-- **Ejecución local:** Docker + Docker Compose
-
----
-
-## 1) Qué debes saber antes de empezar
-
-Este proyecto funciona con Docker, pero hay 3 puntos importantes detectados en la auditoría:
-
-1. **El servicio de PostgreSQL no está usando un volumen persistente real**
-   - En `docker-compose.yml` existe `postgres_data`, pero no está montado en el contenedor de `db`.
-   - Resultado: si destruyes el contenedor, la data puede perderse.
-
-2. **La app frontend usa variables de entorno en build time**
-   - El frontend se compila dentro de la imagen Docker.
-   - Si cambias `VITE_API_URL` o `VITE_LM_STUDIO_URL`, debes reconstruir la imagen del frontend.
+![Status](https://img.shields.io/badge/status-MVP-orange)
+![Backend](https://img.shields.io/badge/backend-FastAPI-009688)
+![Frontend](https://img.shields.io/badge/frontend-React%2018%20%2B%20Vite-61DAFB)
+![DB](https://img.shields.io/badge/database-PostgreSQL%2015-336791)
+![License](https://img.shields.io/badge/license-Privado-lightgrey)
 
 ---
 
-## 2) Estructura relevante del proyecto
+## 📋 Tabla de contenidos
 
-```text
-.
-├── docker-compose.yml
-├── frontend/
-│   └── dockerfile
-├── backend/
-│   ├── Dockerfile
-│   ├── rag_backend.py
-│   └── requirements.txt
-├── initScrips/
-│   └── 01_tablas.sql
-├── .env
-└── README.md
+1. [Arquitectura del sistema](#-arquitectura-del-sistema)
+2. [Estructura del proyecto](#-estructura-del-proyecto)
+3. [Configuración del entorno](#-configuración-del-entorno-variables)
+4. [Guía de inicialización](#-guía-de-inicialización-local-development)
+5. [Bootstrapping de base de datos](#-bootstrapping-de-base-de-datos-auto-seeding)
+6. [Estándares de código y arquitectura](#-estándares-de-código-y-patrones-de-arquitectura)
+7. [Mantenimiento y operaciones (DevOps)](#-mantenimiento-y-operaciones-devops)
+8. [Enlaces útiles](#-enlaces-útiles)
+
+---
+
+## 🏗️ Arquitectura del sistema
+
+El proyecto sigue una arquitectura desacoplada orientada a microservicios, con despliegue en la nube (Serverless/PaaS).
+
+| Capa | Tecnología | Descripción | Despliegue |
+|---|---|---|---|
+| **Frontend** | React 18 + Vite | SPA compilada, estilizada con Tailwind CSS | Vercel |
+| **Backend** | Python 3.10+ / FastAPI | API RESTful asíncrona. Autenticación, RAG y lógica de negocio | Render |
+| **Persistencia** | PostgreSQL 15+ | Base de datos relacional multi-tenant. Sesiones con expiración (TTL) | — |
+| **Motor AI** | DeepSeek API | Procesamiento LLM para el DocChat y Debug predictivo | — |
+
+---
+
+## 🗂️ Estructura del proyecto
+
+```
+BARB/
+├── docker-compose.yml         # Orquestación de contenedores (Frontend, Backend, Postgres).
+├── .env                       # Variables de entorno globales (Credenciales, URLs, Keys).
+├── README.md                  # Documentación principal y guía de onboarding.
+│
+├── initScripts/               # 🗄️ AUTO-SEEDING Y BASE DE DATOS
+│   └── 01_tablas.sql          # Script principal. Borra y recrea el esquema público, inyecta tablas, roles, OTs y credenciales de prueba.
+│
+├── backend/                   # ⚙️ CAPA DE SERVIDOR (FastAPI + Python)
+│   ├── main.py                # Punto de entrada de la API. Gestiona el arranque, conexión a DB, auto-sanación (seeding) y limpieza de sesiones.
+│   ├── permisos.py            # Motor de RBAC (Control de Acceso Basado en Roles). Valida tokens y protege rutas/acciones.
+│   ├── requirements.txt       # Dependencias de Python (FastAPI, psycopg2, dependencias de IA, etc.).
+│   └── Dockerfile             # Instrucciones para empaquetar el backend en Render/Docker.
+│
+└── frontend/                  # 💻 CAPA DE CLIENTE (React + Vite + Tailwind)
+    ├── package.json           # Dependencias de Node y scripts de ejecución (dev, build).
+    ├── Dockerfile              # Empaquetado multietapa (Node + Nginx) para despliegue.
+    └── src/
+        ├── App.tsx            # Componente raíz. Maneja el enrutamiento (React Router) y la protección de rutas.
+        ├── main.tsx           # Punto de montaje de React en el DOM.
+        │
+        ├── context/           # 🧠 ESTADO GLOBAL
+        │   └── AppContext.tsx # Proveedor principal. Inyecta el usuario, idioma, tema oscuro y la instancia segura de la API.
+        │
+        ├── services/          # 🔌 COMUNICACIÓN Y LÓGICA DE NEGOCIO
+        │   ├── api.ts         # ¡ARCHIVO CRÍTICO! Wrapper de fetch. Intercepta errores 401 e inyecta el token Bearer en todas las llamadas.
+        │   └── workOrders.ts  # Funciones puras de lógica de negocio (Cálculo de MTTR, filtros, estados).
+        │
+        ├── pages/             # 🖥️ VISTAS PRINCIPALES
+        │   ├── Login.tsx      # Autenticación de usuarios.
+        │   ├── Menu.tsx       # Hub central y subida de documentos técnicos.
+        │   ├── DocChat.tsx    # Interfaz del asistente IA documental (RAG) con soporte multimodal.
+        │   ├── Debug.tsx      # Consola de diagnóstico predictivo basado en el historial de fallas.
+        │   ├── Topology.tsx   # Mapa interactivo de la planta (nodos, conexiones y salud de equipos).
+        │   └── Dashboard/     # Paneles de métricas (FinancialDashboard, listado de OTs).
+        │
+        ├── components/        # 🧩 PIEZAS REUTILIZABLES DE UI
+        │   ├── ChatBubble.tsx # Renderiza mensajes del usuario y de la IA.
+        │   ├── Modals/        # Modales de sistema (SettingsModal, HelpModal, WorkOrderCreateModal).
+        │   └── Spinner.tsx    # Indicadores de carga compartidos.
+        │
+        └── utils/             # 🛠️ HERRAMIENTAS DE SOPORTE
+            ├── permissions.ts # Matriz de permisos del frontend (espejo de permisos.py). Define quién ve cada botón o página.
+            ├── i18n.ts        # Diccionarios de internacionalización (ES/EN).
+            └── rag.ts         # Funciones auxiliares para el procesamiento de texto en el cliente.
 ```
 
 ---
 
-## 3) Requisitos previos
+## ⚙️ Configuración del entorno (variables)
 
-Instala lo siguiente:
+Antes de levantar el proyecto, debes configurar las variables de entorno. Crea los archivos `.env` en sus respectivas carpetas:
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- Docker Compose v2
-- Opcional, si vas a usar el chat RAG:
-  - [LM Studio](https://lmstudio.ai)
+### 1. Frontend — `/frontend/.env`
 
-Verifica que Docker esté activo:
+| Variable | Descripción | Ejemplo |
+|---|---|---|
+| `VITE_API_URL` | Endpoint raíz del backend | Local: `http://localhost:9000/api` · Prod: `https://api-barb.render.com/api` |
 
-```bash
-docker --version
-docker compose version
-```
+### 2. Backend — `/backend/.env`
 
----
+| Variable | Descripción | Ejemplo |
+|---|---|---|
+| `DATABASE_URL` | Cadena de conexión a PostgreSQL | `postgresql://user:pass@host/barb_db` |
+| `DEEPSEEK_API_KEY` | Credencial segura para el LLM | `sk-xxxxxxxxxxxxxxxxxxxxxxxx` |
 
-## 4) Archivo `.env` inicial
-
-Crea o ajusta el archivo `.env` en la raíz del proyecto con valores locales.
-
-### Ejemplo recomendado para desarrollo local
-
-```env
-VITE_API_URL=http://localhost:9000/api
-VITE_LM_STUDIO_URL=http://host.docker.internal:1234/v1
-```
-
-### Notas
-
-- `VITE_API_URL` debe apuntar al backend local.
-- `VITE_LM_STUDIO_URL` solo se usa si vas a conectar el backend con LM Studio.
-- Si usas una URL remota o de túnel, el frontend se compilará contra esa URL.
+> ⚠️ **Advertencia de seguridad**: Nunca hagas commit de los archivos `.env`. El `DEEPSEEK_API_KEY` debe inyectarse directamente en el dashboard del proveedor cloud (Render/Vercel), nunca en el repositorio.
 
 ---
 
-## 5) Levantar el proyecto desde cero
+## 🚀 Guía de inicialización (local development)
 
-### Paso 1: clonar o ubicarse en el proyecto
+### Opción A — Contenedores (Docker) · Recomendado
 
-```bash
-cd BARB-main
-```
-
-### Paso 2: preparar `.env`
-
-Asegúrate de que el archivo `.env` tenga al menos:
-
-```env
-VITE_API_URL=http://localhost:9000/api
-VITE_LM_STUDIO_URL=http://host.docker.internal:1234/v1
-```
-
-### Paso 3: revisar la carpeta de inicialización de PostgreSQL
-
-Confirma que el script SQL esté en la ruta que usa Docker Compose.
-
-Ejemplo esperado:
-
-```text
-init-scripts/01_tablas.sql
-```
-
-### Paso 4: construir y levantar los contenedores
-
-```bash
-docker compose up --build
-```
-
-Si prefieres dejarlo en segundo plano:
+El proyecto incluye un `docker-compose.yml` preparado para levantar todo el stack de forma aislada.
 
 ```bash
 docker compose up --build -d
-```
-
----
-
-## 6) URLs de acceso
-
-Una vez levantado el stack:
-
-- **Frontend:** http://localhost
-- **Backend:** http://localhost:9000
-- **Health check:** http://localhost:9000/health
-- **API base:** http://localhost:9000/api
-
----
-
-## 7) Verificación rápida
-
-### Backend
-
-```bash
-curl http://localhost:9000/health
-```
-
-Respuesta esperada:
-
-```json
-{
-  "status": "online",
-  "work_orders": 4,
-  "machines": 5,
-  "documents": 3
-}
-```
-
-### Frontend
-
-Abre:
-
-```text
-http://localhost
-```
-
-### Endpoints útiles
-
-```bash
-curl http://localhost:9000/api/disciplines
-curl http://localhost:9000/api/technicians
-curl http://localhost:9000/api/machines
-curl http://localhost:9000/api/work-orders
-```
-
----
-
-## 8) Base de datos y scripts SQL
-
-### Inicialización automática de PostgreSQL
-
-Docker ejecuta automáticamente los scripts que estén en:
-
-```text
-/docker-entrypoint-initdb.d
-```
-
-pero **solo la primera vez** que el volumen de datos está vacío.
-
-### Si cambias un script SQL
-
-Si modificas los archivos SQL y quieres que se vuelvan a ejecutar:
-
-```bash
-docker compose down -v
-docker compose up --build
-```
-
-### Importante sobre este proyecto
-
-El backend `rag_backend.py` crea algunas tablas con SQLAlchemy al arrancar:
-
-- `disciplines`
-- `technicians`
-- `machines`
-- `work_orders`
-
-Además, el proyecto incluye un script SQL más amplio en:
-
-```text
-initScrips/01_tablas.sql
-```
-
-Ese script está pensado para la estructura industrial completa.  
-Si quieres cargarlo manualmente, primero asegúrate de que esa carpeta esté montada dentro del contenedor de PostgreSQL.
-
-Ejemplo de ejecución manual dentro del contenedor:
-
-```bash
-docker compose exec db psql -U barb_admin -d barb_database -f /docker-entrypoint-initdb.d/01_tablas.sql
-```
-
----
-
-## 9) LM Studio y chat RAG
-
-El backend intenta conectarse a LM Studio en:
-
-```text
-http://host.docker.internal:1234/v1
-```
-
-### Si quieres usar el chat
-
-1. Instala LM Studio
-2. Carga un modelo local
-3. Inicia el servidor local en el puerto `1234`
-4. Verifica que responda
-
-```bash
-curl http://localhost:1234/v1/models
-```
-
-### Si no vas a usar LM Studio
-
-El resto del sistema funciona igual, pero los endpoints de chat devolverán error si intentan usar el modelo local y no está activo.
-
----
-
-## 10) Comandos útiles de operación
-
-### Ver logs
-
-```bash
 docker compose logs -f backend
-docker compose logs -f frontend
-docker compose logs -f db
 ```
 
-### Detener el stack
+### Opción B — Ejecución nativa (bare-metal)
 
+**Backend:**
 ```bash
-docker compose down
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --port 9000 --reload
 ```
 
-### Detener y borrar volúmenes
-
+**Frontend** (en otra terminal):
 ```bash
-docker compose down -v
-```
-
-### Reconstruir una sola imagen
-
-```bash
-docker compose build backend
-docker compose build frontend
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
 
-## 11) Auditoría resumida de Docker
+## 🗄️ Bootstrapping de base de datos (auto-seeding)
 
-### docker-compose.yml
+Para facilitar el desarrollo y los despliegues efímeros, BARB incluye un sistema de auto-sanación estructural en su startup (`main.py`):
 
-- El backend y el frontend están correctamente definidos para Docker Compose.
-- El backend expone el puerto `9000`.
-- El frontend expone el puerto `80`.
-- **Problemas detectados:**
-  - falta persistencia real para PostgreSQL porque `postgres_data` no está montado en `db`
-  - la ruta de init scripts no coincide con la carpeta real del repo
-  - las credenciales de PostgreSQL están hardcodeadas
-
-### backend/Dockerfile
-
-- La imagen base es correcta para FastAPI.
-- Instala dependencias del sistema necesarias para compilación.
-- Usa `uvicorn --reload`, útil para desarrollo.
-- **Observación:** para producción, lo normal sería quitar `--reload`.
-
-### frontend/dockerfile
-
-- El build multietapa con Node + Nginx está bien planteado.
-- Sirve el build estático en Nginx.
-- **Observación:** cualquier cambio en variables `VITE_*` exige rebuild.
-
-### backend/requirements.txt
-
-- Las dependencias están alineadas con FastAPI, SQLAlchemy, PostgreSQL y RAG.
-- No se detectó error de sintaxis en el archivo.
-
-### `.env`
-
-- Está orientado al frontend y contiene variables `VITE_*`.
-- **Recomendación:** usar valores locales para Docker, no túneles remotos, salvo que ese sea el objetivo.
+1. **Detección automática** — Al iniciar, FastAPI verifica si la tabla `usuario` existe en PostgreSQL.
+2. **Inyección de seed** — Si la BD está vacía, lee automáticamente el archivo `./initScripts/01_tablas.sql` e inyecta toda la estructura y datos de prueba.
+3. **Seguridad de credenciales** — Las contraseñas en texto plano presentes en el archivo SQL son encriptadas sobre la marcha mediante `hash_password` antes de permitir el inicio de sesión.
 
 ---
 
-## 12) Troubleshooting
+## 📐 Estándares de código y patrones de arquitectura
 
-### El frontend abre, pero no carga datos
+### 1. Gestión de peticiones y seguridad (API Wrapper)
 
-Revisa que `VITE_API_URL` apunte al backend correcto:
+🚫 **Prohibido** el uso de `fetch()` crudo en componentes React. Toda comunicación con el backend debe realizarse a través del servicio inyectado por contexto (`services/api.ts`). Esto garantiza que:
 
-```env
-VITE_API_URL=http://localhost:9000/api
-```
+- El header `Authorization: Bearer <token>` viaje siempre en cada llamada.
+- Los errores globales (como sesión expirada) intercepten la app y fuercen el logout automático.
 
-Luego reconstruye:
+### 2. Autenticación y autorización
 
-```bash
-docker compose up --build
-```
-
-### PostgreSQL no ejecuta el SQL inicial
-
-Revisa:
-
-- que la carpeta montada exista
-- que el archivo esté dentro de `/docker-entrypoint-initdb.d`
-- que el volumen no tenga datos previos
-
-Si ya habías levantado el stack:
-
-```bash
-docker compose down -v
-docker compose up --build
-```
-
-### LM Studio falla desde el backend
-
-Comprueba que el backend pueda alcanzar el host:
-
-- `host.docker.internal:1234`
-
-Si LM Studio no está activo, el endpoint `/api/chat` devolverá error de disponibilidad.
+- **Backend**: BARB no utiliza JWT sin estado. Se utiliza un enfoque seguro basado en base de datos — cada login genera un token guardado en la tabla `sesion` con un TTL de 24 horas.
+- **Permisos**: Protegidos a nivel de endpoint mediante inyección de dependencias en FastAPI (`permisos.py`) y reflejados en el frontend mediante la matriz de accesos en `utils/permissions.ts`.
 
 ---
 
-## 13) Flujo recomendado de trabajo
+## 🔧 Mantenimiento y operaciones (DevOps)
 
-1. Ajustar `.env`
-2. Levantar el stack con `docker compose up --build`
-3. Probar `http://localhost:9000/health`
-4. Abrir el frontend en `http://localhost`
-5. Ejecutar scripts SQL extra si necesitas la estructura industrial completa
-6. Revisar logs si algo falla
+### Limpieza de sesiones
+
+El backend incluye una tarea de recolección de basura en el evento de inicio. Cada vez que el servidor se reinicia, ejecuta un barrido:
+
+```sql
+DELETE FROM sesion WHERE expira_en < NOW();
+```
+
+### Hard-reset de base de datos
+
+Si los datos de QA se corrompen y necesitas restaurar la planta "Demo" de fábrica:
+
+1. Asegúrate de estar autenticado en el sistema como **Admin**.
+2. Llama al endpoint de rescate mediante un `GET` request a `/api/force-reset-db`.
+3. Esto aplicará un `DROP SCHEMA public CASCADE`, reconstruirá las tablas y reinicializará los usuarios de prueba.
+
+> ⚠️ Esta operación es **destructiva e irreversible**. Úsala únicamente en entornos de QA/Demo, nunca en producción.
 
 ---
 
-## 14) Resumen corto
+## 🔗 Enlaces útiles
 
-```bash
-docker compose up --build
-```
-
-Luego:
-
-- frontend: `http://localhost`
-- backend: `http://localhost:9000`
-- health: `http://localhost:9000/health`
-
-Si necesitas reiniciar todo desde cero:
-
-```bash
-docker compose down -v
-docker compose up --build
+- [Documentación de FastAPI](https://fastapi.tiangolo.com/)
+- [Vite Configuration](https://vitejs.dev/config/)
+- [TailwindCSS Docs](https://tailwindcss.com/docs)
