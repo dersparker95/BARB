@@ -67,7 +67,7 @@ const Menu: React.FC = () => {
   // 🔥 FIX: Extraemos api del contexto
   const { user, lang, api } = useAppContext()
   const navigate = useNavigate()
-  
+
   const t = useMemo(() => getTranslations(lang), [lang])
   const nLang = normalizeLang(lang)
 
@@ -122,7 +122,7 @@ const Menu: React.FC = () => {
   const handleUploadSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const title = uploadForm.title.trim()
-    
+
     if (!title) {
       showToast(nLang === 'en' ? '⚠️ Add a name for the document' : '⚠️ Escribe un nombre para el documento')
       return
@@ -165,12 +165,12 @@ const Menu: React.FC = () => {
 
   return (
     <div className="menu-body">
-      <div className="page-title dark:text-white">{t.menu?.title || 'Menú Principal'}</div>
+      <div className="page-title">{t.menu?.title || 'Menú Principal'}</div>
 
       <div className="menu-grid">
         <button className="menu-card" onClick={() => navigate('/docchat')}>
           <div className="menu-card-icon blue">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1a5fa8" strokeWidth="2" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" strokeWidth="2" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
               <line x1="16" y1="13" x2="8" y2="13" />
@@ -186,7 +186,7 @@ const Menu: React.FC = () => {
 
         <button className="menu-card" onClick={() => navigate('/topology')}>
           <div className="menu-card-icon green">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1a7a50" strokeWidth="2" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2" aria-hidden="true">
               <circle cx="12" cy="5" r="3" />
               <circle cx="5" cy="19" r="3" />
               <circle cx="19" cy="19" r="3" />
@@ -203,9 +203,9 @@ const Menu: React.FC = () => {
 
         {user?.role === 'admin' && (
           <>
-            <button className="menu-card admin-only" onClick={() => navigate('/dashboard')} style={{ borderColor: 'rgba(94,61,179,0.3)' }}>
+            <button className="menu-card admin-only menu-card--purple" onClick={() => navigate('/dashboard')}>
               <div className="menu-card-icon purple">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#5e3db3" strokeWidth="2" aria-hidden="true">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" strokeWidth="2" aria-hidden="true">
                   <rect x="3" y="3" width="7" height="7" />
                   <rect x="14" y="3" width="7" height="7" />
                   <rect x="3" y="14" width="7" height="7" />
@@ -215,17 +215,15 @@ const Menu: React.FC = () => {
               <div className="menu-card-text">
                 <h3>
                   {t.menu?.dashboardTitle || 'Dashboard'}{' '}
-                  <span style={{ fontSize: '10px', background: 'var(--purple-bg)', color: 'var(--purple)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600, marginLeft: '4px' }}>
-                    {t.menu?.adminBadge || 'ADMIN'}
-                  </span>
+                  <span className="menu-card-badge">{t.menu?.adminBadge || 'ADMIN'}</span>
                 </h3>
                 <p>{t.menu?.dashboardDescription || 'Métricas y reportes'}</p>
               </div>
             </button>
 
-            <button className="menu-card admin-only" onClick={openUpload} style={{ borderColor: 'rgba(26,95,168,0.22)' }}>
+            <button className="menu-card admin-only menu-card--blue" onClick={openUpload}>
               <div className="menu-card-icon blue">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1a5fa8" strokeWidth="2" aria-hidden="true">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" strokeWidth="2" aria-hidden="true">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />
@@ -242,19 +240,19 @@ const Menu: React.FC = () => {
 
       {uploadOpen && (
         <div className="modal-overlay open" onClick={event => { if (event.target === event.currentTarget) closeUpload() }} role="presentation">
-          <div className="modal-box" style={{ maxWidth: 620 }} role="dialog" aria-modal="true" aria-labelledby="modal-upload-title">
+          <div className="modal-box modal-box--wide" role="dialog" aria-modal="true" aria-labelledby="modal-upload-title">
             <div className="modal-header">
               <div>
                 <h2 id="modal-upload-title">{t.menu?.uploadTitle || (nLang === 'en' ? 'Document upload' : 'Subida de documentos')}</h2>
-                <div style={{ marginTop: 4, fontSize: 12, color: 'var(--ink3)' }}>
+                <div className="modal-header-sub">
                   {t.menu?.uploadDescription || 'Sube archivos al repositorio documental'}
                 </div>
               </div>
               <button className="modal-close" onClick={closeUpload} aria-label={t.common?.close || 'Cerrar'} disabled={isUploading}>✕</button>
             </div>
 
-            <form onSubmit={handleUploadSubmit} className="modal-body" style={{ display: 'grid', gap: 14 }}>
-              <div style={{ display: 'grid', gap: 6 }}>
+            <form onSubmit={handleUploadSubmit} className="modal-body upload-form">
+              <div className="upload-field">
                 <label className="sr-only" htmlFor="upload-title">{t.common?.documentName || 'Nombre'}</label>
                 <input
                   id="upload-title"
@@ -267,7 +265,7 @@ const Menu: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gap: 6 }}>
+              <div className="upload-field">
                 <label className="sr-only" htmlFor="upload-discipline">{t.common?.discipline || 'Disciplina'}</label>
                 <select
                   id="upload-discipline"
@@ -286,7 +284,7 @@ const Menu: React.FC = () => {
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gap: 6 }}>
+              <div className="upload-field">
                 <label className="sr-only" htmlFor="upload-machine">{t.common?.machine || 'Máquina'}</label>
                 <select
                   id="upload-machine"
@@ -297,8 +295,8 @@ const Menu: React.FC = () => {
                   disabled={isUploading || uploadForm.discipline === 'all'}
                 >
                   <option value="">
-                    {uploadForm.discipline === 'all' 
-                      ? (nLang === 'en' ? 'Select a discipline first' : 'Selecciona primero una disciplina') 
+                    {uploadForm.discipline === 'all'
+                      ? (nLang === 'en' ? 'Select a discipline first' : 'Selecciona primero una disciplina')
                       : (nLang === 'en' ? 'Select machine...' : 'Seleccionar máquina...')}
                   </option>
                   {machineOptions.map(option => (
@@ -307,23 +305,22 @@ const Menu: React.FC = () => {
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gap: 6 }}>
+              <div className="upload-field">
                 <label className="sr-only" htmlFor="upload-notes">{t.common?.internalNotes || 'Notas'}</label>
                 <textarea
                   id="upload-notes"
-                  className="form-input"
+                  className="form-input form-input--resizable"
                   value={uploadForm.notes}
                   onChange={event => setUploadForm(prev => ({ ...prev, notes: event.target.value }))}
                   placeholder={t.common?.internalNotes || (nLang === 'en' ? 'Internal notes' : 'Notas internas')}
                   aria-label={t.common?.internalNotes || 'Notas'}
                   rows={4}
-                  style={{ resize: 'vertical', minHeight: 96 }}
                   disabled={isUploading}
                 />
               </div>
 
-              <div style={{ display: 'grid', gap: 6 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)' }}>{t.common?.file || 'Archivo'}</div>
+              <div className="upload-field">
+                <div className="upload-field-label">{t.common?.file || 'Archivo'}</div>
 
                 <div
                   role="button"
@@ -341,40 +338,29 @@ const Menu: React.FC = () => {
                     event.preventDefault(); setIsDragActive(false); if (isUploading) return;
                     handleFiles(event.dataTransfer.files)
                   }}
-                  style={{
-                    border: '2px dashed var(--border)', borderRadius: 16, padding: 16, minHeight: 148,
-                    background: isDragActive ? 'var(--blue-bg)' : 'var(--surface)',
-                    boxShadow: isDragActive ? '0 0 0 2px rgba(26,95,168,0.12) inset' : 'none',
-                    cursor: isUploading ? 'not-allowed' : 'pointer',
-                    transition: 'background 160ms ease, box-shadow 160ms ease, border-color 160ms ease',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}
+                  className={`upload-dropzone ${isDragActive ? 'upload-dropzone--active' : ''} ${isUploading ? 'upload-dropzone--disabled' : ''}`}
                 >
                   <input ref={fileInputRef} type="file" accept={ACCEPTED_FILE_TYPES} className="hidden" disabled={isUploading}
                     onChange={event => { handleFiles(event.target.files); event.currentTarget.value = '' }}
                   />
 
                   {!uploadForm.file ? (
-                    <div style={{ textAlign: 'center', display: 'grid', gap: 8, justifyItems: 'center' }}>
-                      <div aria-hidden="true" style={{ width: 56, height: 56, borderRadius: 999, border: '2px solid var(--blue)', background: 'white', display: 'grid', placeItems: 'center', color: 'var(--blue)', fontSize: 22, boxShadow: '4px 4px 0 0 rgba(0,0,0,0.08)' }}>
-                        ⤴
-                      </div>
-                      <div style={{ fontWeight: 700, color: 'var(--ink)' }}>{nLang === 'en' ? 'Drag and drop' : 'Arrastra tu archivo aquí'}</div>
-                      <div style={{ fontSize: 12, color: 'var(--ink3)' }}>{nLang === 'en' ? 'or click to select' : 'o haz clic para seleccionar'}</div>
+                    <div className="upload-dropzone-empty">
+                      <div className="upload-dropzone-icon" aria-hidden="true">⤴</div>
+                      <div className="upload-dropzone-title">{nLang === 'en' ? 'Drag and drop' : 'Arrastra tu archivo aquí'}</div>
+                      <div className="upload-dropzone-hint">{nLang === 'en' ? 'or click to select' : 'o haz clic para seleccionar'}</div>
                     </div>
                   ) : (
-                    <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-                        <div aria-hidden="true" style={{ width: 54, height: 54, borderRadius: 14, border: '2px solid var(--ink)', background: 'white', display: 'grid', placeItems: 'center', fontSize: 22, boxShadow: '5px 5px 0 0 rgba(0,0,0,0.1)', flexShrink: 0 }}>
-                          📎
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 800, color: 'var(--ink)', lineHeight: 1.3, wordBreak: 'break-word' }}>{uploadForm.file.name}</div>
-                          <div style={{ marginTop: 4, fontSize: 12, color: 'var(--ink3)' }}>{formatFileSize(uploadForm.file.size)}</div>
+                    <div className="upload-file-row">
+                      <div className="upload-file-info">
+                        <div className="upload-file-icon" aria-hidden="true">📎</div>
+                        <div className="upload-file-meta">
+                          <div className="upload-file-name">{uploadForm.file.name}</div>
+                          <div className="upload-file-size">{formatFileSize(uploadForm.file.size)}</div>
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <div className="upload-file-actions">
                         <button type="button" className="btn btn-outline btn-sm" disabled={isUploading} onClick={event => { event.stopPropagation(); fileInputRef.current?.click() }}>
                           {t.common?.replace || (nLang === 'en' ? 'Change' : 'Cambiar')}
                         </button>
@@ -388,19 +374,19 @@ const Menu: React.FC = () => {
               </div>
 
               {uploadError && (
-                <div role="alert" style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.08)', color: '#b91c1c', fontSize: 12, lineHeight: 1.5 }}>
+                <div role="alert" className="form-error-banner">
                   {uploadError}
                 </div>
               )}
 
-              <div style={{ fontSize: 12, color: 'var(--ink3)' }}>
+              <div className="upload-hint">
                 {isUploading ? (t.common?.processing || 'Preparando...') : (t.menu?.uploadHint || 'El archivo se guardará seguro.')}
               </div>
 
-              <div className="modal-footer" style={{ padding: 0, borderTop: 'none', marginTop: 4 }}>
+              <div className="modal-footer modal-footer--plain">
                 <button className="btn btn-primary" type="submit" disabled={isUploading || !canSubmit}>
                   {isUploading ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <span className="btn-loading-content">
                       <span className="animate-spin" aria-hidden="true">⟳</span>
                       {t.common?.loading || (nLang === 'en' ? 'Uploading…' : 'Subiendo…')}
                     </span>

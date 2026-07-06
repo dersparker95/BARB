@@ -66,8 +66,8 @@ const Login: React.FC = () => {
   const showPassText = t.login?.showPassword || 'Mostrar contraseña'
 
   return (
-    <div className="login-screen min-h-[100dvh] flex flex-col items-center justify-center">
-      <div className="login-theme-toggle absolute top-4 right-4">
+    <div className="login-screen">
+      <div className="login-theme-toggle">
         <button
           className="icon-btn"
           onClick={() => setDark(!dark)}

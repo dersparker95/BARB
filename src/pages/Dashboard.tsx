@@ -36,7 +36,8 @@ interface ApiWorkOrder {
 
 interface ApiMachine { id: number; name: string; discipline_id: number; plant_id?: number }
 
-const CHART_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316', '#84cc16']
+// Paleta de gráficos alineada al Design System (var() funciona como atributo SVG en recharts)
+const CHART_PALETTE = ['var(--blue)', 'var(--green)', 'var(--amber)', 'var(--purple)', 'var(--red)', 'var(--cyan)', 'var(--accent)', 'var(--online)']
 
 const ensureUTC = (d?: string | null) => { if (!d) return undefined; return d.endsWith('Z') || d.includes('+') ? d : d + 'Z' }
 
@@ -253,7 +254,7 @@ export default function Dashboard() {
                   <XAxis dataKey="machineName" tick={{ fontSize: 10, fill: 'var(--ink3)' }} angle={-25} textAnchor="end" height={60} />
                   <YAxis tick={{ fontSize: 10, fill: 'var(--ink3)' }} tickFormatter={v => `${v}m`} />
                   <Tooltip
-                    cursor={{ fill: 'rgba(0,0,0,0.05)' }}
+                    cursor={{ fill: 'var(--surface2)' }}
                     content={({ payload }) => payload?.length ? (
                       <div className="dash-tooltip">
                         <div className="dash-tooltip-title">{payload[0].payload.machineName}</div>
