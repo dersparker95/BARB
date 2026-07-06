@@ -13,7 +13,6 @@ import FinancialDashboard from '../components/FinancialDashboard'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
 import { BARB_BUSINESS } from '../hooks/useFinancialStats'
-import { canPerformAction } from '../utils/permissions'
 
 interface ApiWorkOrder {
   id?: string | number; ot_id?: string | number;
@@ -88,7 +87,7 @@ const Block: React.FC<{ title: string; subtitle?: string; children: React.ReactN
 )
 
 export default function Dashboard() {
-  const { lang, apiBase, api, user } = useAppContext()
+  const { lang, apiBase, api } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
 
   const [tickets, setTickets] = useState<WorkOrder[]>([])
@@ -334,9 +333,7 @@ export default function Dashboard() {
             <div className="dash-filters-actions">
               <button className="btn btn-outline" onClick={handleExportCsv}>{t.common?.csv || 'CSV'}</button>
               <button className="btn btn-outline" onClick={handleExportXlsx}>{t.common?.xlsx || 'XLSX'}</button>
-              {canPerformAction(user?.role, 'crear_ot') && (
-                <button className="btn btn-primary" onClick={() => setIsCreateOpen(true)}>+ {t.dashboard?.createWorkOrder || 'Crear'}</button>
-              )}
+              <button className="btn btn-primary" onClick={() => setIsCreateOpen(true)}>+ {t.dashboard?.createWorkOrder || 'Crear'}</button>
             </div>
           </div>
         )}
