@@ -77,7 +77,7 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
   const [machineQuery, setMachineQuery] = useState('')
   const [isMachineDropdownOpen, setIsMachineDropdownOpen] = useState(false)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
-
+  
   const backdropDownOnBackdropRef = useRef(false)
   const selectedDisciplina = form.disciplinaId
 
@@ -95,9 +95,9 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
         const [disciplinesRes, techniciansRes, machinesRes] = await Promise.all([
           api.disciplines(), api.technicians(), api.machines()
         ])
-
+        
         if (cancelled) return
-
+        
         setDisciplinas(Array.isArray(disciplinesRes) ? disciplinesRes.map((d: any) => ({ id: String(d.id ?? ''), label: String(d.name ?? d.label ?? '') })).filter(d => d.id && d.label) : [])
         setTecnicos(Array.isArray(techniciansRes) ? techniciansRes.map((t: any) => ({ id: String(t.id ?? ''), label: String(t.name ?? t.label ?? '') })).filter(t => t.id && t.label) : [])
         setMachines(Array.isArray(machinesRes) ? machinesRes.map((m: any) => ({ id: String(m.id ?? ''), label: String(m.name ?? m.label ?? ''), disciplinaId: String(m.disciplinaId ?? m.discipline_id ?? '') })).filter(m => m.id && m.label && m.disciplinaId) : [])
@@ -118,10 +118,10 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
         if (!raw) return
         const parsed = JSON.parse(raw)
         if (!parsed?.form) return
-
+        
         const { photoDataUrl, photoName, ...cachedRest } = parsed.form
         if (!cancelled) setForm(prev => ({ ...prev, ...cachedRest, photoFile: undefined }))
-
+        
         if (photoDataUrl && photoName) {
           const file = await dataUrlToFile(photoDataUrl, photoName)
           if (!cancelled) {
@@ -186,12 +186,12 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!canSubmit) return
-
+    
     setSubmitting(true)
     setFormError('')
     try {
       await onCreate({ ...form, title: safeTrim(form.title), description: safeTrim(form.description) })
-      showToast(t.common?.success || 'Orden de Trabajo creada exitosamente', 'success')
+      showToast(t.common?.success || 'Orden de Trabajo creada exitosamente', 'success') 
       localStorage.removeItem(STORAGE_KEY)
       onClose()
     } catch (error) {
@@ -217,56 +217,56 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
 
   return (
     <div className="modal-overlay open" onMouseDown={e => backdropDownOnBackdropRef.current = e.target === e.currentTarget} onMouseUp={e => { if (backdropDownOnBackdropRef.current && e.target === e.currentTarget) onClose(); backdropDownOnBackdropRef.current = false }} role="presentation">
-      <div className="modal-box modal-box--form" role="dialog" aria-labelledby="modal-title">
+      <div className="modal-box w-full max-w-lg flex flex-col" style={{ maxWidth: 780, maxHeight: '90vh' }} role="dialog" aria-labelledby="modal-title">
         <div className="modal-header shrink-0">
           <div>
             <h2 id="modal-title">{t.dashboard?.createWorkOrder || 'Crear OT'}</h2>
-            <div className="modal-header-sub">{t.common?.fillDetails || 'Ingresa los detalles para generar y asignar la orden.'}</div>
+            <div style={{ marginTop: 4, fontSize: 12, color: 'var(--ink3)' }}>{t.common?.fillDetails || 'Ingresa los detalles para generar y asignar la orden.'}</div>
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label={t.common?.close || 'Cerrar'}>✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col min-h-0">
-          <div className="modal-body modal-body--form flex-1">
+          <div className="modal-body flex-1" style={{ overflowY: 'auto', padding: '16px 20px' }}>
             {formError && (
-              <div className="form-error-banner" role="alert">
+              <div style={{ padding: 12, background: '#fee2e2', border: '1px solid #f87171', color: '#b91c1c', borderRadius: 8, marginBottom: 16, fontSize: 13 }} role="alert">
                 {formError}
               </div>
             )}
-
-            <div className="wo-form-grid">
+            
+            <div className="ot-detail-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               <div className="ot-detail-field">
                 <div className="ot-detail-label">{t.common?.title || 'Título'}</div>
-                <input className="form-input" value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} placeholder={lang === 'en' ? "E.g. Motor D1 vibration inspection" : "Ej. Inspección de vibración motor D1"} required />
+                <input className="form-input py-3" value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} placeholder={lang === 'en' ? "E.g. Motor D1 vibration inspection" : "Ej. Inspección de vibración motor D1"} required />
               </div>
 
               <div className="ot-detail-field">
                 <div className="ot-detail-label">{lang === 'en' ? 'Discipline' : 'Disciplina'}</div>
-                <select className="form-select" value={form.disciplinaId} onChange={e => setForm(prev => ({ ...prev, disciplinaId: e.target.value, machine: '' }))} required>
+                <select className="form-select py-3" value={form.disciplinaId} onChange={e => setForm(prev => ({ ...prev, disciplinaId: e.target.value, machine: '' }))} required>
                   <option value="">{lang === 'en' ? 'Select a discipline' : 'Selecciona una disciplina'}</option>
                   {disciplinas.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
                 </select>
               </div>
 
-              <div className="ot-detail-field ot-detail-field--relative">
+              <div className="ot-detail-field" style={{ position: 'relative' }}>
                 <div className="ot-detail-label">{t.common?.machine || 'Máquina'}</div>
-                <input
-                  className="form-input"
-                  value={machineQuery}
-                  onChange={e => { setMachineQuery(e.target.value); setIsMachineDropdownOpen(true) }}
-                  placeholder={selectedDisciplina ? (t.common?.search || 'Buscar...') : (lang === 'en' ? 'Select a discipline first' : 'Selecciona una disciplina')}
-                  disabled={!selectedDisciplina}
-                  onFocus={() => { if (selectedDisciplina) setIsMachineDropdownOpen(true) }}
-                  onClick={() => { if (selectedDisciplina) setIsMachineDropdownOpen(true) }}
+                <input 
+                  className="form-input py-3" 
+                  value={machineQuery} 
+                  onChange={e => { setMachineQuery(e.target.value); setIsMachineDropdownOpen(true) }} 
+                  placeholder={selectedDisciplina ? (t.common?.search || 'Buscar...') : (lang === 'en' ? 'Select a discipline first' : 'Selecciona una disciplina')} 
+                  disabled={!selectedDisciplina} 
+                  onFocus={() => { if (selectedDisciplina) setIsMachineDropdownOpen(true) }} 
+                  onClick={() => { if (selectedDisciplina) setIsMachineDropdownOpen(true) }} 
                   required
                 />
                 {showMachineDropdown && (
-                  <div className="wo-machine-dropdown">
+                  <div className="absolute left-0 right-0 z-50 mt-1 shadow-lg rounded-md" style={{ background: 'var(--surface)', border: '1px solid var(--border)', maxHeight: 220, overflow: 'auto' }}>
                     {machineFilteredByQuery.length === 0 ? (
-                      <div className="wo-machine-dropdown-empty">{lang === 'en' ? 'No results' : 'Sin resultados'}</div>
+                      <div className="px-3 py-4 text-xs" style={{ color: 'var(--ink3)' }}>{lang === 'en' ? 'No results' : 'Sin resultados'}</div>
                     ) : (
                       machineFilteredByQuery.map(m => (
-                        <button type="button" key={m.id} className="wo-machine-dropdown-item" onClick={() => { setForm(prev => ({ ...prev, machine: m.id })); setMachineQuery(m.label); setIsMachineDropdownOpen(false) }}>
+                        <button type="button" key={m.id} className="w-full text-left px-3 py-3" style={{ borderBottom: '1px solid var(--border)', color: 'var(--ink1)', fontSize: 14 }} onClick={() => { setForm(prev => ({ ...prev, machine: m.id })); setMachineQuery(m.label); setIsMachineDropdownOpen(false) }}>
                           {m.label}
                         </button>
                       ))
@@ -277,7 +277,7 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
 
               <div className="ot-detail-field">
                 <div className="ot-detail-label">{t.common?.technician || 'Técnico Asignado'}</div>
-                <select className="form-select" value={form.tecnicoId} onChange={e => setForm(prev => ({ ...prev, tecnicoId: e.target.value }))} required>
+                <select className="form-select py-3" value={form.tecnicoId} onChange={e => setForm(prev => ({ ...prev, tecnicoId: e.target.value }))} required>
                   <option value="">{lang === 'en' ? 'Select a technician' : 'Selecciona un técnico'}</option>
                   {tecnicos.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                 </select>
@@ -285,7 +285,7 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
 
               <div className="ot-detail-field">
                 <div className="ot-detail-label">{t.common?.priority || 'Prioridad'}</div>
-                <select className="form-select" value={form.priority} onChange={e => setForm(prev => ({ ...prev, priority: e.target.value as WorkOrderPriority }))}>
+                <select className="form-select py-3" value={form.priority} onChange={e => setForm(prev => ({ ...prev, priority: e.target.value as WorkOrderPriority }))}>
                   <option value="low">{t.common?.low || 'Baja'}</option>
                   <option value="medium">{t.common?.medium || 'Media'}</option>
                   <option value="high">{t.common?.high || 'Alta'}</option>
@@ -295,7 +295,7 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
 
               <div className="ot-detail-field">
                 <div className="ot-detail-label">{t.common?.status || 'Estado Inicial'}</div>
-                <select className="form-select" value={form.status} onChange={e => setForm(prev => ({ ...prev, status: e.target.value as WorkOrderStatus }))}>
+                <select className="form-select py-3" value={form.status} onChange={e => setForm(prev => ({ ...prev, status: e.target.value as WorkOrderStatus }))}>
                   <option value="open">{t.statuses?.open || 'Abierto'}</option>
                   <option value="in_progress">{t.statuses?.in_progress || 'En Progreso'}</option>
                   <option value="done">{t.statuses?.done || 'Hecho'}</option>
@@ -304,33 +304,33 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
               </div>
             </div>
 
-            <div className="wo-form-section">
-              <div className="ot-detail-label wo-form-label">{t.common?.description || 'Descripción'}</div>
-              <textarea className="report-textarea" rows={4} value={form.description} onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))} placeholder={lang === 'en' ? "Describe the issue..." : "Describe la falla..."} required />
+            <div style={{ marginTop: 16 }}>
+              <div className="ot-detail-label" style={{ marginBottom: 6 }}>{t.common?.description || 'Descripción'}</div>
+              <textarea className="report-textarea py-3" rows={4} value={form.description} onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))} placeholder={lang === 'en' ? "Describe the issue..." : "Describe la falla..."} required />
             </div>
 
-            <div className="wo-form-section">
-              <div className="ot-detail-label wo-form-label">{lang === 'en' ? 'Issue Photo (optional)' : 'Foto de la falla (opcional)'}</div>
-              <div className="wo-photo-row">
-                <label className="btn btn-outline">
+            <div style={{ marginTop: 16 }}>
+              <div className="ot-detail-label" style={{ marginBottom: 6 }}>{lang === 'en' ? 'Issue Photo (optional)' : 'Foto de la falla (opcional)'}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <label className="btn btn-outline py-2 cursor-pointer inline-flex items-center">
                   📷 {lang === 'en' ? 'Attach' : 'Adjuntar'}
                   <input type="file" accept="image/*" capture="environment" className="hidden" onChange={async e => await handlePhotoSelected(e.target.files?.[0] ?? null)} />
                 </label>
                 {photoPreview ? (
-                  <div className="wo-photo-preview">
-                    <img src={photoPreview} alt="Vista previa" />
+                  <div style={{ width: 56, height: 56, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                    <img src={photoPreview} alt="Vista previa" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
-                ) : <div className="wo-photo-empty">{lang === 'en' ? 'No photo' : 'Sin foto'}</div>}
+                ) : <div style={{ fontSize: 12, color: 'var(--ink3)' }}>{lang === 'en' ? 'No photo' : 'Sin foto'}</div>}
               </div>
             </div>
           </div>
 
-          <div className="modal-footer modal-footer--split shrink-0">
-            <div className="flex gap-2">
+          <div className="modal-footer shrink-0" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" className="btn btn-outline" onClick={onClose}>{t.common?.cancel || 'Cancelar'}</button>
               <button type="button" className="btn" onClick={() => { setForm({ ...INITIAL_FORM, photoFile: undefined }); setMachineQuery(''); setPhotoPreview(null); localStorage.removeItem(STORAGE_KEY) }}>{lang === 'en' ? 'Clear' : 'Limpiar'}</button>
             </div>
-            <button type="submit" className="btn btn-primary wo-submit-btn" disabled={submitting || !canSubmit}>
+            <button type="submit" className="btn btn-primary" disabled={submitting || !canSubmit} style={{ minWidth: 120 }}>
               {submitting ? (t.common?.loading || 'Guardando...') : (t.dashboard?.createWorkOrder || 'Crear OT')}
             </button>
           </div>
