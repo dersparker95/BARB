@@ -1,9 +1,18 @@
 // @ts-nocheck
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations, normalizeLang } from '../utils/i18n'
 import { showToast } from '../components/Toast'
+
+// =============================================================================
+// TIPOS
+// =============================================================================
 
 type UploadCategory = 'all' | 'electrical' | 'mechanical' | 'hydraulic' | 'pneumatic' | 'automation'
 
@@ -15,6 +24,12 @@ interface UploadFormState {
   file: File | null
 }
 
+type MachineOption = { value: string; label: string }
+
+// =============================================================================
+// CONSTANTES
+// =============================================================================
+
 const EMPTY_UPLOAD: UploadFormState = {
   title: '',
   discipline: 'all',
@@ -24,8 +39,6 @@ const EMPTY_UPLOAD: UploadFormState = {
 }
 
 const ACCEPTED_FILE_TYPES = '.pdf,.doc,.docx,.txt,.md,.xls,.xlsx,.png,.jpg,.jpeg'
-
-type MachineOption = { value: string; label: string }
 
 const MACHINE_OPTIONS_BY_DISCIPLINE: Record<Exclude<UploadCategory, 'all'>, MachineOption[]> = {
   electrical: [
@@ -52,6 +65,10 @@ const MACHINE_OPTIONS_BY_DISCIPLINE: Record<Exclude<UploadCategory, 'all'>, Mach
   ],
 }
 
+// =============================================================================
+// UTILIDADES
+// =============================================================================
+
 const getMachineOptions = (discipline: UploadCategory): MachineOption[] => {
   if (discipline === 'all') return []
   return MACHINE_OPTIONS_BY_DISCIPLINE[discipline]
@@ -63,13 +80,20 @@ const formatFileSize = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+// =============================================================================
+// COMPONENTE PRINCIPAL: MENU
+// =============================================================================
+
 const Menu: React.FC = () => {
-  // 🔥 FIX: Extraemos api del contexto
   const { user, lang, api } = useAppContext()
   const navigate = useNavigate()
 
   const t = useMemo(() => getTranslations(lang), [lang])
   const nLang = normalizeLang(lang)
+
+  // ---------------------------------------------------------------------
+  // Estados del formulario de subida de documentos
+  // ---------------------------------------------------------------------
 
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadForm, setUploadForm] = useState<UploadFormState>(EMPTY_UPLOAD)
@@ -78,6 +102,10 @@ const Menu: React.FC = () => {
   const [uploadError, setUploadError] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // ---------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------
 
   const openUpload = () => {
     setUploadForm(EMPTY_UPLOAD)
@@ -147,7 +175,8 @@ const Menu: React.FC = () => {
       formData.append('machine', uploadForm.machine)
       formData.append('notes', uploadForm.notes.trim())
 
-      // 🔥 FIX: Utilizamos el endpoint nativo de tu api.ts con protección Bearer
+      // Usa el endpoint de api.chat.documents, que ya adjunta el token Bearer,
+      // en vez de un fetch manual.
       await api.chat.documents(formData)
 
       showToast(t.common?.success || '📄 Documento enviado correctamente')
@@ -162,6 +191,10 @@ const Menu: React.FC = () => {
       setIsUploading(false)
     }
   }
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   return (
     <div className="menu-body">

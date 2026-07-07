@@ -1,4 +1,9 @@
 // @ts-nocheck
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useState, useMemo } from 'react'
 import { Banknote, CheckCircle, TimerReset, Clock } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, Cell } from 'recharts'
@@ -6,10 +11,19 @@ import useFinancialStats, { BARB_BUSINESS } from '../hooks/useFinancialStats'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
 
+// =============================================================================
+// UTILIDADES Y CONSTANTES
+// =============================================================================
+
 const fmtUSD = (v) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v || 0)
 
-// Paleta de gráficos alineada al Design System (var() funciona como atributo SVG en recharts)
+// Paleta de gráficos: usa tokens del Design System en vez de hex, ya que recharts
+// acepta var() como valor válido de stroke/fill en sus props SVG.
 const CHART_COLORS = ['var(--blue)', 'var(--green)', 'var(--amber)', 'var(--purple)', 'var(--red)', 'var(--cyan)']
+
+// =============================================================================
+// SUBCOMPONENTES
+// =============================================================================
 
 function Badge({ text, type }) {
   return <span className={`fin-badge ${type === 'est' ? 'fin-badge--est' : 'fin-badge--real'}`}>{text}</span>
@@ -33,9 +47,17 @@ function StatCard({ icon: Icon, label, value, subtitle, colorVariant, badgeType,
   )
 }
 
+// =============================================================================
+// COMPONENTE PRINCIPAL: FINANCIAL DASHBOARD
+// =============================================================================
+
 export default function FinancialDashboard({ timeRange }) {
   const { lang, api } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
+
+  // ---------------------------------------------------------------------
+  // Datos y estado derivado
+  // ---------------------------------------------------------------------
 
   const { financials, trend14Days, machines, isLoading } = useFinancialStats(timeRange, api)
   const [machineView, setMachineView] = useState('ots')
@@ -60,6 +82,10 @@ export default function FinancialDashboard({ timeRange }) {
     : (t.financial?.mttrOptimal || 'Óptimo')
 
   if (isLoading) return <div className="fin-loading">{t.common?.loading || 'Cargando...'}</div>
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   return (
     <section className="fin-section">

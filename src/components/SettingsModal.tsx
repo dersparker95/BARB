@@ -1,7 +1,15 @@
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useEffect, useMemo, useState } from 'react'
 import { useAppContext } from '../context/AppContext'
 import { showToast } from './Toast'
 import { getTranslations, normalizeLang } from '../utils/i18n'
+
+// =============================================================================
+// COMPONENTE PRINCIPAL: SETTINGS MODAL
+// =============================================================================
 
 const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const {
@@ -18,7 +26,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
   const [localApi, setLocalApi] = useState(apiBase)
   const [localLang, setLocalLang] = useState(normalizeLang(lang))
 
-  // Estado para bloquear el botón mientras se hace el ping real al servidor
+  // Bloquea el botón de prueba mientras la petición de health-check está en curso.
   const [isTesting, setIsTesting] = useState(false)
 
   useEffect(() => {
@@ -28,6 +36,10 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
   }, [apiBase, lang, isOpen])
 
   if (!isOpen) return null
+
+  // ---------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------
 
   const handleSave = () => {
     const nextApi = localApi.trim()
@@ -58,6 +70,10 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
     setIsTesting(false)
     showToast(`API: ${apiStatus}`)
   }
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   return (
     <div className="modal-overlay open" onClick={(event) => { if (event.target === event.currentTarget) onClose() }}>

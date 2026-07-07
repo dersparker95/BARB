@@ -1,6 +1,15 @@
 // @ts-nocheck
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useState } from 'react'
 import { Message, SourceHit } from '../types'
+
+// =============================================================================
+// COMPONENTE: INDICADOR DE ESCRITURA
+// =============================================================================
 
 export const Thinking: React.FC = () => (
   <div className="thinking">
@@ -9,6 +18,10 @@ export const Thinking: React.FC = () => (
     <span />
   </div>
 )
+
+// =============================================================================
+// COMPONENTE: FUENTES CITADAS
+// =============================================================================
 
 const Sources: React.FC<{ sources?: SourceHit[]; elapsed?: string; fromAPI?: boolean }> = ({ sources, elapsed, fromAPI }) => {
   if (!sources || sources.length === 0) {
@@ -29,20 +42,23 @@ const Sources: React.FC<{ sources?: SourceHit[]; elapsed?: string; fromAPI?: boo
   )
 }
 
-// 🔥 Escudo de Seguridad: Evitamos dangerouslySetInnerHTML para prevenir ataques XSS
-// y renderizamos Markdown básico (negritas y saltos de línea) de forma segura en React
+// =============================================================================
+// COMPONENTE: MARKDOWN SEGURO
+// =============================================================================
+
+// Renderiza un subconjunto seguro de Markdown (negritas y saltos de línea) sin
+// recurrir a dangerouslySetInnerHTML, evitando así vectores de XSS.
 const SafeMarkdown: React.FC<{ text: string }> = ({ text }) => {
   if (!text) return null;
   return (
     <>
       {text.split('\n').map((line, lineIndex) => {
-        // Separamos el texto buscando el patrón de **negritas**
+        // Aísla los segmentos delimitados por **negritas** del resto del texto.
         const parts = line.split(/(\*\*.*?\*\*)/g);
         return (
           <span key={lineIndex} className="md-line">
             {parts.map((part, partIndex) => {
               if (part.startsWith('**') && part.endsWith('**')) {
-                // Removemos los asteriscos y ponemos la etiqueta fuerte segura
                 return <strong key={partIndex} className="md-strong">{part.slice(2, -2)}</strong>;
               }
               return part;
@@ -54,6 +70,10 @@ const SafeMarkdown: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
+// =============================================================================
+// COMPONENTE PRINCIPAL: CHAT BUBBLE
+// =============================================================================
+
 const ChatBubble: React.FC<{
   msg: Message;
   side?: 'user' | 'bot';
@@ -64,17 +84,17 @@ const ChatBubble: React.FC<{
 }> = ({ msg, side = 'bot', sources, elapsed, fromAPI, onFeedback }) => {
   const isUser = side === 'user'
 
-  // Leemos las fuentes desde msg.sources (RAG Backend) o desde el prop
+  // Prioriza las fuentes embebidas por el backend RAG sobre las recibidas por prop.
   const finalSources = msg.sources || sources || []
 
-  // Validación de fecha segura
+  // Usa la hora actual si el mensaje no trae timestamp.
   const timeString = new Date(msg.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-  // Estado local para manejar el feedback visualmente de inmediato
+  // Refleja el feedback de inmediato en la UI mientras se confirma en el backend.
   const [feedback, setFeedback] = useState<'good' | 'bad' | null>(null)
 
   const handleFeedback = (type: 'good' | 'bad') => {
-    if (feedback) return; // Solo permite votar una vez
+    if (feedback) return; // Restringe el voto a una sola vez por mensaje.
     setFeedback(type);
     if (onFeedback) {
       onFeedback(msg, type);
@@ -86,7 +106,6 @@ const ChatBubble: React.FC<{
       <div className={`msg-avatar ${side}`}>{isUser ? 'OP' : '🤖'}</div>
       <div className="msg-content">
         <div className="msg-bubble">
-          {/* Usamos el parser seguro en lugar del HTML crudo */}
           <SafeMarkdown text={msg.content || ''} />
 
           {finalSources.length > 0 && <Sources sources={finalSources} elapsed={elapsed} fromAPI={fromAPI} />}
@@ -95,7 +114,7 @@ const ChatBubble: React.FC<{
         <div className="msg-footer">
           <span className="msg-time">{timeString}</span>
 
-          {/* Botones de Feedback (Solo visibles en los mensajes de BARB) */}
+          {/* Los botones de feedback solo aplican a respuestas de BARB, no a mensajes del usuario. */}
           {!isUser && (
             <div className="feedback-actions">
               {feedback === 'good' && <span className="feedback-msg feedback-msg--good">¡Gracias por el feedback!</span>}

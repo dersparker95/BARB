@@ -1,8 +1,17 @@
 // @ts-nocheck
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useRef, useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '../context/AppContext'
 import { useNavigate } from 'react-router-dom'
 import { getTranslations } from '../utils/i18n'
+
+// =============================================================================
+// TIPOS
+// =============================================================================
 
 type TopologyNode = {
   nodo_id: number | string
@@ -22,9 +31,17 @@ type TopologyEdge = {
   tipo_relacion: string
 }
 
+// =============================================================================
+// CONSTANTES
+// =============================================================================
+
 const INITIAL_VB = { x: -100, y: -50, w: 1200, h: 800 }
 const NODE_W = 130
 const NODE_H = 85
+
+// =============================================================================
+// UTILIDADES: MAPEO DE DATOS DE LA API
+// =============================================================================
 
 const mapApiNode = (n: any): TopologyNode => ({
   nodo_id: n.nodo_id ?? n.id,
@@ -44,11 +61,18 @@ const mapApiEdge = (e: any): TopologyEdge => ({
   tipo_relacion: e.tipo_relacion ?? e.relation_type ?? e.type ?? 'default'
 })
 
+// =============================================================================
+// COMPONENTE PRINCIPAL: PLANT TOPOLOGY
+// =============================================================================
+
 const PlantTopology: React.FC = () => {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  
-  // 🔥 FIX: Extraemos 'api' del contexto
+
+  // ---------------------------------------------------------------------
+  // Estados
+  // ---------------------------------------------------------------------
+
   const { setSelectedMachine, lang, api } = useAppContext()
   const navigate = useNavigate()
   
@@ -67,12 +91,17 @@ const PlantTopology: React.FC = () => {
   const [edges, setEdges] = useState<TopologyEdge[]>([])
   const [loading, setLoading] = useState(true)
 
+  // ---------------------------------------------------------------------
+  // Carga de datos
+  // ---------------------------------------------------------------------
+
   useEffect(() => {
     const controller = new AbortController()
     
     async function fetchTopology() {
       try {
-        // 🔥 FIX: Utilizamos el api centralizado con token
+        // api.topologia() adjunta el token de sesión automáticamente,
+        // a diferencia de un fetch() manual.
         const data = await api.topologia() 
         if (!controller.signal.aborted && data) {
           const rawNodes = Array.isArray(data.nodos) ? data.nodos : (Array.isArray(data.nodes) ? data.nodes : [])
@@ -103,6 +132,10 @@ const PlantTopology: React.FC = () => {
     return dict
   }, [nodes])
 
+  // ---------------------------------------------------------------------
+  // Handlers de mouse (paneo)
+  // ---------------------------------------------------------------------
+
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.topo-node')) return;
     setIsPanning(true);
@@ -131,6 +164,10 @@ const PlantTopology: React.FC = () => {
   const handleMouseUpOrLeave = () => {
     setIsPanning(false);
   };
+
+  // ---------------------------------------------------------------------
+  // Handlers táctiles (pan / pinch-zoom)
+  // ---------------------------------------------------------------------
 
   // Calcula la distancia entre dos puntos de contacto (usado para el gesto de pellizco/zoom).
   const getTouchDistance = (touches: React.TouchList) => {
@@ -197,6 +234,10 @@ const PlantTopology: React.FC = () => {
     }
   };
 
+  // ---------------------------------------------------------------------
+  // Acciones de la vista: selección de nodo, navegación y zoom
+  // ---------------------------------------------------------------------
+
   const handleNodeClick = (node: TopologyNode, e: React.MouseEvent) => {
     e.stopPropagation(); 
     const rect = containerRef.current?.getBoundingClientRect()
@@ -231,6 +272,10 @@ const PlantTopology: React.FC = () => {
     if (s.includes('falla') || s.includes('error') || s.includes('closed') || s.includes('crítico')) return '#ef4444'
     return '#64748B'
   }
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   if (loading) {
     return <div className="p-4 text-center">{t.common?.loading || 'Cargando Topología...'}</div>

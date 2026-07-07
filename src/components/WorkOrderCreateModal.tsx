@@ -1,10 +1,19 @@
 // @ts-nocheck
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { showToast } from './Toast'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
 
-// ⚠️ FIX: faltaba 'urgent' — es el valor máximo real del enum prioridad_ot en la
+// =============================================================================
+// TIPOS
+// =============================================================================
+
+// FIX: faltaba 'urgent' — es el valor máximo real del enum prioridad_ot en la
 // BD (low/medium/high/urgent). Sin esto, nunca se podía crear una OT urgente
 // desde este formulario.
 type WorkOrderPriority = 'low' | 'medium' | 'high' | 'urgent'
@@ -31,6 +40,10 @@ interface WorkOrderCreateModalProps {
   onCreate: (payload: WorkOrderCreatePayload) => Promise<void> | void
 }
 
+// =============================================================================
+// CONSTANTES
+// =============================================================================
+
 const STORAGE_KEY = 'barb_form_cache'
 
 const INITIAL_FORM: WorkOrderCreatePayload = {
@@ -42,6 +55,10 @@ const INITIAL_FORM: WorkOrderCreatePayload = {
   status: 'open',
   description: '',
 }
+
+// =============================================================================
+// UTILIDADES
+// =============================================================================
 
 function safeTrim(v: string) { return v.trim() }
 function normalizeText(s: string) { return s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '') }
@@ -61,9 +78,17 @@ async function dataUrlToFile(dataUrl: string, fileName: string): Promise<File> {
   return new File([blob], fileName, { type: blob.type })
 }
 
+// =============================================================================
+// COMPONENTE PRINCIPAL: WORK ORDER CREATE MODAL
+// =============================================================================
+
 const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onClose, onCreate }) => {
   const { lang, api } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
+
+  // ---------------------------------------------------------------------
+  // Estados
+  // ---------------------------------------------------------------------
 
   const [form, setForm] = useState<WorkOrderCreatePayload>({ ...INITIAL_FORM })
   const [submitting, setSubmitting] = useState(false)
@@ -86,6 +111,10 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
     if (!q) return machinesFiltradas
     return machinesFiltradas.filter(m => normalizeText(m.label).includes(q))
   }, [machineQuery, machinesFiltradas])
+
+  // ---------------------------------------------------------------------
+  // Efectos: catálogos, caché local, reseteo y filtrado
+  // ---------------------------------------------------------------------
 
   useEffect(() => {
     if (!isOpen) return
@@ -183,6 +212,10 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
 
   const canSubmit = safeTrim(form.title).length > 0 && safeTrim(form.description).length > 0 && !!form.disciplinaId && !!form.machine && !!form.tecnicoId
 
+  // ---------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!canSubmit) return
@@ -212,6 +245,10 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
       setFormError('No se pudo leer la imagen seleccionada.')
     }
   }
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   if (!isOpen) return null
 

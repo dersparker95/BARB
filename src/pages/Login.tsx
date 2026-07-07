@@ -1,3 +1,7 @@
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Spinner from '../components/Spinner'
@@ -5,7 +9,15 @@ import { useAppContext } from '../context/AppContext'
 import { Role } from '../types'
 import { getTranslations } from '../utils/i18n'
 
+// =============================================================================
+// COMPONENTE PRINCIPAL: LOGIN
+// =============================================================================
+
 const Login: React.FC = () => {
+  // ---------------------------------------------------------------------
+  // Estados
+  // ---------------------------------------------------------------------
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -15,6 +27,10 @@ const Login: React.FC = () => {
   const navigate = useNavigate()
 
   const t = useMemo(() => getTranslations(lang), [lang])
+
+  // ---------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -64,6 +80,10 @@ const Login: React.FC = () => {
   const connectingText = t.common?.connecting || 'Conectando...'
   const hidePassText = t.login?.hidePassword || 'Ocultar contraseña'
   const showPassText = t.login?.showPassword || 'Mostrar contraseña'
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   return (
     <div className="login-screen">

@@ -1,10 +1,20 @@
 // @ts-nocheck
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useMemo } from 'react'
 import { WorkOrder } from '../types'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
 
-// 🔥 BLINDAJE DE TIPOS: Extendemos el tipo base para no usar jamás "any"
+// =============================================================================
+// TIPOS
+// =============================================================================
+
+// Extiende el tipo base para no depender de "any" en los campos que llegan
+// enriquecidos desde el backend (nombre de máquina, duración real, etc.).
 interface ExtendedWorkOrder extends WorkOrder {
   machineName?: string;
   machineId?: string | number;
@@ -16,10 +26,14 @@ interface TicketTableProps {
   onSelect: (id: string) => void
 }
 
+// =============================================================================
+// COMPONENTE PRINCIPAL: TICKET TABLE
+// =============================================================================
+
 const TicketTable: React.FC<TicketTableProps> = ({ tickets, onSelect }) => {
   const { lang } = useAppContext()
 
-  // 🔥 OPTIMIZACIÓN: Congelamos las traducciones para no ahogar el procesador
+  // Memoiza las traducciones para no recalcularlas en cada render.
   const t = useMemo(() => getTranslations(lang), [lang])
 
   // Escudo contra arrays nulos o vacíos
@@ -46,11 +60,11 @@ const TicketTable: React.FC<TicketTableProps> = ({ tickets, onSelect }) => {
             const statusKey = String(ticket.status || 'pending').toLowerCase()
             const label = t.statuses?.[statusKey] || statusKey
 
-            // Extracción segura
             const safeDuration = ticket.durationReal || 0
             const machineLabel = ticket.machineName || `${t.dashboard?.machine || 'Máquina'} ${ticket.machineId || '?'}`
 
-            // Asumimos el SLA meta estándar de 24 horas (o minutos) para alertar visualmente
+            // El umbral de 24 (horas o minutos según la unidad de negocio) es el SLA
+            // estándar usado para alertar visualmente cuando se excede.
             const durationVariant = safeDuration > 24 ? 'slow' : 'fast'
 
             return (

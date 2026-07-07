@@ -1,10 +1,19 @@
 // @ts-nocheck
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useMemo } from 'react'
 import { WorkOrder } from '../types'
 import { WO_STATUSES, WO_STATUS_LABEL, type WOStatus } from '../services/workOrders'
 import { showToast } from './Toast'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
+
+// =============================================================================
+// TIPOS
+// =============================================================================
 
 interface Props {
   ticket: WorkOrder | null
@@ -13,11 +22,19 @@ interface Props {
   onDelete: (id: string) => Promise<void> | void
 }
 
-// ⚠️ FIX: antes solo existían 2 ramas (high / medium por defecto), así que 'low'
-// y 'urgent' (el valor real más alto del enum prioridad_ot) caían ambos en
+// =============================================================================
+// CONSTANTES
+// =============================================================================
+
+// FIX: antes solo existían 2 ramas (high / medium por defecto), así que 'low'
+// y 'urgent' (el valor más alto real del enum prioridad_ot) caían ambos en
 // "Media" sin distinguirse ni resaltar en rojo. Se cubre el enum completo.
 const PRIORITY_LABEL_ES: Record<string, string> = { low: 'Baja', medium: 'Media', high: 'Alta', urgent: 'Urgente' }
 const PRIORITY_LABEL_EN: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent' }
+
+// =============================================================================
+// COMPONENTE PRINCIPAL: TICKET DETAIL MODAL
+// =============================================================================
 
 const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, onDelete }) => {
   const { lang } = useAppContext()
@@ -27,12 +44,17 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
 
   const statusOrder = WO_STATUSES || ['pending', 'assigned', 'in_progress', 'completed', 'cancelled', 'overdue']
 
-  // 🔥 BLINDAJE: Normalizamos el estado por si el backend lo envía en mayúsculas
+  // Normaliza el estado por si el backend lo envía en mayúsculas.
   const currentStatus = String(ticket.status || 'pending').toLowerCase() as WOStatus
 
-  // Si el estado no existe en la lista, asumimos 0 para que no rompa el array
+  // Si el estado no coincide con ninguno de la lista, usa el primer paso como
+  // valor por defecto para no romper la indexación del timeline.
   const rawIndex = statusOrder.indexOf(currentStatus)
   const currentIndex = rawIndex >= 0 ? rawIndex : 0
+
+  // ---------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------
 
   const advance = () => {
     const next = Math.min(statusOrder.length - 1, currentIndex + 1)
@@ -44,7 +66,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
     const w = window.open('', '_blank')
     if (!w) return
 
-    // 🔥 MEJORA: Un reporte de impresión mucho más limpio y corporativo que un simple JSON
+    // Genera un reporte de impresión estructurado en vez de exponer el JSON crudo.
     // Nota: este HTML vive en una ventana aparte sin acceso al index.css de la app,
     // por eso usa valores fijos en vez de var() — es la única excepción permitida.
     const html = `
@@ -66,7 +88,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
     w.document.write(html)
     w.document.close()
 
-    // Pequeño timeout para asegurar que el navegador renderice el HTML antes de lanzar la ventana de impresión
+    // Da tiempo al navegador a renderizar el HTML antes de abrir el diálogo de impresión.
     setTimeout(() => {
       w.print()
     }, 200)
@@ -88,10 +110,14 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
     }
   }
 
-  // Traducciones seguras — cubre las 4 prioridades reales (low/medium/high/urgent)
+  // Cubre las 4 prioridades reales (low/medium/high/urgent) con fallback a español.
   const priorityKey = String(ticket.priority || 'medium').toLowerCase()
   const priorityLabels = lang === 'en' ? PRIORITY_LABEL_EN : PRIORITY_LABEL_ES
   const priorityLabel = t.common?.[priorityKey] || priorityLabels[priorityKey] || priorityLabels.medium
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   return (
     <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
@@ -111,7 +137,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
               const active = s === currentStatus
               const isLast = i === statusOrder.length - 1
 
-              // Intentamos buscar la etiqueta en el i18n, si no, en el array estático, si no, usamos el string.
+              // Resuelve la etiqueta con fallback: i18n -> tabla estática -> valor crudo.
               const label = t.statuses?.[s] || WO_STATUS_LABEL?.[s] || s
 
               return (
@@ -127,7 +153,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
           <div className="ot-detail-grid">
             <div className="ot-detail-field">
               <div className="ot-detail-label">{t.dashboard?.machine || 'Máquina'}</div>
-              {/* Priorizamos el nombre real de la máquina, si no, mostramos el ID */}
+              {/* Usa el nombre de la máquina si está disponible; de lo contrario, muestra el ID. */}
               <div className="ot-detail-val">{ticket.machineName || ticket.machineId || 'N/A'}</div>
             </div>
             <div className="ot-detail-field">

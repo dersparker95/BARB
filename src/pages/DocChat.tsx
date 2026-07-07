@@ -1,4 +1,9 @@
 // @ts-nocheck
+
+/* -----------------------------------------------------------------------------
+ * Imports
+ * -------------------------------------------------------------------------- */
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
@@ -6,6 +11,10 @@ import ChatBubble, { Thinking } from '../components/ChatBubble'
 import { SourceHit } from '../types'
 import { getTranslations, normalizeLang } from '../utils/i18n'
 import { tokenize } from '../utils/rag'
+
+/* -----------------------------------------------------------------------------
+ * Tipos
+ * -------------------------------------------------------------------------- */
 
 interface ChatApiResponse {
   reply: string
@@ -239,7 +248,7 @@ const getWorkOrderPriority = (ot: WorkOrderRecord): string =>
 export default function DocChat() {
   const {
     apiBase,
-    api, // 🔥 FIX: Inyectado desde el contexto
+    api,
     discipline,
     plant,
     docMachine,
@@ -402,7 +411,8 @@ export default function DocChat() {
       setCatalogsLoading(true)
 
       try {
-        // 🔥 FIX: Cargamos catálogos usando tu 'api' centralizado (con token incorporado)
+        // Usa el servicio `api` centralizado (adjunta el token automáticamente)
+        // en vez de fetch() manuales por catálogo.
         const [plantsData, disciplinesData, machinesData, workOrdersData] = await Promise.all([
           api.plants().catch(() => []),
           api.disciplines().catch(() => []),
@@ -486,7 +496,6 @@ export default function DocChat() {
       formData.append('type', 'document')
       formData.append('context', 'document_library')
 
-      // 🔥 FIX: Delegamos la subida de documento a api.chat.documents
       const data = await api.chat.documents(formData)
 
       if (data) {
@@ -610,7 +619,8 @@ export default function DocChat() {
     }
 
     try {
-      // 🔥 FIX: Como no hay método saveSession en api.ts, usamos fetch pero INYECTANDO el Token manualmente
+      // No existe un método saveSession en el servicio `api`, así que se usa
+      // fetch directo inyectando el token de sesión manualmente.
       const response = await fetch(`${apiRoot}/chat-sessions`, {
         method: 'POST',
         headers: { 
@@ -692,7 +702,8 @@ export default function DocChat() {
       }))
 
     try {
-      // 🔥 FIX: Mantener parámetros completos (imágenes y manual activo) usando fetch directo con Token
+      // Usa fetch directo (en vez del servicio `api`) para poder enviar el payload
+      // completo con imágenes y manual activo, inyectando el token manualmente.
       const response = await fetch(`${apiRoot}/chat`, {
         method: 'POST',
         headers: { 
@@ -1156,7 +1167,9 @@ export default function DocChat() {
                 msg={message}
                 side={message.role === 'user' ? 'user' : 'bot'}
                 onFeedback={(msg, rating) => {
-                  // 🔥 FIX: fetch in-line inyectando el token seguro
+                  // Fetch directo (no usa el servicio `api`) porque este callback vive
+                  // fuera del ciclo de vida del componente; recupera el token
+                  // directamente de localStorage en vez de depender del contexto.
                   fetch(`${apiRoot}/chat-feedback`, {
                     method: 'POST',
                     headers: { 

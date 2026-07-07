@@ -1,11 +1,19 @@
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useState, useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import SettingsModal from './SettingsModal'
-import HelpModal from './HelpModal' // 🔥 NUEVO: Importamos el modal de ayuda
+import HelpModal from './HelpModal'
 import { showToast } from './Toast'
 import { getTranslations, normalizeLang } from '../utils/i18n'
-import { helpContentData } from '../utils/helpContent' // 🔥 NUEVO: Importamos el diccionario
+import { helpContentData } from '../utils/helpContent'
+
+// =============================================================================
+// COMPONENTE PRINCIPAL: TOP BAR
+// =============================================================================
 
 const TopBar: React.FC = () => {
   const { user, setUser, dark, setDark, lang, setLang, apiBase, setLoading } = useAppContext()
@@ -13,7 +21,7 @@ const TopBar: React.FC = () => {
   const location = useLocation()
   
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [helpOpen, setHelpOpen] = useState(false) // 🔥 NUEVO: Estado para abrir/cerrar la ayuda
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const translations = useMemo(() => getTranslations(lang), [lang])
 
@@ -27,10 +35,14 @@ const TopBar: React.FC = () => {
     }
   }, [dark])
 
+  // ---------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------
+
   const handleLogout = async () => {
     setLoading(true)
     try {
-      // ⚠️ FIX: antes usaba 'http://localhost:9000/api' como fallback. Desde que
+      // FIX: antes usaba 'http://localhost:9000/api' como fallback. Desde que
       // se quitó el dominio hardcodeado de AppContext.tsx, apiBase puede quedar
       // legítimamente vacío en producción si falta VITE_API_URL — apuntar a
       // localhost en ese caso fallaría silenciosamente contra la máquina del
@@ -62,14 +74,19 @@ const TopBar: React.FC = () => {
     showToast(translations.settings?.languageUpdated || 'Idioma actualizado')
   }
 
+  // ---------------------------------------------------------------------
+  // Resolución de título y ayuda contextual según la ruta
+  // ---------------------------------------------------------------------
+
   const path = location.pathname
   
   let title = translations.topbar?.maintenance || 'Mantenimiento'
   let showBack = true
   let backPath: string | number = '/menu'
-  let helpKey = 'default' // 🔥 NUEVO: Clave para buscar la ayuda correcta
+  let helpKey = 'default'
 
-  // 🔥 Lógica combinada para título y ayuda
+  // Resuelve título y clave de ayuda en el mismo bloque porque ambos dependen
+  // exclusivamente de la ruta actual.
   if (path.includes('/menu')) {
     showBack = false
     title = translations.topbar?.mainMenu || 'Menú Principal'
@@ -97,8 +114,11 @@ const TopBar: React.FC = () => {
     helpKey = '/report'
   }
 
-  // 🔥 NUEVO: Obtenemos el texto de ayuda según la ruta actual
   const currentHelp = helpContentData[helpKey]
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   return (
     <div className="topbar">
@@ -145,7 +165,6 @@ const TopBar: React.FC = () => {
           </svg>
         </button>
 
-        {/* 🔥 NUEVO: Botón de Ayuda contextual */}
         <button className="icon-btn" onClick={() => setHelpOpen(true)} title="Guía de esta pantalla">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10"></circle>
@@ -167,7 +186,6 @@ const TopBar: React.FC = () => {
 
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
       
-      {/* 🔥 NUEVO: Renderizamos el modal pasándole el título y contenido */}
       <HelpModal 
         isOpen={helpOpen} 
         onClose={() => setHelpOpen(false)} 
