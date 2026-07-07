@@ -1,8 +1,16 @@
 // @ts-nocheck
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 
-// Todas las constantes de negocio estructuradas para el dashboard
+// =============================================================================
+// CONSTANTES DE NEGOCIO
+// =============================================================================
+
 export const BARB_BUSINESS = {
   targetUptime: 98,
   avgDowntimeCost: 5000,
@@ -11,7 +19,10 @@ export const BARB_BUSINESS = {
   ANNUAL_WITH_BARB: 45000
 };
 
-// 🔥 BLINDAJE DE TIPOS: Aseguramos la integridad de los datos
+// =============================================================================
+// TIPOS
+// =============================================================================
+
 interface Financials {
   ahorro_generado: number;
   mttr: number;
@@ -41,6 +52,10 @@ interface FinancialStats {
   machines: MachineData[];
 }
 
+// =============================================================================
+// HOOK PRINCIPAL: USE FINANCIAL STATS
+// =============================================================================
+
 export default function useFinancialStats(timeRange?: number | 'all') {
   const [data, setData] = useState<FinancialStats>({
     financials: { ahorro_generado: 0, mttr: 0, efficiency: 0, costo_total_acumulado: 0, mtbfHours: null },
@@ -51,10 +66,11 @@ export default function useFinancialStats(timeRange?: number | 'all') {
   const { apiBase, api } = useAppContext();
 
   useEffect(() => {
-    // 🛡️ ESCUDO ANTI-FUGAS DE MEMORIA: Prepara la cancelación si el usuario cambia de pantalla rápido
+    // Permite cancelar la petición si el usuario cambia de pantalla antes de
+    // que la respuesta llegue, evitando actualizar estado de un componente desmontado.
     const controller = new AbortController();
 
-    // ⚠️ FIX: antes esto era un fetch() manual sin el header Authorization que
+    // FIX: antes esto era un fetch() manual sin el header Authorization que
     // ahora exige el backend, y sin el prefijo /api consistente. Se usa
     // api.stats.financialImpact(), que ya adjunta el token de sesión y normaliza
     // la URL (ver services/api.ts). Se mantiene el guard de apiBase vacío para
@@ -89,7 +105,6 @@ export default function useFinancialStats(timeRange?: number | 'all') {
         }
       });
 
-    // Cleanup function: Se ejecuta si el componente se desmonta antes de terminar el fetch
     return () => {
       controller.abort();
     };

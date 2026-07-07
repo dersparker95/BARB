@@ -1,4 +1,12 @@
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React from 'react'
+
+// =============================================================================
+// TIPOS
+// =============================================================================
 
 interface HelpModalProps {
   isOpen: boolean
@@ -6,6 +14,10 @@ interface HelpModalProps {
   title: string
   content: string
 }
+
+// =============================================================================
+// COMPONENTE PRINCIPAL: HELP MODAL
+// =============================================================================
 
 const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, title, content }) => {
   if (!isOpen) return null
@@ -17,7 +29,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, title, content }
     >
       <div className="modal-box">
 
-        {/* Cabecera idéntica a SettingsModal */}
+        {/* Reutiliza la misma estructura de cabecera que SettingsModal para mantener consistencia visual. */}
         <div className="modal-header">
           <h2>{title}</h2>
           <button
@@ -29,7 +41,6 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, title, content }
           </button>
         </div>
 
-        {/* Cuerpo del modal usando tus clases de tipografía */}
         <div className="modal-body">
           <div className="settings-section">
             <div className="help-modal-content">
@@ -38,7 +49,6 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, title, content }
           </div>
         </div>
 
-        {/* Footer usando tu clase btn-primary */}
         <div className="modal-footer">
           <button
             className="btn btn-primary"

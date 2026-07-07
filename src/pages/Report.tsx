@@ -1,13 +1,20 @@
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import { showToast } from '../components/Toast'
 import { getTranslations, normalizeLang } from '../utils/i18n'
 
+// =============================================================================
+// COMPONENTE PRINCIPAL: REPORT
+// =============================================================================
+
 const Report: React.FC = () => {
   const navigate = useNavigate()
 
-  // 🔥 BLINDAJE: Conectamos el idioma y evitamos el Spanglish
   const { selectedMachine, sessionStart, getDebugMessages, lang, apiBase, api, user } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
   const nLang = normalizeLang(lang)
@@ -19,7 +26,11 @@ const Report: React.FC = () => {
 
   const [isSending, setIsSending] = useState(false)
 
-  // ⚠️ FIX: antes handleSubmit no llamaba a ningún backend — solo mostraba un
+  // ---------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------
+
+  // FIX: antes handleSubmit no llamaba a ningún backend — solo mostraba un
   // toast de éxito falso ("Aquí iría tu lógica futura de fetch()"). Ahora sí
   // persiste el reporte contra POST /api/reports/debug (endpoint agregado al
   // backend), usando datos reales de la sesión de debug.
@@ -53,7 +64,7 @@ const Report: React.FC = () => {
 
     setIsSending(true)
     try {
-      // ⚠️ FIX: antes esto era un fetch() manual directo, sin el header
+      // FIX: antes esto era un fetch() manual directo, sin el header
       // Authorization que ahora exige el backend (protegido por rol) y sin el
       // prefijo /api consistente. Se usa api.reports.send(), que ya adjunta
       // el token de sesión automáticamente (ver services/api.ts).
@@ -77,9 +88,12 @@ const Report: React.FC = () => {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
+
   return (
     <div className="report-body">
-      {/* 🔥 SEMÁNTICA: Cambiamos el div por un form */}
       <form className="report-card" onSubmit={handleSubmit}>
         <h2>{t.report?.title || (nLang === 'en' ? 'Debug Session Report' : 'Reporte de Diagnóstico')}</h2>
 
@@ -131,7 +145,8 @@ const Report: React.FC = () => {
         <div className="report-field">
           <label>{t.common?.severity || 'Severidad'}</label>
           <select name="severity" className="form-select form-select--md" defaultValue="medium">
-            {/* 🔥 NORMALIZACIÓN: Valores en minúsculas (BD) vs Etiquetas en el idioma del usuario */}
+            {/* Los value quedan en minúsculas porque así los espera la BD; las
+                etiquetas se muestran en el idioma del usuario. */}
             <option value="low">{t.common?.low || 'Baja'}</option>
             <option value="medium">{t.common?.medium || 'Media'}</option>
             <option value="high">{t.common?.high || 'Alta'}</option>

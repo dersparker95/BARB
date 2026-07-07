@@ -1,17 +1,29 @@
 // @ts-nocheck
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import ChatBubble, { Thinking } from '../components/ChatBubble'
 import { getTranslations, normalizeLang } from '../utils/i18n'
 
+// =============================================================================
+// COMPONENTE PRINCIPAL: DEBUG CHAT
+// =============================================================================
+
 export default function DebugChat() {
-  // 🔥 FIX: Extraemos api y apiBase
   const { apiBase, user, lang, api } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
   const nLang = normalizeLang(lang)
 
   const location = useLocation()
+
+  // ---------------------------------------------------------------------
+  // Estados
+  // ---------------------------------------------------------------------
 
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
@@ -24,13 +36,19 @@ export default function DebugChat() {
 
   const areaRef = useRef(null)
   
-  // URL limpia sólo para el feedback in-line
+  // apiRoot se usa solo para el fetch directo del feedback; el resto de las
+  // llamadas van por el servicio `api` centralizado.
   const apiRoot = (apiBase || '').replace(/\/$/, '')
+
+  // ---------------------------------------------------------------------
+  // Efectos: carga de datos, navegación entrante y auto-scroll
+  // ---------------------------------------------------------------------
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // 🔥 FIX: Consulta con token nativo
+        // api.machines()/api.workOrders.getAll() adjuntan el token de sesión
+        // automáticamente, a diferencia de un fetch() manual.
         const [machRes, otRes] = await Promise.all([
           api.machines(),
           api.workOrders.getAll()
@@ -54,12 +72,20 @@ export default function DebugChat() {
     if (areaRef.current) areaRef.current.scrollTop = areaRef.current.scrollHeight
   }, [messages])
 
+  // ---------------------------------------------------------------------
+  // Datos derivados
+  // ---------------------------------------------------------------------
+
   const machineHistory = useMemo(() => {
     if (!selectedMachineId) return []
     return workOrders.filter(ot => String(ot.machineId ?? ot.machine_id) === String(selectedMachineId))
   }, [selectedMachineId, workOrders])
 
   const selectedMachine = machines.find(m => String(m.id ?? m.maquina_id) === String(selectedMachineId))
+
+  // ---------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------
 
   const send = async () => {
     const query = input.trim()
@@ -70,7 +96,7 @@ export default function DebugChat() {
     setMessages(prev => [...prev, { role: 'user', content: query }])
 
     try {
-      // 🔥 FIX: Utilizamos tu askRAG estructurado
+      // Usa el endpoint estructurado askRAG en vez de un fetch manual al motor de IA.
       const data = await api.chat.askRAG(
         query, 
         selectedMachine?.name || 'general', 
@@ -102,6 +128,10 @@ export default function DebugChat() {
     setInput(prompt);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   }
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   return (
     <div className="two-panel debug-shell">
@@ -206,7 +236,9 @@ export default function DebugChat() {
                 msg={msg}
                 side={msg.role === 'user' ? 'user' : 'bot'}
                 onFeedback={(msgData, rating) => {
-                  // 🔥 FIX: fetch in-line con el token recuperado localmente
+                  // Fetch directo (no usa el servicio `api`) porque este callback vive
+                  // fuera del ciclo de vida del componente; recupera el token
+                  // directamente de localStorage en vez de depender del contexto.
                   fetch(`${apiRoot}/chat-feedback`, {
                     method: 'POST',
                     headers: { 

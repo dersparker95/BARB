@@ -1,11 +1,23 @@
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useMemo } from 'react'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
+
+// =============================================================================
+// TIPOS
+// =============================================================================
 
 type SpinnerProps = {
   label?: string
   className?: string
 }
+
+// =============================================================================
+// COMPONENTE PRINCIPAL: SPINNER
+// =============================================================================
 
 const Spinner: React.FC<SpinnerProps> = ({ label, className = '' }) => {
   const { lang } = useAppContext()

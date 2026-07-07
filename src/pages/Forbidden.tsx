@@ -1,7 +1,15 @@
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
+
+// =============================================================================
+// COMPONENTE PRINCIPAL: FORBIDDEN
+// =============================================================================
 
 const Forbidden: React.FC = () => {
   const navigate = useNavigate()
@@ -19,11 +27,9 @@ const Forbidden: React.FC = () => {
   }
 
   return (
-    // ✅ CORREGIDO: Tailwind arbitrario → clases BEM del DS
     <div className="forbidden-root">
       <div className="login-card shadow-soft forbidden-card">
 
-        {/* ✅ CORREGIDO: emoji 🚫 → SVG accesible; fontSize inline → clase BEM */}
         <div className="forbidden-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
@@ -39,7 +45,6 @@ const Forbidden: React.FC = () => {
           {t.common?.forbiddenMessage || 'Tu usuario no tiene permiso para acceder a esta ruta.'}
         </p>
 
-        {/* ✅ CORREGIDO: div con inline styles → .forbidden-actions */}
         <div className="forbidden-actions">
           <button className="btn btn-primary" onClick={handleGoMenu} type="button">
             {t.common?.backToMenu || 'Volver al menú'}

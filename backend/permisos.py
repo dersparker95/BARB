@@ -43,8 +43,9 @@ RUTAS: dict[str, dict[str, bool | str]] = {
 
 # =============================================================================
 # PERMISOS POR ACCIÓN  (basado en la matriz "Funciones dentro de las páginas")
-# NOTA: "crear_ot" se sobre-escribe abajo según instrucción explícita:
-# solo gerente y admin pueden crear OT (la foto original decía distinto).
+# NOTA: "crear_ot" se sobre-escribe abajo por instrucción explícita del negocio:
+# solo gerente y admin pueden crear OT (la matriz de referencia original indicaba
+# otros roles).
 # =============================================================================
 
 ACCIONES: dict[str, dict[str, bool]] = {
@@ -149,10 +150,12 @@ def require_route(ruta: str, solo_lectura: bool = False):
     """
     Dependencia para proteger un endpoint según la matriz de RUTAS.
 
-    ## Args:
-    ruta: Clave de la ruta definida en RUTAS.
-    solo_lectura: Si True, considera "ver" como acceso válido (endpoints GET).
-                  Si False, "ver" se rechaza (endpoints que escriben datos).
+    Args:
+        ruta:
+            Clave de la ruta definida en RUTAS.
+        solo_lectura:
+            Si True, considera "ver" como acceso válido (endpoints GET).
+            Si False, "ver" se rechaza (endpoints que escriben datos).
     """
     async def _dep(authorization: str = Header(..., alias="Authorization")):
         rol_actual = get_rol_actual(authorization)

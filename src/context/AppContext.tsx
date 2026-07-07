@@ -1,9 +1,20 @@
 // @ts-nocheck
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { AppContextValue, Message, Role, User } from '../types'
 import { createApiService, setToken, clearToken } from '../services/api'
 
-// === LÓGICA DE PERSISTENCIA DE SESIÓN ===
+// =============================================================================
+// PERSISTENCIA DE SESIÓN
+// =============================================================================
+//
+// Serializa y valida el usuario autenticado en localStorage para sobrevivir
+// recargas de página, descartando cualquier valor corrupto o incompleto.
+//
 type StoredAuth = {
   user: Pick<User, 'id' | 'name' | 'role'>
   token: string
@@ -52,8 +63,15 @@ const readStoredAuth = (): StoredAuth | null => {
 
 const AppContext = createContext<AppContextValue | undefined>(undefined)
 
-// === VARIABLES DE ENTORNO DINÁMICAS ===
-// ⚠️ FIX: se elimina el dominio de Render hardcodeado como fallback ("...onrender.com").
+// =============================================================================
+// VARIABLES DE ENTORNO DINÁMICAS
+// =============================================================================
+//
+// Resuelve las URLs base de la API y del motor de IA local a partir de
+// variables de entorno, sin depender de dominios fijos en el código.
+//
+
+// FIX: se elimina el dominio de Render hardcodeado como fallback ("...onrender.com").
 // Esta es LA fuente real de apiBase para toda la app (Dashboard.tsx y demás componentes
 // solo heredan este valor vía contexto) — dejar un dominio fijo aquí hacía inútil
 // cualquier VITE_API_URL que no coincidiera exactamente, y ataba el código a un
@@ -89,11 +107,17 @@ const resolveApiBase = (): string => {
 
 const resolveLmBase = (): string => {
   if (typeof window === 'undefined') return defaultLmUrl
-  // lmBase puede ser localhost legítimamente (LM Studio local), no se filtra.
+  // A diferencia de apiBase, lmBase sí puede apuntar a localhost legítimamente
+  // (LM Studio corriendo en la máquina del usuario), por lo que no se filtra.
   return window.localStorage.getItem('barb.lmBase') ?? defaultLmUrl
 }
 
-// === ESTADO POR DEFECTO ===
+// =============================================================================
+// ESTADO POR DEFECTO
+// =============================================================================
+//
+// Valores iniciales usados cuando no hay nada persistido en localStorage.
+//
 const defaultState = {
   currentScreen: 'dashboard', 
   dark: false,
@@ -108,6 +132,10 @@ const defaultState = {
   debugMessagesByMachine: {} as Record<string, Message[]>,
   loading: false,
 }
+
+// =============================================================================
+// PROVIDER PRINCIPAL
+// =============================================================================
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // --- ESTADOS BASE ---
@@ -163,10 +191,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       lastMsg.content += chunk;
       
-      // Adaptado para funcionar perfecto con el componente ChatBubble blindado
+      // Normaliza el formato de las fuentes para el componente ChatBubble: si ya
+      // llegan como objeto se conservan, si llegan como string se envuelven.
       if (sources && sources.length > 0) {
         lastMsg.sources = sources.map(s => {
-          // Si ya viene como objeto, lo dejamos. Si viene como string, lo parseamos.
           if (typeof s === 'string') return { documentName: s, pageNumber: '' }
           return s
         });
@@ -260,7 +288,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await authService.auth.logout()
     } catch {
-      // Ignorar fallo de red
+      // Se ignora el fallo de red: el logout local (borrar user/token) debe
+      // continuar aunque el backend sea inalcanzable.
     } finally {
       setUser(null)
       setCurrentScreen('login')
@@ -281,14 +310,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     docMessages, pushDocMessage, clearDocMessages, appendToLastDocMessage,
     debugMessagesByMachine, getDebugMessages, pushDebugMessage,
     user, setUser, login, logout,
-    api: authService, // 🚀 Servicio API centralizado, disponible para toda la app
-    apiBase, setApiBase,  // 🚀 ¡Agregados!
-    lmBase, setLmBase,    // 🚀 ¡Agregados!
+    api: authService,
+    apiBase, setApiBase,
+    lmBase, setLmBase,
     loading, setLoading,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
+
+// =============================================================================
+// HOOK DE CONSUMO DEL CONTEXTO
+// =============================================================================
 
 export const useAppContext = (): AppContextValue => {
   const ctx = useContext(AppContext)

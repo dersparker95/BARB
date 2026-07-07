@@ -1,4 +1,9 @@
 // @ts-nocheck
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Bar, BarChart, Cell, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis, PieChart, Pie, Legend
@@ -13,6 +18,10 @@ import FinancialDashboard from '../components/FinancialDashboard'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
 import { BARB_BUSINESS } from '../hooks/useFinancialStats'
+
+// =============================================================================
+// TIPOS
+// =============================================================================
 
 interface ApiWorkOrder {
   id?: string | number; ot_id?: string | number;
@@ -36,8 +45,16 @@ interface ApiWorkOrder {
 
 interface ApiMachine { id: number; name: string; discipline_id: number; plant_id?: number }
 
+// =============================================================================
+// CONSTANTES
+// =============================================================================
+
 // Paleta de gráficos alineada al Design System (var() funciona como atributo SVG en recharts)
 const CHART_PALETTE = ['var(--blue)', 'var(--green)', 'var(--amber)', 'var(--purple)', 'var(--red)', 'var(--cyan)', 'var(--accent)', 'var(--online)']
+
+// =============================================================================
+// UTILIDADES
+// =============================================================================
 
 const ensureUTC = (d?: string | null) => { if (!d) return undefined; return d.endsWith('Z') || d.includes('+') ? d : d + 'Z' }
 
@@ -58,7 +75,7 @@ const mapApiWorkOrder = (o: ApiWorkOrder): WorkOrder => {
     description: o.description || o.descripcion_problema || o.title || 'Sin descripción',
     machineId,
     machineName: o.machine_name || o.maquina_nombre || `Máquina ${machineId}`,
-    // ⚠️ FIX: se prioriza 'estado' (valor crudo snake_case: pending/assigned/in_progress/
+    // FIX: se prioriza 'estado' (valor crudo snake_case: pending/assigned/in_progress/
     // completed/cancelled/overdue) porque es la clave que usan los filtros y las
     // traducciones. 'status' es solo una etiqueta humanizada en inglés ("In Progress")
     // que nunca coincide con esas claves y rompía filtros y badges.
@@ -76,6 +93,10 @@ const mapApiWorkOrder = (o: ApiWorkOrder): WorkOrder => {
   }
 }
 
+// =============================================================================
+// SUBCOMPONENTE: BLOCK (contenedor de tarjeta del dashboard)
+// =============================================================================
+
 const Block: React.FC<{ title: string; subtitle?: string; children: React.ReactNode; className?: string }> = ({ title, subtitle, children, className = '' }) => (
   <div className={`dash-block ${className}`}>
     <div className="dash-block-header">
@@ -86,9 +107,17 @@ const Block: React.FC<{ title: string; subtitle?: string; children: React.ReactN
   </div>
 )
 
+// =============================================================================
+// COMPONENTE PRINCIPAL: DASHBOARD
+// =============================================================================
+
 export default function Dashboard() {
   const { lang, apiBase, api } = useAppContext()
   const t = useMemo(() => getTranslations(lang), [lang])
+
+  // ---------------------------------------------------------------------
+  // Estados
+  // ---------------------------------------------------------------------
 
   const [tickets, setTickets] = useState<WorkOrder[]>([])
   const [machines, setMachines] = useState<ApiMachine[]>([])
@@ -112,10 +141,14 @@ export default function Dashboard() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
+  // ---------------------------------------------------------------------
+  // Carga de datos
+  // ---------------------------------------------------------------------
+
   const loadData = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true)
     try {
-      // ⚠️ FIX: antes esto eran 2 fetch() manuales sin el header Authorization
+      // FIX: antes esto eran 2 fetch() manuales sin el header Authorization
       // que ahora exige el backend, y sin el prefijo /api consistente.
       // api.workOrders.getAll()/api.machines() ya adjuntan el token de sesión.
       const [rawData, machinesData] = await Promise.all([
@@ -142,6 +175,10 @@ export default function Dashboard() {
 
   useEffect(() => { setCurrentPage(1) }, [statusFilter, machineFilter, typeFilter, search, timeRange])
 
+  // ---------------------------------------------------------------------
+  // Datos derivados: filtros, paginación y series para los gráficos
+  // ---------------------------------------------------------------------
+
   const machineLabel = useCallback((id: string) => machines.find(m => String(m.id) === id)?.name ?? id, [machines])
 
   const filtered = useMemo(() => {
@@ -164,7 +201,7 @@ export default function Dashboard() {
       const isClosed = tk.status === 'closed' || tk.status === 'cerrado' || tk.status === 'resolved' || tk.status === 'completed';
       if (isClosed) return false;
       const ageHours = tk.durationReal / 60;
-      // ⚠️ FIX: la BD usa 'urgent' como valor máximo de prioridad (enum prioridad_ot:
+      // FIX: la BD usa 'urgent' como valor máximo de prioridad (enum prioridad_ot:
       // low/medium/high/urgent). 'critical' pertenece a otro campo (severity) y nunca
       // coincidía aquí, así que las OTs urgentes usaban el umbral de 24h en vez de 2h.
       return (tk.priority === 'high' || tk.priority === 'urgent' ? ageHours > 2 : ageHours > 24);
@@ -187,6 +224,10 @@ export default function Dashboard() {
     }))
   }, [filtered, t.maintenanceTypes])
 
+  // ---------------------------------------------------------------------
+  // Exportación (CSV / XLSX)
+  // ---------------------------------------------------------------------
+
   const handleExportCsv = () => {
     const header = ['ID', 'Titulo', 'Maquina', 'Estado', 'Tipo', 'Tecnico', 'Duracion Real (m)']
     const rows = filtered.map(tk => [
@@ -208,6 +249,10 @@ export default function Dashboard() {
     })))
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Data'); XLSX.writeFile(wb, 'barb_reporte.xlsx')
   }
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   return (
     <div className="dashboard-body">
@@ -367,7 +412,7 @@ export default function Dashboard() {
         onClose={() => setIsCreateOpen(false)}
         onCreate={async (p) => {
           try {
-            // ⚠️ FIX: antes era un fetch() manual sin Authorization ni prefijo /api.
+            // FIX: antes era un fetch() manual sin Authorization ni prefijo /api.
             await api.workOrders.create({
               title: p.title,
               maquina_id: Number(p.machine),
@@ -392,7 +437,7 @@ export default function Dashboard() {
         onClose={() => setSelectedTicket(null)}
         onUpdateStatus={async (id, s) => {
           try {
-            // ⚠️ FIX: antes era un fetch() manual sin Authorization ni prefijo /api.
+            // FIX: antes era un fetch() manual sin Authorization ni prefijo /api.
             await api.workOrders.updateStatus(id, s);
             loadData();
             setSelectedTicket(null);
@@ -403,7 +448,7 @@ export default function Dashboard() {
         }}
         onDelete={async (id) => {
           try {
-            // ⚠️ FIX: antes era un fetch() manual sin Authorization ni prefijo /api.
+            // FIX: antes era un fetch() manual sin Authorization ni prefijo /api.
             await api.workOrders.delete(id);
             loadData();
             setSelectedTicket(null);

@@ -1,6 +1,14 @@
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
 import React, { useEffect, useState } from 'react'
 import { useAppContext } from '../context/AppContext'
 import ChatBubble from '../components/ChatBubble'
+
+// =============================================================================
+// TIPOS
+// =============================================================================
 
 interface SavedSession {
   session_id: number
@@ -13,16 +21,28 @@ interface SavedSession {
   messages: any[]
 }
 
+// =============================================================================
+// COMPONENTE PRINCIPAL: SESSION HISTORY
+// =============================================================================
+
 export default function SessionHistory() {
+  // ---------------------------------------------------------------------
+  // Estados
+  // ---------------------------------------------------------------------
+
   const { apiBase } = useAppContext()
   const [sessions, setSessions] = useState<SavedSession[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSession, setSelectedSession] = useState<SavedSession | null>(null)
 
-  // ⚠️ FIX: se elimina el dominio de Render hardcodeado (mismo patrón corregido
+  // FIX: se elimina el dominio de Render hardcodeado (mismo patrón corregido
   // en AppContext.tsx/Dashboard.tsx/api.ts). apiBase ya viene resuelto del
   // contexto (incluye el fallback a VITE_API_URL).
   const apiRoot = (apiBase || '').replace(/\/$/, '')
+
+  // ---------------------------------------------------------------------
+  // Efectos
+  // ---------------------------------------------------------------------
 
   useEffect(() => {
     fetch(`${apiRoot}/chat-sessions`)
@@ -36,6 +56,10 @@ export default function SessionHistory() {
         setLoading(false)
       })
   }, [apiRoot])
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
 
   return (
     <div className="sh-page">
