@@ -2,7 +2,7 @@
 @import "tailwindcss";
 
 :root {
-  /* 🎨 PALETA AJUSTADA PARA CONFORT VISUAL */
+  /* Paleta ajustada para confort visual */
   /* Fondo más cálido y menos "blanco papel" */
   --bg:         #e9e7e2; 
   --bg2:        #dfdbd4;
@@ -150,7 +150,10 @@ body {
 /* Resto de tu CSS (Botones, Chat, Dashboard) se mantendrá igual pero 
    ahora se adaptará automáticamente a estos nuevos tonos más amigables. */
 
-/* ── ACCESSIBILITY UTILITIES ─────────────────────────────────── */
+/* =============================================================================
+   ACCESSIBILITY UTILITIES
+   =============================================================================
+   */
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;
@@ -295,13 +298,16 @@ body {
 /* Extras - CORREGIDO */
 .topo-node { transition: filter 0.3s ease; will-change: filter; }
 .topo-node:hover {
-  /* 👇 Mantenemos el brillo pero eliminamos el 'transform' */
+  /* Se mantiene el brillo pero se elimina el 'transform' */
   filter: drop-shadow(0 0 8px var(--color-tertiary));
 }
 .shadow-soft { box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
 .shadow-glow { box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
 
-/* ── TOP BAR ──────────────────────────────────────────────────── */
+/* =============================================================================
+   TOP BAR
+   =============================================================================
+   */
 .topbar {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -342,7 +348,10 @@ body {
 .icon-btn:active { background:var(--border); }
 .icon-btn svg { width:18px; height:18px; }
 
-/* ── FORM ELEMENTS (shared) ───────────────────────────────────── */
+/* =============================================================================
+   FORM ELEMENTS (SHARED)
+   =============================================================================
+   */
 .form-select {
   width:100%; padding:10px 14px; border-radius:var(--radius-sm);
   border:1px solid var(--border); background:var(--surface2);
@@ -356,7 +365,10 @@ body {
 .btn-green:hover { background:var(--green-dark); }
 .btn-lg { padding:14px 24px; font-size:15px; }
 
-/* ── MENU SCREEN ──────────────────────────────────────────────── */
+/* =============================================================================
+   MENU SCREEN
+   =============================================================================
+   */
 .menu-body { flex:1; padding:32px; overflow-y:auto; width: 100%; }
 .page-title {
   font-family:var(--serif); font-size:28px; font-weight:700;
@@ -386,7 +398,10 @@ body {
 }
 .menu-card-text p { font-size:13px; color:var(--ink2); line-height:1.5; }
 
-/* ── DEBUG & TOPOLOGY & REPORTS ───────────────────────────────── */
+/* =============================================================================
+   DEBUG & TOPOLOGY & REPORTS
+   =============================================================================
+   */
 .debug-panel-left {
   width:50%; background:var(--surface);
   border-right:1px solid var(--border);
@@ -465,7 +480,10 @@ body {
 .report-textarea:focus { border-color:var(--blue); }
 .report-actions { display:flex; gap:12px; padding-top:20px; }
 
-/* ── TAGS & PILLS (DocChat) ──────────────────────────────────── */
+/* =============================================================================
+   TAGS & PILLS (DOCCHAT)
+   =============================================================================
+   */
 .disc-list { display:flex; flex-direction:column; gap:6px; }
 .disc-pill {
   display:flex; align-items:center; gap:10px; padding:10px 12px;
@@ -502,7 +520,10 @@ body {
 .ctx-tag.plant     { background:var(--surface2); color:var(--ink2); border:1px solid var(--border); }
 .ctx-empty         { font-size:12px; color:var(--ink3); font-style:italic; }
 
-/* ── OT DETAIL MODAL ─────────────────────────────────────────── */
+/* =============================================================================
+   OT DETAIL MODAL
+   =============================================================================
+   */
 .ot-detail-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; }
 .ot-detail-num { font-family:var(--mono); font-size:13px; color:var(--blue); font-weight:600; }
 .ot-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
@@ -515,7 +536,10 @@ body {
 .ot-live-dot { width:7px; height:7px; border-radius:50%; background:var(--amber); display:inline-block; margin-right:4px; animation:blink 1.2s ease-in-out infinite; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
-/* ── SETTINGS MODAL ───────────────────────────────────────────── */
+/* =============================================================================
+   SETTINGS MODAL
+   =============================================================================
+   */
 .settings-section { margin-bottom: 20px; }
 .settings-section h3 { font-size:13px; font-weight:600; color:var(--ink); margin-bottom:10px; }
 .settings-block { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; }
@@ -541,7 +565,10 @@ body {
 .toggle input:checked ~ .toggle-thumb { transform:translateX(20px); }
 .modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; gap:10px; flex-shrink:0; }
 
-/* ── Toast ────────────────────────────────────────────────────── */
+/* =============================================================================
+   TOAST
+   =============================================================================
+   */
 #toast {
   position: fixed;
   bottom: 20px;
@@ -566,7 +593,10 @@ body {
   .dark #toast { backdrop-filter: blur(10px); background: rgba(22,25,33,0.85); }
 }
 
-/* ── MACHINE SELECTOR LIST (DocChat panel-left) ──────────────── */
+/* =============================================================================
+   MACHINE SELECTOR LIST (DOCCHAT PANEL-LEFT)
+   =============================================================================
+   */
 .machine-sel-list {
   display: flex;
   flex-direction: column;
@@ -630,7 +660,10 @@ body {
   margin-top: 1px;
 }
 
-/* ── MACHINE GRID (Machines select screen) ───────────────────── */
+/* =============================================================================
+   MACHINE GRID (MACHINES SELECT SCREEN)
+   =============================================================================
+   */
 .machine-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -685,7 +718,10 @@ body {
 .mc-model { font-size: 12px; color: var(--ink2); }
 .mc-category { font-size: 11px; color: var(--ink3); margin-top: 6px; font-family: var(--mono); }
 
-/* ── STATUS BADGE (topbar) ───────────────────────────────────── */
+/* =============================================================================
+   STATUS BADGE (TOPBAR)
+   =============================================================================
+   */
 .status-badge {
   display: flex;
   align-items: center;
@@ -712,7 +748,10 @@ body {
 .status-dot.warn { background: var(--amber); }
 .status-dot.error { background: #ef4444; }
 
-/* ── MANUAL LIBRARY (DocChat) ────────────────────────────────── */
+/* =============================================================================
+   MANUAL LIBRARY (DOCCHAT)
+   =============================================================================
+   */
 .upload-zone {
   border: 1.5px dashed var(--border2);
   border-radius: var(--radius-sm);
@@ -835,7 +874,10 @@ body {
 
 .lib-sep { height: 1px; background: var(--border); margin: 12px 0 8px; }
 
-/* ── DIAGNOSTIC BLOCKS (Debug chat) ─────────────────────────── */
+/* =============================================================================
+   DIAGNOSTIC BLOCKS (DEBUG CHAT)
+   =============================================================================
+   */
 .diagnostic-block {
   background: var(--accent-bg);
   border: 1px solid rgba(245,158,11,0.25);
@@ -883,7 +925,10 @@ body {
   margin-bottom: 8px; display: inline-block;
 }
 
-/* ── LOGIN SCREEN ─────────────────────────────────────────────── */
+/* =============================================================================
+   LOGIN SCREEN
+   =============================================================================
+   */
 .login-screen {
   min-height: 100vh;
   width: 100%;
@@ -1045,12 +1090,18 @@ body {
   }
 }
 
-/* ── SPACING UTILITIES ──────────────────────────────────────── */
+/* =============================================================================
+   SPACING UTILITIES
+   =============================================================================
+   */
 .mt-md { margin-top: 10px; }
 .mt-sm { margin-top: 6px; }
 .mt-lg { margin-top: 20px; }
 
-/* ── DEBUG: AUDIT & CHAT HISTORY (sección Debug nueva) ──────── */
+/* =============================================================================
+   DEBUG: AUDIT & CHAT HISTORY (SECCIÓN DEBUG NUEVA)
+   =============================================================================
+   */
 .audit-table-wrap {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1154,7 +1205,10 @@ body {
   background: var(--bg);
 }
 
-/* ── PRINT STYLES ────────────────────────────────────────────── */
+/* =============================================================================
+   PRINT STYLES
+   =============================================================================
+   */
 @media print {
   .topbar,
   .panel-left,
@@ -1171,7 +1225,10 @@ body {
   .report-body { padding: 0; }
 }
 
-/* ── RESPONSIVE ──────────────────────────────────────────────── */
+/* =============================================================================
+   RESPONSIVE
+   =============================================================================
+   */
 @media (max-width: 900px) {
   .dash-kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .dash-bottom { grid-template-columns: 1fr; }
@@ -1187,7 +1244,10 @@ body {
   .ot-detail-grid { grid-template-columns: 1fr; }
 }
 
-/* ── Menu cards: variantes de borde por contexto (admin/warning) ───────── */
+/* =============================================================================
+   MENU CARDS: VARIANTES DE BORDE POR CONTEXTO (ADMIN/WARNING)
+   =============================================================================
+   */
 .menu-card--warning {
   border-color: var(--amber);
 }
@@ -1200,7 +1260,10 @@ body {
   border-color: var(--blue);
 }
  
-/* ── Badge inline tipo "ADMIN" dentro de un <h3> de menu-card ───────────── */
+/* =============================================================================
+   BADGE INLINE TIPO "ADMIN" DENTRO DE UN <H3> DE MENU-CARD
+   =============================================================================
+   */
 .menu-card-badge {
   font-family: var(--mono);
   font-size: 10px;
@@ -1214,7 +1277,10 @@ body {
   margin-left: 4px;
 }
  
-/* ── Modal: variante ancha para formularios con más campos ──────────────── */
+/* =============================================================================
+   MODAL: VARIANTE ANCHA PARA FORMULARIOS CON MÁS CAMPOS
+   =============================================================================
+   */
 .modal-box--wide {
   max-width: 620px;
 }
@@ -1225,20 +1291,29 @@ body {
   color: var(--ink3);
 }
  
-/* ── Modal footer sin separación (cuando ya hay hint arriba) ────────────── */
+/* =============================================================================
+   MODAL FOOTER SIN SEPARACIÓN (CUANDO YA HAY HINT ARRIBA)
+   =============================================================================
+   */
 .modal-footer--flush {
   padding: 0;
   border-top: none;
   margin-top: 4px;
 }
  
-/* ── Modal body en grid (en vez de flex col) para formularios cortos ────── */
+/* =============================================================================
+   MODAL BODY EN GRID (EN VEZ DE FLEX COL) PARA FORMULARIOS CORTOS
+   =============================================================================
+   */
 .upload-modal-body {
   display: grid;
   gap: 14px;
 }
  
-/* ── Wrapper estándar de campo de formulario (label + input apilados) ──── */
+/* =============================================================================
+   WRAPPER ESTÁNDAR DE CAMPO DE FORMULARIO (LABEL + INPUT APILADOS)
+   =============================================================================
+   */
 .upload-field {
   display: grid;
   gap: 6px;
@@ -1250,9 +1325,13 @@ body {
   color: var(--ink2);
 }
  
-/* ── Dropzone de archivo (drag & drop) ───────────────────────────────────
-   Usa --border para el estado en reposo y --blue / --blue-bg para el
-   estado activo de arrastre, igual que .input-wrap:focus-within. */
+/* =============================================================================
+   DROPZONE DE ARCHIVO (DRAG & DROP)
+   =============================================================================
+  
+   Usa  border para el estado en reposo y  blue /  blue-bg para el
+   estado activo de arrastre, igual que .input-wrap:focus-within.
+   */
 .upload-dropzone {
   border: 2px dashed var(--border);
   border-radius: var(--radius);
@@ -1277,7 +1356,10 @@ body {
   cursor: not-allowed;
 }
  
-/* ── Estado vacío de la dropzone ─────────────────────────────────────────── */
+/* =============================================================================
+   ESTADO VACÍO DE LA DROPZONE
+   =============================================================================
+   */
 .upload-dropzone-empty {
   text-align: center;
   display: grid;
@@ -1308,7 +1390,10 @@ body {
   color: var(--ink3);
 }
  
-/* ── Estado con archivo seleccionado dentro de la dropzone ───────────────── */
+/* =============================================================================
+   ESTADO CON ARCHIVO SELECCIONADO DENTRO DE LA DROPZONE
+   =============================================================================
+   */
 .upload-file-preview {
   width: 100%;
   display: flex;
@@ -1361,7 +1446,10 @@ body {
   flex-wrap: wrap;
 }
  
-/* ── Alerta de error del formulario de subida (usa tokens --red) ────────── */
+/* =============================================================================
+   ALERTA DE ERROR DEL FORMULARIO DE SUBIDA (USA TOKENS  RED)
+   =============================================================================
+   */
 .upload-error {
   padding: 10px 12px;
   border-radius: var(--radius);
@@ -1372,26 +1460,38 @@ body {
   line-height: 1.5;
 }
  
-/* ── Hint inferior del formulario (estado de subida / ayuda) ─────────────── */
+/* =============================================================================
+   HINT INFERIOR DEL FORMULARIO (ESTADO DE SUBIDA / AYUDA)
+   =============================================================================
+   */
 .upload-hint {
   font-size: 12px;
   color: var(--ink3);
 }
  
-/* ── Contenido del botón submit cuando está subiendo (spinner + texto) ──── */
+/* =============================================================================
+   CONTENIDO DEL BOTÓN SUBMIT CUANDO ESTÁ SUBIENDO (SPINNER + TEXTO)
+   =============================================================================
+   */
 .upload-submit-loading {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
-/* ── Shell general de la pantalla de Debug ──────────────────────────────── */
+/* =============================================================================
+   SHELL GENERAL DE LA PANTALLA DE DEBUG
+   =============================================================================
+   */
 .debug-shell {
   width: 100%;
   height: 100%;
   position: relative;
 }
  
-/* ── Overlay para el sidebar en mobile (mismo patrón que .modal-overlay) ── */
+/* =============================================================================
+   OVERLAY PARA EL SIDEBAR EN MOBILE (MISMO PATRÓN QUE .MODAL-OVERLAY)
+   =============================================================================
+   */
 .debug-sidebar-overlay {
   position: fixed;
   inset: 0;
@@ -1405,9 +1505,13 @@ body {
   }
 }
  
-/* ── Sidebar de selección de equipo ──────────────────────────────────────
+/* =============================================================================
+   SIDEBAR DE SELECCIÓN DE EQUIPO
+   =============================================================================
+  
    Por defecto extiende .panel-left. En mobile se oculta y se convierte
-   en drawer deslizante cuando tiene el modificador --open. */
+   en drawer deslizante cuando tiene el modificador  open.
+   */
 .debug-sidebar {
   display: flex;
   flex-direction: column;
@@ -1460,7 +1564,10 @@ body {
   margin-bottom: 16px;
 }
  
-/* ── Historial de OTs dentro del sidebar ─────────────────────────────────── */
+/* =============================================================================
+   HISTORIAL DE OTS DENTRO DEL SIDEBAR
+   =============================================================================
+   */
 .debug-history {
   flex: 1;
   overflow: hidden;
@@ -1519,7 +1626,10 @@ body {
   width: 100%;
 }
  
-/* ── Topbar del panel principal (variante local de .topbar) ─────────────── */
+/* =============================================================================
+   TOPBAR DEL PANEL PRINCIPAL (VARIANTE LOCAL DE .TOPBAR)
+   =============================================================================
+   */
 .debug-topbar {
   padding: 16px;
   align-items: center;
@@ -1548,7 +1658,10 @@ body {
   }
 }
  
-/* ── Estado vacío del área de chat ───────────────────────────────────────── */
+/* =============================================================================
+   ESTADO VACÍO DEL ÁREA DE CHAT
+   =============================================================================
+   */
 .debug-empty-state {
   height: 100%;
   display: flex;
@@ -1561,7 +1674,10 @@ body {
   padding: 0 16px;
 }
  
-/* ── Textarea e input de envío del chat de debug ─────────────────────────── */
+/* =============================================================================
+   TEXTAREA E INPUT DE ENVÍO DEL CHAT DE DEBUG
+   =============================================================================
+   */
 .debug-input {
   flex: 1;
   resize: none;
@@ -1581,8 +1697,12 @@ body {
   align-self: flex-end;
 }
  
-/* ── Responsive: panel-left como drawer ya cubierto arriba.
-   En desktop, .debug-sidebar se comporta como .panel-left normal. ───────── */
+/* =============================================================================
+   RESPONSIVE: PANEL-LEFT COMO DRAWER YA CUBIERTO ARRIBA.
+   =============================================================================
+  
+   En desktop, .debug-sidebar se comporta como .panel-left normal.
+   */
 @media (min-width: 768px) {
   .debug-sidebar {
     display: flex;
@@ -1591,7 +1711,10 @@ body {
 .login-submit-btn {
   margin-top: 16px;
 }
- /* ── Página completa de topología ────────────────────────────────────────── */
+/* =============================================================================
+   PÁGINA COMPLETA DE TOPOLOGÍA
+   =============================================================================
+   */
 .topo-page {
   width: 100%;
   height: 100%;
@@ -1606,7 +1729,10 @@ body {
   color: var(--ink3);
 }
  
-/* ── Header con título y acciones de zoom ────────────────────────────────── */
+/* =============================================================================
+   HEADER CON TÍTULO Y ACCIONES DE ZOOM
+   =============================================================================
+   */
 .topo-header {
   display: flex;
   align-items: center;
@@ -1620,13 +1746,19 @@ body {
   gap: 8px;
 }
  
-/* ── SVG interno: dimensiones fijas (el cursor dinámico va inline) ──────── */
+/* =============================================================================
+   SVG INTERNO: DIMENSIONES FIJAS (EL CURSOR DINÁMICO VA INLINE)
+   =============================================================================
+   */
 .topo-svg-el {
   width: 100%;
   height: 100%;
 }
  
-/* ── Líneas de conexión entre nodos ──────────────────────────────────────── */
+/* =============================================================================
+   LÍNEAS DE CONEXIÓN ENTRE NODOS
+   =============================================================================
+   */
 .topo-edges {
   stroke: var(--ink3);
   opacity: 0.4;
@@ -1636,9 +1768,13 @@ body {
   transition: stroke-dasharray 0.3s ease, opacity 0.3s ease;
 }
  
-/* ── Tooltip flotante sobre un nodo ───────────────────────────────────────
+/* =============================================================================
+   TOOLTIP FLOTANTE SOBRE UN NODO
+   =============================================================================
+  
    left/top se calculan dinámicamente en JS y van inline; el resto del
-   posicionamiento y la apariencia visual vive aquí. */
+   posicionamiento y la apariencia visual vive aquí.
+   */
 .topo-tooltip {
   position: absolute;
   z-index: 60;
@@ -1690,7 +1826,7 @@ body {
 .dash-block-title {
   font-size: 16px;
   font-weight: 700;
-  color: var(--ink);        /* ✅ corregido: era --ink1 (inexistente) */
+  color: var(--ink);        /* Corregido: antes usaba --ink1, un token inexistente */
 }
  
 .dash-block-subtitle {
@@ -1700,9 +1836,10 @@ body {
   margin-top: 2px;
 }
  
-/* ----------------------------------------------------------
-   dash-alert-banner  (reemplaza el banner inline con hardcodes)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DASH-ALERT-BANNER  (REEMPLAZA EL BANNER INLINE CON HARDCODES)
+   =============================================================================
+   */
 .dash-alert-banner {
   display: flex;
   align-items: center;
@@ -1734,9 +1871,10 @@ body {
   opacity: 0.9;
 }
  
-/* ----------------------------------------------------------
-   dash-charts-grid  (reemplaza el flex container inline)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DASH-CHARTS-GRID  (REEMPLAZA EL FLEX CONTAINER INLINE)
+   =============================================================================
+   */
 .dash-charts-grid {
   display: flex;
   flex-wrap: wrap;
@@ -1744,9 +1882,10 @@ body {
   margin-bottom: 24px;
 }
  
-/* ----------------------------------------------------------
-   dash-chart-scroll / dash-chart-center
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DASH-CHART-SCROLL / DASH-CHART-CENTER
+   =============================================================================
+   */
 .dash-chart-scroll {
   width: 100%;
   overflow-x: auto;
@@ -1760,9 +1899,10 @@ body {
   justify-content: center;
 }
  
-/* ----------------------------------------------------------
-   dash-tooltip  (reemplaza las clases Tailwind hardcodeadas)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DASH-TOOLTIP  (REEMPLAZA LAS CLASES TAILWIND HARDCODEADAS)
+   =============================================================================
+   */
 .dash-tooltip {
   background: var(--color-primary);
   border: 1px solid var(--border2);
@@ -1790,9 +1930,10 @@ body {
   margin-top: 4px;
 }
  
-/* ----------------------------------------------------------
-   dash-time-range  (reemplaza el div de selector inline)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DASH-TIME-RANGE  (REEMPLAZA EL DIV DE SELECTOR INLINE)
+   =============================================================================
+   */
 .dash-time-range {
   display: flex;
   justify-content: flex-end;
@@ -1804,18 +1945,20 @@ body {
   border-width: 2px;
 }
  
-/* ----------------------------------------------------------
-   dash-filters-actions  (botones dentro del panel de filtros)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DASH-FILTERS-ACTIONS  (BOTONES DENTRO DEL PANEL DE FILTROS)
+   =============================================================================
+   */
 .dash-filters-actions {
   margin-left: auto;
   display: flex;
   gap: 8px;
 }
  
-/* ----------------------------------------------------------
-   dash-empty  (reemplaza p-8 text-center text-slate-500)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DASH-EMPTY  (REEMPLAZA P-8 TEXT-CENTER TEXT-SLATE-500)
+   =============================================================================
+   */
 .dash-empty {
   padding: 32px;
   text-align: center;
@@ -1823,9 +1966,10 @@ body {
   font-size: 13px;
 }
  
-/* ----------------------------------------------------------
-   dash-loading
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DASH-LOADING
+   =============================================================================
+   */
 .dash-loading {
   padding: 40px;
   text-align: center;
@@ -1833,9 +1977,10 @@ body {
   font-size: 14px;
 }
  
-/* ----------------------------------------------------------
-   dash-pagination  (reemplaza el div de paginación inline)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DASH-PAGINATION  (REEMPLAZA EL DIV DE PAGINACIÓN INLINE)
+   =============================================================================
+   */
 .dash-pagination {
   display: flex;
   justify-content: space-between;
@@ -1855,9 +2000,10 @@ body {
   gap: 8px;
 }
  
-/* ----------------------------------------------------------
-   Responsive
-   ---------------------------------------------------------- */
+/* =============================================================================
+   RESPONSIVE
+   =============================================================================
+   */
 @media (max-width: 900px) {
   .dash-charts-grid {
     flex-direction: column;
@@ -1881,9 +2027,10 @@ body {
     gap: 8px;
   }
 }
- /* ----------------------------------------------------------
-   dc-sidebar  (reemplaza el panel-left con width inline dinámico)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DC-SIDEBAR  (REEMPLAZA EL PANEL-LEFT CON WIDTH INLINE DINÁMICO)
+   =============================================================================
+   */
 .dc-sidebar {
   display: flex;
   flex-direction: column;
@@ -1901,9 +2048,10 @@ body {
   min-width: 44px;
 }
  
-/* ----------------------------------------------------------
-   dc-sidebar-header  (reemplaza el div toggle con inline styles)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DC-SIDEBAR-HEADER  (REEMPLAZA EL DIV TOGGLE CON INLINE STYLES)
+   =============================================================================
+   */
 .dc-sidebar-header {
   display: flex;
   align-items: center;
@@ -1927,9 +2075,10 @@ body {
   white-space: nowrap;
 }
  
-/* ----------------------------------------------------------
-   dc-toggle-btn  (reemplaza el botón toggle con inline styles)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DC-TOGGLE-BTN  (REEMPLAZA EL BOTÓN TOGGLE CON INLINE STYLES)
+   =============================================================================
+   */
 .dc-toggle-btn {
   display: flex;
   align-items: center;
@@ -1955,9 +2104,10 @@ body {
   color: var(--ink);
 }
  
-/* ----------------------------------------------------------
-   dc-sidebar-content  (reemplaza display:flex/none inline)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DC-SIDEBAR-CONTENT  (REEMPLAZA DISPLAY:FLEX/NONE INLINE)
+   =============================================================================
+   */
 .dc-sidebar-content {
   flex: 1;
   flex-direction: column;
@@ -1972,9 +2122,10 @@ body {
   display: none;
 }
  
-/* ----------------------------------------------------------
-   dc-catalog-loading  (reemplaza el loading OTs con inline)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DC-CATALOG-LOADING  (REEMPLAZA EL LOADING OTS CON INLINE)
+   =============================================================================
+   */
 .dc-catalog-loading {
   font-size: 11px;
   color: var(--ink3);
@@ -1982,19 +2133,22 @@ body {
   padding: 8px 0;
 }
  
-/* ----------------------------------------------------------
-   dc-save-section  (área del botón guardar en panel izq.)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DC-SAVE-SECTION  (ÁREA DEL BOTÓN GUARDAR EN PANEL IZQ.)
+   =============================================================================
+   */
 .dc-save-section {
   margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
  
-/* ----------------------------------------------------------
-   dc-save-btn  (reemplaza el botón guardar con inline dinámico)
+/* =============================================================================
+   DC-SAVE-BTN  (REEMPLAZA EL BOTÓN GUARDAR CON INLINE DINÁMICO)
+   =============================================================================
+  
    Estados: idle | saving | saved | error
-   ---------------------------------------------------------- */
+   */
 .dc-save-btn {
   width: 100%;
   display: flex;
@@ -2035,10 +2189,12 @@ body {
   color: var(--red);
 }
  
-/* ----------------------------------------------------------
-   dc-save-modal  (reemplaza modal guardar sesión con inline)
+/* =============================================================================
+   DC-SAVE-MODAL  (REEMPLAZA MODAL GUARDAR SESIÓN CON INLINE)
+   =============================================================================
+  
    Usa .modal-overlay y .modal-box ya existentes en el DS
-   ---------------------------------------------------------- */
+   */
 .dc-save-modal {
   width: 380px;
   max-width: 90vw;
@@ -2074,9 +2230,10 @@ body {
   margin-top: 16px;
 }
  
-/* ----------------------------------------------------------
-   dc-textarea  (reemplaza Tailwind arbitrario en textarea)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DC-TEXTAREA  (REEMPLAZA TAILWIND ARBITRARIO EN TEXTAREA)
+   =============================================================================
+   */
 .dc-textarea {
   flex: 1;
   resize: none;
@@ -2094,9 +2251,10 @@ body {
   color: var(--ink3);
 }
  
-/* ----------------------------------------------------------
-   dc-camera-btn  (reemplaza botón cámara con inline + JS hover)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DC-CAMERA-BTN  (REEMPLAZA BOTÓN CÁMARA CON INLINE + JS HOVER)
+   =============================================================================
+   */
 .dc-camera-btn {
   flex-shrink: 0;
   display: flex;
@@ -2119,17 +2277,19 @@ body {
   pointer-events: none;
 }
  
-/* ----------------------------------------------------------
-   input-wrap--drag  (reemplaza Tailwind ring-2 ring-[var(--blue)])
-   ---------------------------------------------------------- */
+/* =============================================================================
+   INPUT-WRAP DRAG  (REEMPLAZA TAILWIND RING-2 RING-[VAR( BLUE)])
+   =============================================================================
+   */
 .input-wrap--drag {
   border-color: var(--blue);
   box-shadow: 0 0 0 2px var(--blue-alpha);
 }
  
-/* ----------------------------------------------------------
-   dc-pending-images  (reemplaza contenedor inline de previews)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DC-PENDING-IMAGES  (REEMPLAZA CONTENEDOR INLINE DE PREVIEWS)
+   =============================================================================
+   */
 .dc-pending-images {
   display: flex;
   flex-wrap: wrap;
@@ -2175,9 +2335,10 @@ body {
   background: var(--red-dark);
 }
  
-/* ----------------------------------------------------------
-   dc-upload-progress  (reemplaza Tailwind arbitrario mt-2 text-xs)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DC-UPLOAD-PROGRESS  (REEMPLAZA TAILWIND ARBITRARIO MT-2 TEXT-XS)
+   =============================================================================
+   */
 .dc-upload-progress {
   margin-top: 6px;
   font-size: 10px;
@@ -2185,9 +2346,10 @@ body {
   color: var(--ink3);
 }
  
-/* ----------------------------------------------------------
-   dc-manual-tags  (reemplaza Tailwind arbitrario en lista manuales)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   DC-MANUAL-TAGS  (REEMPLAZA TAILWIND ARBITRARIO EN LISTA MANUALES)
+   =============================================================================
+   */
 .dc-manual-tags {
   display: flex;
   flex-wrap: wrap;
@@ -2240,18 +2402,21 @@ body {
   opacity: 1;
 }
  
-/* ----------------------------------------------------------
-   ctx-tag--manual  (modificador BEM para el tag de manual activo)
+/* =============================================================================
+   CTX-TAG MANUAL  (MODIFICADOR BEM PARA EL TAG DE MANUAL ACTIVO)
+   =============================================================================
+  
    Reemplaza el style inline con background/color hardcodeados
-   ---------------------------------------------------------- */
+   */
 .ctx-tag--manual {
   background: var(--blue-bg);
   color: var(--blue);
 }
  
-/* ----------------------------------------------------------
-   Responsive
-   ---------------------------------------------------------- */
+/* =============================================================================
+   RESPONSIVE
+   =============================================================================
+   */
 @media (max-width: 640px) {
   .dc-sidebar--open {
     width: 100%;
@@ -2262,11 +2427,13 @@ body {
     width: 100%;
   }
 }
- /* ----------------------------------------------------------
-   forbidden-root
+/* =============================================================================
+   FORBIDDEN-ROOT
+   =============================================================================
+  
    Reemplaza: className="flex min-h-[100dvh] w-full items-center
-   justify-center bg-[var(--bg)]"  (Tailwind + arbitrario)
-   ---------------------------------------------------------- */
+   justify-center bg-[var( bg)]"  (Tailwind + arbitrario)
+   */
 .forbidden-root {
   display: flex;
   min-height: 100dvh;
@@ -2276,22 +2443,26 @@ body {
   background: var(--bg);
 }
  
-/* ----------------------------------------------------------
-   forbidden-card
+/* =============================================================================
+   FORBIDDEN-CARD
+   =============================================================================
+  
    Reemplaza: style={{ maxWidth: 560, width: 'calc(100% - 32px)',
    textAlign: 'center' }} (inline)
-   ---------------------------------------------------------- */
+   */
 .forbidden-card {
   max-width: 560px;
   width: calc(100% - 32px);
   text-align: center;
 }
  
-/* ----------------------------------------------------------
-   forbidden-icon
+/* =============================================================================
+   FORBIDDEN-ICON
+   =============================================================================
+  
    Reemplaza: style={{ fontSize: 44 }} en el div del emoji
-   El SVG hereda el color de var(--ink3) y escala con width/height
-   ---------------------------------------------------------- */
+   El SVG hereda el color de var( ink3) y escala con width/height
+   */
 .forbidden-icon {
   display: flex;
   align-items: center;
@@ -2307,10 +2478,12 @@ body {
   height: 100%;
 }
  
-/* ----------------------------------------------------------
-   forbidden-title / forbidden-sub
+/* =============================================================================
+   FORBIDDEN-TITLE / FORBIDDEN-SUB
+   =============================================================================
+  
    Reemplaza: style={{ marginTop: 8 }} en ambos elementos
-   ---------------------------------------------------------- */
+   */
 .forbidden-title {
   margin-top: 8px;
 }
@@ -2319,11 +2492,13 @@ body {
   margin-top: 8px;
 }
  
-/* ----------------------------------------------------------
-   forbidden-actions
+/* =============================================================================
+   FORBIDDEN-ACTIONS
+   =============================================================================
+  
    Reemplaza: style={{ display: 'flex', gap: 12,
    justifyContent: 'center', marginTop: 20, flexWrap: 'wrap' }}
-   ---------------------------------------------------------- */
+   */
 .forbidden-actions {
   display: flex;
   gap: 12px;
@@ -2331,11 +2506,13 @@ body {
   margin-top: 20px;
   flex-wrap: wrap;
 }
-/* ----------------------------------------------------------
-   mm-loading-wrap / mm-loading-text
+/* =============================================================================
+   MM-LOADING-WRAP / MM-LOADING-TEXT
+   =============================================================================
+  
    Reemplaza: className="flex items-center justify-center" (Tailwind)
-              className="text-[var(--ink3)]" (Tailwind arbitrario)
-   ---------------------------------------------------------- */
+   className="text-[var( ink3)]" (Tailwind arbitrario)
+   */
 .mm-loading-wrap {
   display: flex;
   align-items: center;
@@ -2347,10 +2524,12 @@ body {
   color: var(--ink3);
 }
  
-/* ----------------------------------------------------------
-   mm-container
+/* =============================================================================
+   MM-CONTAINER
+   =============================================================================
+  
    Reemplaza: className="space-y-6 max-w-3xl" (Tailwind)
-   ---------------------------------------------------------- */
+   */
 .mm-container {
   max-width: 768px;
   display: flex;
@@ -2358,22 +2537,26 @@ body {
   gap: 24px;
 }
  
-/* ----------------------------------------------------------
-   mm-timeline
-   Reemplaza: style={{ borderLeft: '2px solid var(--border)',
+/* =============================================================================
+   MM-TIMELINE
+   =============================================================================
+  
+   Reemplaza: style={{ borderLeft: '2px solid var( border)',
    paddingLeft: '24px', marginLeft: '12px' }} (inline)
-   ---------------------------------------------------------- */
+   */
 .mm-timeline {
   border-left: 2px solid var(--border);
   padding-left: 24px;
   margin-left: 12px;
 }
  
-/* ----------------------------------------------------------
-   mm-event
+/* =============================================================================
+   MM-EVENT
+   =============================================================================
+  
    Reemplaza: className="mb-8 relative hover:opacity-90
    transition-opacity" (Tailwind)
-   ---------------------------------------------------------- */
+   */
 .mm-event {
   position: relative;
   margin-bottom: 32px;
@@ -2384,12 +2567,14 @@ body {
   opacity: 0.9;
 }
  
-/* ----------------------------------------------------------
-   mm-dot
+/* =============================================================================
+   MM-DOT
+   =============================================================================
+  
    Reemplaza: className="absolute top-0 w-3.5 h-3.5 rounded-full"
-   + style={{ left: '-31px', background: 'var(--blue)',
-   border: '2px solid var(--surface)' }} (Tailwind + inline)
-   ---------------------------------------------------------- */
+   + style={{ left: '-31px', background: 'var( blue)',
+   border: '2px solid var( surface)' }} (Tailwind + inline)
+   */
 .mm-dot {
   position: absolute;
   top: 0;
@@ -2402,11 +2587,13 @@ body {
   flex-shrink: 0;
 }
  
-/* ----------------------------------------------------------
-   mm-date
-   Reemplaza: style={{ fontFamily: 'var(--mono)', fontSize: '11px',
-   color: 'var(--ink3)' }} (inline)
-   ---------------------------------------------------------- */
+/* =============================================================================
+   MM-DATE
+   =============================================================================
+  
+   Reemplaza: style={{ fontFamily: 'var( mono)', fontSize: '11px',
+   color: 'var( ink3)' }} (inline)
+   */
 .mm-date {
   font-family: var(--mono);
   font-size: 11px;
@@ -2414,11 +2601,13 @@ body {
   letter-spacing: 0.04em;
 }
  
-/* ----------------------------------------------------------
-   mm-event-title
+/* =============================================================================
+   MM-EVENT-TITLE
+   =============================================================================
+  
    Reemplaza: style={{ fontSize: '15px', fontWeight: 600,
-   color: 'var(--ink)', marginTop: '4px' }} (inline)
-   ---------------------------------------------------------- */
+   color: 'var( ink)', marginTop: '4px' }} (inline)
+   */
 .mm-event-title {
   font-size: 15px;
   font-weight: 600;
@@ -2426,11 +2615,13 @@ body {
   margin-top: 4px;
 }
  
-/* ----------------------------------------------------------
-   mm-event-summary
-   Reemplaza: style={{ fontSize: '13px', color: 'var(--ink2)',
+/* =============================================================================
+   MM-EVENT-SUMMARY
+   =============================================================================
+  
+   Reemplaza: style={{ fontSize: '13px', color: 'var( ink2)',
    marginTop: '4px', lineHeight: 1.6 }} (inline)
-   ---------------------------------------------------------- */
+   */
 .mm-event-summary {
   font-size: 13px;
   color: var(--ink2);
@@ -2438,12 +2629,14 @@ body {
   line-height: 1.6;
 }
  
-/* ----------------------------------------------------------
-   mm-event-actor / mm-event-actor-name
-   Reemplaza: style={{ fontSize: '11px', color: 'var(--ink3)',
+/* =============================================================================
+   MM-EVENT-ACTOR / MM-EVENT-ACTOR-NAME
+   =============================================================================
+  
+   Reemplaza: style={{ fontSize: '11px', color: 'var( ink3)',
    marginTop: '8px' }} + span con style={{ fontWeight: 500,
-   color: 'var(--ink)' }} (inline)
-   ---------------------------------------------------------- */
+   color: 'var( ink)' }} (inline)
+   */
 .mm-event-actor {
   font-size: 11px;
   color: var(--ink3);
@@ -2454,11 +2647,13 @@ body {
   font-weight: 500;
   color: var(--ink);
 }
-/* ----------------------------------------------------------
-   ChatBubble — NUEVO, agregar a index.css
+/* =============================================================================
+   CHATBUBBLE — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Reemplaza clases Tailwind arbitrarias y estilos inline
    de ChatBubble.tsx
-   ---------------------------------------------------------- */
+   */
 
 .msg-content {
   display: flex;
@@ -2520,7 +2715,7 @@ body {
   color: var(--ink);
 }
 
-/* Feedback (👍 / 👎) */
+/* Controles de feedback (positivo / negativo) */
 .feedback-actions {
   display: flex;
   gap: 12px;
@@ -2556,15 +2751,16 @@ body {
 .feedback-msg--bad {
   color: var(--ink3);
 }
-/* ----------------------------------------------------------
-   FinancialDashboard — NUEVO, agregar a index.css
+/* =============================================================================
+   FINANCIALDASHBOARD — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Reemplaza los style={{}} inline de FinancialDashboard.jsx
-   ---------------------------------------------------------- */
+   */
 
-/* ⚠️ FIX previo requerido: estos tokens ya existen en el sistema
-   pero solo estaban definidos en modo oscuro (.dark / prefers dark).
-   Agrégalos también dentro de :root (modo claro) si no lo hiciste
-   ya al aplicar el bloque anterior:
+/* Nota: estos tokens deben estar definidos también dentro de :root (modo
+   claro), ya que originalmente solo existían en modo oscuro (.dark /
+   prefers dark):
    --cyan: #0e7490;
    --cyan-bg: #ecfeff;
    --blue-dark: #1347a8;
@@ -2807,19 +3003,23 @@ body {
   align-items: center;
   margin-bottom: 16px;
 }
-/* ----------------------------------------------------------
-   HelpModal — NUEVO, agregar a index.css
+/* =============================================================================
+   HELPMODAL — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Reemplaza: className="text-sm leading-relaxed text-gray-700/200" (Tailwind + dark manual)
-   ---------------------------------------------------------- */
+   */
 .help-modal-content {
   font-size: 13px;
   line-height: 1.6;
   color: var(--ink2);
 }
-/* ----------------------------------------------------------
-   SettingsModal — NUEVO, agregar a index.css
+/* =============================================================================
+   SETTINGSMODAL — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Reemplaza style={{ fontFamily, fontSize, maxWidth, padding }} inline
-   ---------------------------------------------------------- */
+   */
 
 .settings-version {
   font-family: var(--mono);
@@ -2837,10 +3037,12 @@ body {
   font-size: 10px;
   padding: 5px 8px;
 }
-/* ----------------------------------------------------------
-   TicketDetailModal — NUEVO, agregar a index.css
+/* =============================================================================
+   TICKETDETAILMODAL — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Reemplaza style={{ maxWidth, padding, color, fontSize, etc. }} inline
-   ---------------------------------------------------------- */
+   */
 
 .ot-detail-modal-title {
   font-size: 17px;
@@ -2897,10 +3099,12 @@ body {
 .btn-danger:hover {
   background: var(--red-bg);
 }
-/* ----------------------------------------------------------
-   TicketTable — NUEVO, agregar a index.css
+/* =============================================================================
+   TICKETTABLE — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Reemplaza STATUS_COLORS (Tailwind slate hardcodeado) y estilos inline
-   ---------------------------------------------------------- */
+   */
 
 .ot-table-empty {
   padding: 32px;
@@ -2940,10 +3144,12 @@ body {
 .ot-badge.cancelled { background: var(--red-bg); color: var(--red); }
 .ot-badge.overdue   { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); }
 
-/* ----------------------------------------------------------
-   TopBar — NUEVO, agregar a index.css
+/* =============================================================================
+   TOPBAR — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Faltaba la clase .topbar-select usada por el <select> de idioma
-   ---------------------------------------------------------- */
+   */
 .topbar-select {
   padding: 5px 8px;
   border-radius: var(--radius-sm);
@@ -2959,12 +3165,14 @@ body {
 .topbar-select:focus {
   border-color: var(--blue);
 }
-/* ----------------------------------------------------------
-   WorkOrderCreateModal — NUEVO, agregar a index.css
+/* =============================================================================
+   WORKORDERCREATEMODAL — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Reemplaza estilos inline y Tailwind arbitrario ('py-3', maxWidth, etc.)
    Reutiliza .modal-header-sub, .ot-detail-field, .ot-detail-label,
    .form-input, .form-select, .report-textarea, .btn, .modal-* existentes.
-   ---------------------------------------------------------- */
+   */
 
 .modal-box--form {
   max-width: 780px;
@@ -3082,12 +3290,14 @@ body {
 .wo-submit-btn {
   min-width: 120px;
 }
-/* ----------------------------------------------------------
-   Layout — NUEVO, agregar a index.css
+/* =============================================================================
+   LAYOUT — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Reemplaza className="flex flex-col h-[100dvh] overflow-hidden
-   bg-[var(--bg-body)] text-[var(--ink)] transition-colors duration-200"
-   (Tailwind arbitrario, además var(--bg-body) no existe → var(--bg))
-   ---------------------------------------------------------- */
+   bg-[var( bg-body)] text-[var( ink)] transition-colors duration-200"
+   (Tailwind arbitrario, además var( bg-body) no existe → var( bg))
+   */
 
 .app-shell {
   display: flex;
@@ -3105,23 +3315,27 @@ body {
   overflow: hidden;
   position: relative;
 }
-/* ----------------------------------------------------------
-   Login — NUEVO, agregar a index.css (justo después de .login-screen)
+/* =============================================================================
+   LOGIN — NUEVO, AGREGAR A INDEX.CSS (JUSTO DESPUÉS DE .LOGIN-SCREEN)
+   =============================================================================
+  
    Reemplaza className="min-h-[100dvh] flex flex-col items-center justify-center"
    .login-screen ya define min-height/flex/align/justify, pero le faltaba
    flex-direction:column y el fix de altura dinámica en móvil (100dvh).
-   ---------------------------------------------------------- */
+   */
 .login-screen {
   min-height: 100dvh;
   flex-direction: column;
 }
-/* ----------------------------------------------------------
-   Menu — NUEVO, agregar a index.css
+/* =============================================================================
+   MENU — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Reemplaza los style={{}} inline del formulario de subida de documentos.
-   Reutiliza .menu-card--purple/--blue, .menu-card-badge, .modal-box--wide,
+   Reutiliza .menu-card purple/ blue, .menu-card-badge, .modal-box wide,
    .modal-header-sub y .form-error-banner (esta última ya creada en el
    bloque de WorkOrderCreateModal — si no la agregaste aún, inclúyela).
-   ---------------------------------------------------------- */
+   */
 
 .upload-form {
   display: grid;
@@ -3265,18 +3479,22 @@ body {
   align-items: center;
   gap: 8px;
 }
-/* ----------------------------------------------------------
-   Report — NUEVO, agregar a index.css
+/* =============================================================================
+   REPORT — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Reemplaza style={{ maxWidth: '200px' }} del <select> de severidad
-   ---------------------------------------------------------- */
+   */
 .form-select--md {
   max-width: 200px;
 }
-/* ----------------------------------------------------------
-   SessionHistory — NUEVO, agregar a index.css
+/* =============================================================================
+   SESSIONHISTORY — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
    Reemplaza por completo las clases Tailwind con corchetes
-   (bg-[var(--x)], w-[450px], etc.)
-   ---------------------------------------------------------- */
+   (bg-[var( x)], w-[450px], etc.)
+   */
 
 .sh-page {
   width: 100%;
@@ -3442,12 +3660,14 @@ body {
   gap: 16px;
   background: var(--bg);
 }
-/* ----------------------------------------------------------
-   Topology — NUEVO, agregar a index.css
-   Reemplaza Tailwind arbitrario (bg-[var(--x)], transition-all, etc.)
+/* =============================================================================
+   TOPOLOGY — NUEVO, AGREGAR A INDEX.CSS
+   =============================================================================
+  
+   Reemplaza Tailwind arbitrario (bg-[var( x)], transition-all, etc.)
    y colores hardcodeados (#10B981, #F59E0B, #ef4444, #64748B).
    Reutiliza .shadow-soft ya existente.
-   ---------------------------------------------------------- */
+   */
 
 .topo-loading {
   padding: 16px;

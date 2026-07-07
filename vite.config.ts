@@ -1,7 +1,24 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// =============================================================================
+// CONFIGURACIÓN
+// =============================================================================
+//
+// Constantes y ajustes base utilizados por la configuración de Vite.
+//
+
+// Timeout extendido para soportar respuestas largas del backend y del
+// motor RAG a través del proxy de desarrollo.
 const PROXY_TIMEOUT = 30 * 60 * 1000
+
+// =============================================================================
+// SERVIDOR DE DESARROLLO
+// =============================================================================
+//
+// Define el host, puerto y el proxy hacia el backend central y hacia
+// LM Studio durante el desarrollo local.
+//
 
 export default defineConfig({
   plugins: [react()],
@@ -28,7 +45,14 @@ export default defineConfig({
       },
     },
   },
-  // 🔥 Mantenemos solo el Chunk Splitting (que es lo que realmente importa para que cargue rápido)
+
+  // ===========================================================================
+  // BUILD DE PRODUCCIÓN
+  // ===========================================================================
+  //
+  // Configura el particionado de chunks para optimizar los tiempos de carga
+  // inicial, separando las dependencias más pesadas en bundles propios.
+  //
   build: {
     rollupOptions: {
       output: {
