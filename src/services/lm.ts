@@ -1,26 +1,49 @@
 // @ts-nocheck
 
+// =============================================================================
+// INTEGRACIÓN — LM STUDIO (FALLBACK LOCAL)
+// =============================================================================
+//
+// Provee conexión directa con LM Studio como motor de respaldo cuando el
+// backend central de FastAPI no está disponible. Sigue el estándar de la
+// API de OpenAI para mantener compatibilidad de payloads.
+//
+
 /**
- * Servicio de conexión directa con LM Studio.
- * Actúa como "Cerebro de Emergencia" si el backend central de FastAPI se cae.
- * Utiliza el estándar de la API de OpenAI.
+ * Ejecuta una solicitud de chat completions directamente contra LM Studio,
+ * sin pasar por el backend central.
+ *
+ * Args:
+ *     messages:
+ *         Historial de mensajes en formato OpenAI.
+ *     lmBase:
+ *         URL base del servidor LM Studio.
+ *     lmModel:
+ *         Identificador del modelo local a utilizar.
+ *     maxTokens:
+ *         Límite de tokens en la respuesta.
+ *     timeout:
+ *         Tiempo máximo de espera en milisegundos antes de abortar.
+ *
+ * Returns:
+ *     Objeto Response nativo del fetch, para ser consumido con `.json()`
+ *     por los componentes que lo invocan.
  */
 export async function callLMStudio(
-  messages: any[], 
-  lmBase: string, 
-  lmModel: string = 'local-model', 
-  maxTokens = 1500, 
+  messages: any[],
+  lmBase: string,
+  lmModel: string = 'local-model',
+  maxTokens = 1500,
   timeout = 120000
 ) {
   try {
-    // 1. Limpiamos la URL para evitar errores de doble barra (//)
+    // Normaliza la URL base para evitar barras duplicadas.
     const safeLmBase = (lmBase || 'http://localhost:1234/v1').replace(/\/$/, '');
 
-    // 2. Blindaje anti-cuelgues: Si la IA local se satura, abortamos la petición
+    // Aborta la solicitud si el motor local no responde dentro del timeout.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    // 3. Llamada DIRECTA a LM Studio (sin pasar por FastAPI)
     const response = await fetch(`${safeLmBase}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -30,10 +53,10 @@ export async function callLMStudio(
         model: lmModel,
         messages: messages,
         max_tokens: maxTokens,
-        temperature: 0.3, // Temperatura baja para respuestas técnicas precisas
-        stream: false // Mantenemos false para compatibilidad con la estructura actual del UI
+        temperature: 0.3,
+        stream: false,
       }),
-      signal: controller.signal
+      signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
@@ -42,15 +65,12 @@ export async function callLMStudio(
       throw new Error(`Error del motor LM Studio: ${response.status}`);
     }
 
-    // Retornamos el objeto Response nativo. 
-    // De esta forma, Debug.tsx y DocChat.tsx pueden hacer `await resp.json()` sin problemas.
     return response;
-    
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      console.error("❌ LM Studio tardó demasiado en responder (Timeout).");
+      console.error('LM Studio tardó demasiado en responder (timeout).');
     } else {
-      console.error("❌ Error de red al intentar contactar a LM Studio directamente:", err);
+      console.error('Error de red al intentar contactar a LM Studio directamente:', err);
     }
     throw err;
   }

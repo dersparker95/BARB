@@ -1,14 +1,20 @@
 import { WorkOrder } from '../types'
 
-// ⚠️ FIX: antes esta lista era ['open','in_progress','done','closed'], inventada
-// y distinta al enum real de Postgres (estado_ot). Esto rompía el botón "Avanzar
-// estado" (podía mandar 'open'/'done'/'closed', que no existen en la BD → el
-// PUT /status fallaba) y hacía que computeMTTR() nunca contara nada (comparaba
-// contra 'closed'/'done', pero el status real es 'completed').
+// =============================================================================
+// CONSTANTES DE ESTADO
+// =============================================================================
+//
+// Define los estados válidos de una orden de trabajo, alineados con el enum
+// real de PostgreSQL (estado_ot), y sus etiquetas visuales de respaldo.
+//
+
+// Refleja el enum estado_ot de la base de datos. Un desalineamiento aquí
+// provoca fallos silenciosos: el PUT /status rechaza valores inexistentes
+// en la BD, y computeMTTR() deja de contabilizar órdenes cerradas.
 export const WO_STATUSES = ['pending', 'assigned', 'in_progress', 'completed', 'cancelled', 'overdue'] as const
 export type WOStatus = typeof WO_STATUSES[number]
 
-// Fallback de etiquetas (Aunque en la UI ahora usamos t.statuses del i18n)
+// Fallback de etiquetas; la UI utiliza preferentemente t.statuses del i18n.
 export const WO_STATUS_LABEL: Record<WOStatus, string> = {
   'pending': 'Pendiente',
   'assigned': 'Asignada',
@@ -18,7 +24,13 @@ export const WO_STATUS_LABEL: Record<WOStatus, string> = {
   'overdue': 'Vencida'
 }
 
-// Interfaz estricta para evitar el uso de 'any'
+// =============================================================================
+// MODELOS
+// =============================================================================
+//
+// Estructuras tipadas utilizadas por las utilidades de órdenes de trabajo.
+//
+
 export interface MachineHistoryEvent {
   id: string
   type: string
@@ -28,13 +40,30 @@ export interface MachineHistoryEvent {
   actor: string
 }
 
-// 2. Cálculo de MTTR (Tiempo Medio de Reparación) seguro
+// =============================================================================
+// MÉTRICAS
+// =============================================================================
+//
+// Calcula indicadores derivados del conjunto de órdenes de trabajo.
+//
+
+/**
+ * Calcula el tiempo medio de reparación (MTTR) en minutos, considerando
+ * únicamente las órdenes en estado terminal real de la base de datos.
+ *
+ * Args:
+ *     tickets:
+ *         Conjunto de órdenes de trabajo a evaluar.
+ *
+ * Returns:
+ *     MTTR en minutos, redondeado a un decimal, o 0 si no hay datos válidos.
+ */
 export function computeMTTR(tickets: WorkOrder[]): number {
   if (!Array.isArray(tickets) || tickets.length === 0) return 0
 
   const durations: number[] = tickets
-    // ⚠️ FIX: 'completed' es el único estado terminal real en la BD.
-    // 'closed'/'done' no existen como valores de estado_ot.
+    // 'completed' es el único estado terminal real; 'closed'/'done' no existen
+    // como valores de estado_ot.
     .filter(t => {
       const s = String(t.status || '').toLowerCase()
       return s === 'completed' && t.closedAt && t.createdAt
@@ -47,7 +76,25 @@ export function computeMTTR(tickets: WorkOrder[]): number {
   return Math.round((sum / durations.length) * 10) / 10
 }
 
-// 3. Filtro de Búsqueda Dinámico para la tabla del Dashboard
+// =============================================================================
+// FILTRADO Y BÚSQUEDA
+// =============================================================================
+//
+// Provee las utilidades de filtrado utilizadas por la tabla del dashboard.
+//
+
+/**
+ * Filtra órdenes de trabajo según estado, máquina y texto de búsqueda libre.
+ *
+ * Args:
+ *     tickets:
+ *         Conjunto de órdenes de trabajo a filtrar.
+ *     q:
+ *         Criterios de filtrado: status, machineId y/o search.
+ *
+ * Returns:
+ *     Subconjunto de órdenes que cumple con los criterios indicados.
+ */
 export function filterTickets(
   tickets: WorkOrder[], 
   q: { status?: string; machineId?: string; search?: string }
@@ -55,13 +102,11 @@ export function filterTickets(
   if (!Array.isArray(tickets)) return []
 
   return tickets.filter(t => {
-    // Normalizamos los strings para la comparación
     const currentStatus = String(t.status || '').toLowerCase()
     const filterStatus = String(q.status || '').toLowerCase()
 
     if (q.status && q.status !== 'all' && currentStatus !== filterStatus) return false
-    
-    // Extracción segura del ID de máquina
+
     const tMachine = String((t as any).machineId || (t as any).machine || '')
     if (q.machineId && q.machineId !== 'all' && tMachine !== String(q.machineId)) return false
     
@@ -79,7 +124,27 @@ export function filterTickets(
   })
 }
 
-// 4. Historial de Máquina 100% Real y Tipado
+// =============================================================================
+// HISTORIAL DE MÁQUINA
+// =============================================================================
+//
+// Reconstruye el historial de eventos asociado a una máquina a partir de
+// sus órdenes de trabajo.
+//
+
+/**
+ * Construye el historial de eventos de una máquina a partir de sus órdenes
+ * de trabajo asociadas, ordenado de más reciente a más antiguo.
+ *
+ * Args:
+ *     tickets:
+ *         Conjunto de órdenes de trabajo disponibles.
+ *     machineId:
+ *         Identificador de la máquina a consultar.
+ *
+ * Returns:
+ *     Lista de eventos tipados, ordenada cronológicamente en forma descendente.
+ */
 export function getMachineHistory(tickets: WorkOrder[], machineId: string | number): MachineHistoryEvent[] {
   if (!Array.isArray(tickets)) return []
 
@@ -94,16 +159,16 @@ export function getMachineHistory(tickets: WorkOrder[], machineId: string | numb
     events.push({ 
       id: String(t.id), 
       type: 'workorder', 
-      // Fallback a fecha actual solo si no existe ninguna de las dos
+      // Recurre a la fecha actual solo si no existe fecha de cierre ni de creación.
       date: t.closedAt || t.createdAt || new Date().toISOString(), 
       title: t.title || 'OT', 
-      // Si no hay creador, dejamos string vacío para que el componente UI aplique su propia traducción (ej. t.common.system)
+      // Si no hay creador registrado, se deja vacío para que la UI aplique su
+      // propia traducción por defecto (por ejemplo, t.common.system).
       actor: t.createdBy || (t as any).technician || '', 
       summary: t.description || `[Status: ${t.status || 'Unknown'}]`
     })
   })
 
-  // Ordenar de más reciente a más antiguo
   events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   
   return events

@@ -5,7 +5,14 @@ import App from './App'
 import { AppProvider } from './context/AppContext'
 import './index.css'
 
-// 🔥 BLINDAJE: Validación estricta del contenedor principal
+// =============================================================================
+// PUNTO DE ENTRADA
+// =============================================================================
+//
+// Inicializa el árbol de React sobre el contenedor raíz del DOM y monta
+// los proveedores globales de la aplicación.
+//
+
 const container = document.getElementById('root')
 
 if (!container) {
@@ -18,8 +25,8 @@ const root = createRoot(container)
 
 root.render(
   <React.StrictMode>
-    {/* 🔥 ARQUITECTURA LIMPIA: El Router envuelve al Contexto para permitir 
-        el uso de hooks de navegación globales dentro de AppProvider si se requiere. */}
+    {/* El Router envuelve al contexto para permitir el uso de hooks de
+        navegación globales dentro de AppProvider si se requiere. */}
     <BrowserRouter>
       <AppProvider>
         <App />

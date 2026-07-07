@@ -1,7 +1,22 @@
+// =============================================================================
+// MODELOS
+// =============================================================================
+//
+// Define la estructura de una guía de ayuda contextual.
+//
+
 export interface HelpGuide {
   title: string;
   content: string;
 }
+
+// =============================================================================
+// CONTENIDO DE AYUDA
+// =============================================================================
+//
+// Centraliza las guías de ayuda contextual por ruta de la aplicación.
+// La clave 'default' se utiliza cuando la ruta actual no tiene guía asociada.
+//
 
 export const helpContentData: Record<string, HelpGuide> = {
   '/menu': {

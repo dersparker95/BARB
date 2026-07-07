@@ -1,20 +1,43 @@
-// 🔥 BLINDAJE: Agregados los roles de Login y el truco de autocompletado
+// =============================================================================
+// USUARIOS Y ROLES
+// =============================================================================
+//
+// Define los roles de acceso del sistema y la estructura del usuario
+// autenticado.
+//
+
+// Se añade (string & {}) para preservar autocompletado de los roles conocidos
+// sin restringir el tipo a un enum cerrado.
 export type Role = 'gerente' | 'admin' | 'tecnico' | 'operador' | 'engineer' | 'supervisor' | 'visitante' | (string & {})
 
 export interface User {
-  id: string | number // 🛠️ SQL envía números (1, 2), React a veces usa strings ('1')
+  id: string | number // El backend SQL entrega números; el frontend puede recibirlos como string.
   name: string
   role: Role
   token?: string
 }
 
+// =============================================================================
+// MÁQUINAS
+// =============================================================================
+//
+// Modelo de máquina y sus posibles estados operativos.
+//
+
 export interface Machine {
   id: string | number
   name: string
-  // 🔥 FIX: Mantenemos el autocompletado de los estados conocidos
   status: 'ok' | 'warning' | 'alarm' | 'operativo' | 'mantenimiento' | 'falla' | (string & {})
   location?: string
 }
+
+// =============================================================================
+// ÓRDENES DE TRABAJO
+// =============================================================================
+//
+// Modelo de orden de trabajo alineado con los enums reales de PostgreSQL
+// (estado_ot, prioridad_ot).
+//
 
 export interface WorkOrder {
   id: string | number
@@ -22,17 +45,15 @@ export interface WorkOrder {
   description?: string
   machineId?: string | number
   machine?: string 
-  machineName?: string // 🛠️ Integrado desde el mapeo del Dashboard
+  machineName?: string
 
-  // ⚠️ FIX: antes decía 'open'|'in_progress'|'done'|'closed', que NO son los
-  // valores reales del enum estado_ot en Postgres (pending/assigned/in_progress/
-  // completed/cancelled/overdue). Se corrige para que el tipo documente lo que
-  // realmente llega del backend; se mantiene (string & {}) para no romper nada
-  // que dependa de valores adicionales.
+  // Refleja el enum estado_ot real de la base de datos (pending/assigned/
+  // in_progress/completed/cancelled/overdue). Se conserva (string & {}) para
+  // no romper valores adicionales que pueda enviar el backend.
   status: 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | 'overdue' | (string & {})
-  // ⚠️ FIX: faltaba 'urgent', que es el valor máximo real del enum prioridad_ot
-  // (low/medium/high/urgent). 'critical' no es un valor de prioridad en la BD
-  // (pertenece a severity, un campo distinto).
+  // Refleja el enum prioridad_ot real de la base de datos (low/medium/high/
+  // urgent). 'critical' no es un valor de prioridad: pertenece al campo
+  // severity, que es distinto.
   priority?: 'low' | 'medium' | 'high' | 'urgent' | (string & {})
   
   createdAt: string
@@ -40,7 +61,6 @@ export interface WorkOrder {
   createdBy?: string
   technician?: string 
   
-  // 🛠️ Integrado desde el mapeo del Dashboard para evitar "any" en la tabla
   durationReal?: number 
   discipline?: string 
   maintenanceType?: string 
@@ -48,6 +68,13 @@ export interface WorkOrder {
   costoReal?: number 
   hasBarbAi?: boolean 
 }
+
+// =============================================================================
+// CHAT Y MENSAJERÍA
+// =============================================================================
+//
+// Estructuras utilizadas por el módulo de chat y el motor RAG.
+//
 
 export interface SourceHit {
   documentName?: string
@@ -63,6 +90,14 @@ export interface Message {
 }
 
 export type DebugMessagesByMachine = Record<string, Message[]>
+
+// =============================================================================
+// ESTADO GLOBAL DE LA APLICACIÓN
+// =============================================================================
+//
+// Define el estado y el contrato del contexto compartido por toda la
+// aplicación.
+//
 
 export interface AppState {
   currentScreen: string
@@ -83,8 +118,8 @@ export interface AppState {
 }
 
 export interface AppContextValue extends AppState {
-  // Servicio API centralizado (ya vinculado al apiBase actual y con el token de
-  // sesión adjunto automáticamente). Úsalo en vez de hacer fetch() manual.
+  // Servicio API centralizado, ya vinculado al apiBase actual y con el token
+  // de sesión adjunto automáticamente. Debe usarse en lugar de fetch() manual.
   api: any
   setCurrentScreen: (s: string) => void
   setDark: (v: boolean) => void
@@ -103,11 +138,18 @@ export interface AppContextValue extends AppState {
   setApiBase: (u: string) => void
   setLmBase: (u: string) => void
   setLoading: (l: boolean) => void
-  // 🔥 FIX: Actualizado a SourceHit[] para hacer match perfecto con la lógica RAG
   appendToLastDocMessage?: (chunk: string, sources?: SourceHit[]) => void 
   login?: (params: { email: string; password: string }) => Promise<User>
   logout?: () => Promise<void>
 }
+
+// =============================================================================
+// RESPUESTAS DE API
+// =============================================================================
+//
+// Estructuras de respuesta de los endpoints de documentación (RAG) y
+// diagnóstico (debug).
+//
 
 export interface DocApiResponse {
   response: string
@@ -121,6 +163,13 @@ export interface DebugApiResponse {
   diagnostics?: unknown
   suggestedActions?: unknown[]
 }
+
+// =============================================================================
+// REPORTES Y SESIONES DE DIAGNÓSTICO
+// =============================================================================
+//
+// Modelos utilizados por los módulos de reportes y sesiones de debug.
+//
 
 export interface Report {
   reportId: string
@@ -139,6 +188,14 @@ export interface DebugSession {
   technician?: string
   notes?: string
 }
+
+// =============================================================================
+// HISTORIAL
+// =============================================================================
+//
+// Estructura unificada para representar eventos del historial de una
+// máquina, sin importar su origen (orden de trabajo, reporte o debug).
+//
 
 export type HistoryEvent = {
   id: string

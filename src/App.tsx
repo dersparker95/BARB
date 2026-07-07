@@ -1,14 +1,27 @@
 import React, { Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 
-// ⚡ CARGA INMEDIATA (Solo lo esencial)
+// =============================================================================
+// CARGA INMEDIATA
+// =============================================================================
+//
+// Componentes esenciales requeridos antes de resolver cualquier ruta.
+//
+
 import Layout from './layout/Layout'
 import Login from './pages/Login'
 import Forbidden from './pages/Forbidden'
 import { useAppContext } from './context/AppContext'
 import { canAccessPage, AppPage } from './utils/permissions'
 
-// 🦥 CARGA PEREZOSA (Lazy Loading para optimizar la RAM y la red)
+// =============================================================================
+// CARGA DIFERIDA
+// =============================================================================
+//
+// Páginas cargadas de forma perezosa para reducir el consumo inicial de
+// red y memoria.
+//
+
 const Dashboard = React.lazy(() => import('./pages/Dashboard'))
 const Menu = React.lazy(() => import('./pages/Menu'))
 const DocChat = React.lazy(() => import('./pages/DocChat'))
@@ -16,18 +29,36 @@ const Debug = React.lazy(() => import('./pages/Debug'))
 const Topology = React.lazy(() => import('./pages/Topology'))
 const MachineMemory = React.lazy(() => import('./pages/MachineMemory'))
 const Report = React.lazy(() => import('./pages/Report'))
-// 🔥 NUEVA RUTA: Historial de Sesiones
 const SessionHistory = React.lazy(() => import('./pages/SessionHistory'))
+
+// =============================================================================
+// SEGURIDAD
+// =============================================================================
+//
+// Define el guardia de acceso por rol utilizado en todas las rutas
+// protegidas de la aplicación.
+//
 
 type GuardProps = {
   page: AppPage
   children: React.ReactElement
 }
 
-// 🛡️ GUARDIA ÚNICO DE SEGURIDAD: ahora consulta permissions.ts directamente
-// (espejo de permisos.py en el backend) en vez de arrays de roles hardcodeados
-// o precalculados. Agregar una página o rol nuevo solo requiere tocar
-// permissions.ts/permisos.py — nada aquí.
+/**
+ * Protege una ruta verificando sesión activa y permiso de acceso del rol
+ * del usuario, delegando la validación en permissions.ts (espejo de
+ * permisos.py en el backend). Agregar una página o rol nuevo solo requiere
+ * modificar esa fuente de verdad, no este componente.
+ *
+ * Args:
+ *     page:
+ *         Página a proteger.
+ *     children:
+ *         Elemento a renderizar si el acceso es válido.
+ *
+ * Returns:
+ *     El contenido protegido, o una redirección a /login o /403.
+ */
 const RoleGuard: React.FC<GuardProps> = ({ page, children }) => {
   const { user } = useAppContext()
   const location = useLocation()
@@ -45,7 +76,7 @@ const RoleGuard: React.FC<GuardProps> = ({ page, children }) => {
 
 const RootRedirect: React.FC = () => <Navigate to="/login" replace />
 
-// Spinner bilingüe e independiente
+// Spinner de carga bilingüe, independiente del sistema de traducciones.
 const LoadingFallback = () => (
   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100dvh', width: '100%', color: 'var(--ink3)', background: 'var(--bg-body)' }}>
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
@@ -57,6 +88,14 @@ const LoadingFallback = () => (
   </div>
 )
 
+// =============================================================================
+// ENDPOINTS — ENRUTAMIENTO PRINCIPAL
+// =============================================================================
+//
+// Define el árbol de rutas de la aplicación y el layout que envuelve las
+// rutas protegidas.
+//
+
 export default function App() {
   return (
     <Suspense fallback={<LoadingFallback />}>
@@ -65,7 +104,6 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/403" element={<Forbidden />} />
 
-        {/* 🔥 ARQUITECTURA LIMPIA V6: El Layout envuelve nativamente las rutas hijas */}
         <Route element={<Layout />}>
           <Route
             path="/dashboard"
@@ -123,7 +161,6 @@ export default function App() {
               </RoleGuard>
             }
           />
-          {/* 🔥 SECCIÓN INYECTADA */}
           <Route
             path="/history"
             element={

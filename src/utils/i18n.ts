@@ -1,6 +1,22 @@
+// =============================================================================
+// TIPOS BASE
+// =============================================================================
+//
+// Define los idiomas soportados y el tipo genérico de valor de traducción
+// (texto estático o función interpolada).
+//
+
 export type AppLang = 'es' | 'en'
 
 type TranslationValue = string | ((...args: Array<string | number>) => string)
+
+// =============================================================================
+// ÁRBOL DE TRADUCCIONES
+// =============================================================================
+//
+// Define la estructura tipada de todas las claves de traducción disponibles,
+// agrupadas por módulo de la aplicación.
+//
 
 export type TranslationTree = {
   common: {
@@ -30,7 +46,6 @@ export type TranslationTree = {
     password: string
     role: string
     settings: string
-    // 🔥 Nuevas claves necesarias por los componentes actualizados
     optional: string
     page: string
     remove: string
@@ -71,11 +86,11 @@ export type TranslationTree = {
     completed: string
     cancelled: string
     overdue: string
-    // Opciones del Dashboard
+    // Claves utilizadas por el Dashboard.
     open: string
     done: string
     closed: string
-    // Opciones Topología
+    // Claves utilizadas por la Topología.
     operativo: string
     alerta: string
     mantenimiento: string
@@ -285,6 +300,14 @@ export type TranslationTree = {
   }
 }
 
+// =============================================================================
+// DATOS DE TRADUCCIÓN
+// =============================================================================
+//
+// Contiene los valores de traducción para cada idioma soportado, siguiendo
+// la estructura definida en TranslationTree.
+//
+
 const translations: Record<AppLang, TranslationTree> = {
   es: {
     common: {
@@ -483,12 +506,64 @@ const translations: Record<AppLang, TranslationTree> = {
   },
 }
 
+// =============================================================================
+// UTILIDADES DE IDIOMA
+// =============================================================================
+//
+// Funciones auxiliares para validar, normalizar y consultar traducciones.
+//
+
+/**
+ * Verifica si un valor corresponde a un idioma soportado por la aplicación.
+ *
+ * Args:
+ *     value:
+ *         Valor a evaluar.
+ *
+ * Returns:
+ *     True si el valor es un AppLang válido.
+ */
 export const isSupportedLang = (value: string): value is AppLang => value === 'es' || value === 'en'
 
+/**
+ * Normaliza un valor de idioma, retornando español como valor por defecto
+ * cuando el idioma recibido no es soportado.
+ *
+ * Args:
+ *     value:
+ *         Valor de idioma a normalizar.
+ *
+ * Returns:
+ *     Idioma soportado equivalente.
+ */
 export const normalizeLang = (value: string): AppLang => (isSupportedLang(value) ? value : 'es')
 
+/**
+ * Obtiene el árbol de traducciones correspondiente a un idioma.
+ *
+ * Args:
+ *     lang:
+ *         Idioma solicitado (se normaliza automáticamente).
+ *
+ * Returns:
+ *     Árbol de traducciones del idioma resultante.
+ */
 export const getTranslations = (lang: string) => translations[normalizeLang(lang)]
 
+/**
+ * Obtiene un valor de traducción específico dentro de una sección del árbol.
+ *
+ * Args:
+ *     lang:
+ *         Idioma solicitado.
+ *     section:
+ *         Sección del árbol de traducciones.
+ *     key:
+ *         Clave de traducción dentro de la sección.
+ *
+ * Returns:
+ *     Valor de traducción (texto o función interpolada).
+ */
 export const t = <S extends keyof TranslationTree, K extends keyof TranslationTree[S]>(
   lang: string,
   section: S,
