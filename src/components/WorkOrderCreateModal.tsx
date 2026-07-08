@@ -255,7 +255,7 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
   return (
     <div className="modal-overlay open" onMouseDown={e => backdropDownOnBackdropRef.current = e.target === e.currentTarget} onMouseUp={e => { if (backdropDownOnBackdropRef.current && e.target === e.currentTarget) onClose(); backdropDownOnBackdropRef.current = false }} role="presentation">
       <div className="modal-box modal-box--form" role="dialog" aria-labelledby="modal-title">
-        <div className="modal-header shrink-0">
+        <div className="modal-header">
           <div>
             <h2 id="modal-title">{t.dashboard?.createWorkOrder || 'Crear OT'}</h2>
             <div className="modal-header-sub">{t.common?.fillDetails || 'Ingresa los detalles para generar y asignar la orden.'}</div>
@@ -263,8 +263,8 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
           <button type="button" className="modal-close" onClick={onClose} aria-label={t.common?.close || 'Cerrar'}>✕</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col min-h-0">
-          <div className="modal-body modal-body--form flex-1">
+        <form onSubmit={handleSubmit} className="wo-form">
+          <div className="modal-body modal-body--form">
             {formError && (
               <div className="form-error-banner" role="alert">
                 {formError}
@@ -362,8 +362,8 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
             </div>
           </div>
 
-          <div className="modal-footer modal-footer--split shrink-0">
-            <div className="flex gap-2">
+          <div className="modal-footer modal-footer--split">
+            <div className="modal-footer-group">
               <button type="button" className="btn btn-outline" onClick={onClose}>{t.common?.cancel || 'Cancelar'}</button>
               <button type="button" className="btn" onClick={() => { setForm({ ...INITIAL_FORM, photoFile: undefined }); setMachineQuery(''); setPhotoPreview(null); localStorage.removeItem(STORAGE_KEY) }}>{lang === 'en' ? 'Clear' : 'Limpiar'}</button>
             </div>

@@ -236,7 +236,7 @@ const Menu: React.FC = () => {
 
         {user?.role === 'admin' && (
           <>
-            <button className="menu-card admin-only menu-card--purple" onClick={() => navigate('/dashboard')}>
+            <button className="menu-card menu-card--purple" onClick={() => navigate('/dashboard')}>
               <div className="menu-card-icon purple">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" strokeWidth="2" aria-hidden="true">
                   <rect x="3" y="3" width="7" height="7" />
@@ -254,7 +254,7 @@ const Menu: React.FC = () => {
               </div>
             </button>
 
-            <button className="menu-card admin-only menu-card--blue" onClick={openUpload}>
+            <button className="menu-card menu-card--blue" onClick={openUpload}>
               <div className="menu-card-icon blue">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" strokeWidth="2" aria-hidden="true">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -420,7 +420,7 @@ const Menu: React.FC = () => {
                 <button className="btn btn-primary" type="submit" disabled={isUploading || !canSubmit}>
                   {isUploading ? (
                     <span className="btn-loading-content">
-                      <span className="animate-spin" aria-hidden="true">⟳</span>
+                      <span className="spinning" aria-hidden="true">⟳</span>
                       {t.common?.loading || (nLang === 'en' ? 'Uploading…' : 'Subiendo…')}
                     </span>
                   ) : (

@@ -203,7 +203,7 @@ export default function DebugChat() {
         )}
       </div>
 
-      <div className="panel-right debug-main">
+      <div className="panel-right">
         <div className="topbar debug-topbar">
           <button
             type="button"
