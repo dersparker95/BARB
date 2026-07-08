@@ -6,7 +6,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Bar, BarChart, Cell, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis, PieChart, Pie, Legend
+  Bar, BarChart, Cell, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis, PieChart, Pie, Legend, ResponsiveContainer
 } from 'recharts'
 import * as XLSX from 'xlsx'
 import TicketTable from '../components/TicketTable'
@@ -294,7 +294,8 @@ export default function Dashboard() {
             ? <div className="dash-empty">{t.dashboard?.noData || 'Sin datos'}</div>
             : (
               <div className="dash-chart-scroll">
-                <BarChart width={500} height={260} data={resolutionData} margin={{ top: 20 }}>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={resolutionData} margin={{ top: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="machineName" tick={{ fontSize: 10, fill: 'var(--ink3)' }} angle={-25} textAnchor="end" height={60} />
                   <YAxis tick={{ fontSize: 10, fill: 'var(--ink3)' }} tickFormatter={v => `${v}m`} />
@@ -319,7 +320,8 @@ export default function Dashboard() {
                       <Cell key={i} fill={d.minutos > (BARB_BUSINESS?.SLA_TARGET || 24) ? 'var(--red)' : 'var(--green)'} />
                     ))}
                   </Bar>
-                </BarChart>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             )}
         </Block>
@@ -329,13 +331,15 @@ export default function Dashboard() {
             ? <div className="dash-empty">{t.dashboard?.noData || 'Sin datos'}</div>
             : (
               <div className="dash-chart-center">
-                <PieChart width={300} height={260}>
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
                   <Pie data={typeData} innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value" nameKey="name">
                     {typeData.map((d, i) => <Cell key={i} fill={d.fill} />)}
                   </Pie>
                   <Tooltip contentStyle={{ background: 'var(--surface)', borderRadius: 'var(--radius-sm)' }} />
                   <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: 11 }} />
-                </PieChart>
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
             )}
         </Block>
