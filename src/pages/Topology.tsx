@@ -267,10 +267,10 @@ const PlantTopology: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     const s = String(status || '').toLowerCase()
-    if (s.includes('operativo') || s.includes('ok') || s === 'open' || s === 'activo') return '#10B981'
-    if (s.includes('alerta') || s.includes('warning') || s.includes('mantenimiento')) return '#F59E0B'
-    if (s.includes('falla') || s.includes('error') || s.includes('closed') || s.includes('crítico')) return '#ef4444'
-    return '#64748B'
+    if (s.includes('operativo') || s.includes('ok') || s === 'open' || s === 'activo') return 'var(--green)'
+    if (s.includes('alerta') || s.includes('warning') || s.includes('mantenimiento')) return 'var(--amber)'
+    if (s.includes('falla') || s.includes('error') || s.includes('closed') || s.includes('crítico')) return 'var(--red)'
+    return 'var(--ink3)'
   }
 
   // ---------------------------------------------------------------------
@@ -278,32 +278,28 @@ const PlantTopology: React.FC = () => {
   // ---------------------------------------------------------------------
 
   if (loading) {
-    return <div className="p-4 text-center">{t.common?.loading || 'Cargando Topología...'}</div>
+    return <div className="topo-loading">{t.common?.loading || 'Cargando Topología...'}</div>
   }
 
   return (
-    <div className="w-full relative h-full flex flex-col" ref={containerRef}>
-      <div className="flex items-center justify-between mb-3 shrink-0">
-        <div className="text-lg font-semibold">{t.topology?.title || 'Topología de Planta (En Vivo)'}</div>
-        <div className="flex gap-2">
+    <div className="topo-page" ref={containerRef}>
+      <div className="topo-header">
+        <div className="topo-title">{t.topology?.title || 'Topología de Planta (En Vivo)'}</div>
+        <div className="topo-header-actions">
           <button className="btn btn-outline btn-sm" onClick={() => zoom(1.2)}>＋ {t.topology?.zoomIn || 'Zoom In'}</button>
           <button className="btn btn-outline btn-sm" onClick={() => zoom(0.8)}>－ {t.topology?.zoomOut || 'Zoom Out'}</button>
           <button className="btn btn-outline btn-sm" onClick={reset}>{t.topology?.resetView || 'Reset View'}</button>
         </div>
       </div>
 
-      <div style={{ minHeight: 0, borderRadius: 12, overflow: 'hidden' }} className="topo-canvas flex-1 bg-[var(--surface)] border border-[var(--border)] shadow-soft relative">
+      <div className="topo-canvas shadow-soft">
         <svg 
           ref={svgRef} 
           id="topo-svg" 
           viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} 
           preserveAspectRatio="xMidYMid meet" 
-          style={{ 
-            width: '100%', 
-            height: '100%',
-            cursor: isPanning ? 'grabbing' : 'grab',
-            touchAction: 'none'
-          }}
+          className={`topo-svg ${isPanning ? 'topo-svg--panning' : ''}`}
+          style={{ touchAction: 'none' }}
           onMouseDown={handleMouseDown}       
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUpOrLeave}
@@ -314,7 +310,7 @@ const PlantTopology: React.FC = () => {
           onTouchCancel={handleTouchEnd}
         >
           
-          <g id="topo-lines" stroke="currentColor" className="text-[var(--ink3)] opacity-40" strokeWidth={2} fill="none">
+          <g className="topo-lines" strokeWidth={2} fill="none">
             {edges.map(edge => {
               const start = nodesDict.get(String(edge.origen_nodo_id))
               const end = nodesDict.get(String(edge.destino_nodo_id))
@@ -328,7 +324,7 @@ const PlantTopology: React.FC = () => {
                   x1={start.x} y1={start.y} 
                   x2={end.x} y2={end.y} 
                   strokeDasharray={strokeDash} 
-                  className="transition-all duration-300"
+                  className="topo-edge"
                 />
               )
             })}
@@ -337,12 +333,12 @@ const PlantTopology: React.FC = () => {
           {nodes.map(n => {
             const nodeColor = getStatusColor(n.estado_actual)
             return (
-              <g key={String(n.nodo_id)} transform={`translate(${n.pos_x || 0},${n.pos_y || 0})`} className="topo-node transition-transform" style={{ cursor: 'pointer' }} onClick={(e) => handleNodeClick(n, e)}>
+              <g key={String(n.nodo_id)} transform={`translate(${n.pos_x || 0},${n.pos_y || 0})`} className="topo-node" onClick={(e) => handleNodeClick(n, e)}>
                 <rect x={0} y={0} width={NODE_W} height={NODE_H} rx={12} fill="var(--surface2)" stroke={nodeColor} strokeWidth={2} />
                 <text x={NODE_W / 2} y={28} textAnchor="middle" fontSize={22}>{n.icono}</text>
                 
-                <text x={NODE_W / 2} y={50} textAnchor="middle" fontSize={11} className="text-[var(--ink)]" fill="currentColor" fontWeight={600}>{n.nombre_visual}</text>
-                <text x={NODE_W / 2} y={65} textAnchor="middle" fontSize={10} className="text-[var(--ink3)]" fill="currentColor">{n.tipo}</text>
+                <text x={NODE_W / 2} y={50} textAnchor="middle" fontSize={11} className="topo-node-name" fontWeight={600}>{n.nombre_visual}</text>
+                <text x={NODE_W / 2} y={65} textAnchor="middle" fontSize={10} className="topo-node-type">{n.tipo}</text>
                 
                 <circle cx={NODE_W - 14} cy={14} r={7} fill={nodeColor} />
               </g>
@@ -353,23 +349,20 @@ const PlantTopology: React.FC = () => {
         {tooltip.visible && tooltip.node && (
           <div 
             style={{ 
-              position: 'absolute', 
               left: Math.min(tooltip.x + 12, (containerRef.current?.clientWidth || 800) - 220), 
-              top: Math.min(tooltip.y + 12, (containerRef.current?.clientHeight || 600) - 100), 
-              zIndex: 60,
-              minWidth: 200 
+              top: Math.min(tooltip.y + 12, (containerRef.current?.clientHeight || 600) - 100)
             }} 
-            className="bg-[var(--surface)] border border-[var(--border)] p-3 rounded-xl shadow-lg"
+            className="topo-tooltip"
           >
-            <div className="font-semibold text-[var(--ink)]">{tooltip.node.nombre_visual}</div>
-            <div className="text-xs text-[var(--ink3)] mt-1 mb-3">
+            <div className="topo-tooltip-title">{tooltip.node.nombre_visual}</div>
+            <div className="topo-tooltip-meta">
               {tooltip.node.tipo} · {t.statuses?.[tooltip.node.estado_actual?.toLowerCase()] || tooltip.node.estado_actual}
             </div>
-            <div className="flex gap-2">
-              <button className="btn btn-sm btn-primary py-1 px-3" onClick={() => goToDebug(tooltip.node?.maquina_id)}>
+            <div className="topo-tooltip-actions">
+              <button className="btn btn-sm btn-primary" onClick={() => goToDebug(tooltip.node?.maquina_id)}>
                 {t.topology?.goToDebug || 'Diagnóstico IA'}
               </button>
-              <button className="btn btn-sm btn-outline py-1 px-3" onClick={() => setTooltip({ visible: false, x: 0, y: 0 })}>
+              <button className="btn btn-sm btn-outline" onClick={() => setTooltip({ visible: false, x: 0, y: 0 })}>
                 {t.topology?.close || 'Cerrar'}
               </button>
             </div>

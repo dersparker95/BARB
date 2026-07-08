@@ -807,7 +807,7 @@ export default function DocChat() {
    * -------------------------------------------------------------------------- */
 
   return (
-    <div className="two-panel w-full h-full relative">
+    <div className="two-panel">
 
       {/* -----------------------------------------------------------------------
        * Panel izquierdo — colapsable
