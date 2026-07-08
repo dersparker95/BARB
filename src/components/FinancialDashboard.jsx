@@ -6,7 +6,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { Banknote, CheckCircle, TimerReset, Clock } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, Cell } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, Cell, ResponsiveContainer } from 'recharts'
 import useFinancialStats, { BARB_BUSINESS } from '../hooks/useFinancialStats'
 import { useAppContext } from '../context/AppContext'
 import { getTranslations } from '../utils/i18n'
@@ -157,18 +157,20 @@ export default function FinancialDashboard({ timeRange }) {
             <h3 className="fin-chart-title">{t.financial?.healthTitle || 'Tendencias'}</h3>
             <p className="fin-chart-subtitle">{t.financial?.healthSub || 'Últimos 14 días'}</p>
             <div className="fin-chart-wrap">
-              <AreaChart width={500} height={220} data={trend14Days} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorAbiertas" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--amber)" stopOpacity={0.3}/><stop offset="95%" stopColor="var(--amber)" stopOpacity={0}/></linearGradient>
-                  <linearGradient id="colorCerradas" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--green)" stopOpacity={0.3}/><stop offset="95%" stopColor="var(--green)" stopOpacity={0}/></linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--ink3)' }} tickFormatter={v => v ? v.slice(5) : ''} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--ink3)' }} allowDecimals={false} />
-                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8 }} />
-                <Area type="monotone" dataKey="abiertas" stroke="var(--amber)" fill="url(#colorAbiertas)" strokeWidth={2} />
-                <Area type="monotone" dataKey="cerradas" stroke="var(--green)" fill="url(#colorCerradas)" strokeWidth={2} />
-              </AreaChart>
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={trend14Days} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorAbiertas" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--amber)" stopOpacity={0.3}/><stop offset="95%" stopColor="var(--amber)" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="colorCerradas" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--green)" stopOpacity={0.3}/><stop offset="95%" stopColor="var(--green)" stopOpacity={0}/></linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--ink3)' }} tickFormatter={v => v ? v.slice(5) : ''} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--ink3)' }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8 }} />
+                  <Area type="monotone" dataKey="abiertas" stroke="var(--amber)" fill="url(#colorAbiertas)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="cerradas" stroke="var(--green)" fill="url(#colorCerradas)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </div>
         )}
@@ -192,24 +194,26 @@ export default function FinancialDashboard({ timeRange }) {
             </div>
 
             <div className="fin-chart-wrap">
-              <BarChart width={500} height={220} data={topMachines} layout="vertical" margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="var(--border)" />
-                <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--ink3)' }} hide />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--ink)' }} width={90} />
-                <Tooltip
-                  cursor={{ fill: 'var(--surface2)' }}
-                  contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
-                />
-                <Bar
-                  dataKey={machineView === 'ots' ? 'total' : machineView === 'ahorro' ? 'ahorroGenerado' : 'mttr'}
-                  radius={[0, 4, 4, 0]}
-                  barSize={16}
-                >
-                  {topMachines.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={topMachines} layout="vertical" margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="var(--border)" />
+                  <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--ink3)' }} hide />
+                  <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--ink)' }} width={90} />
+                  <Tooltip
+                    cursor={{ fill: 'var(--surface2)' }}
+                    contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
+                  />
+                  <Bar
+                    dataKey={machineView === 'ots' ? 'total' : machineView === 'ahorro' ? 'ahorroGenerado' : 'mttr'}
+                    radius={[0, 4, 4, 0]}
+                    barSize={16}
+                  >
+                    {topMachines.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
         )}
