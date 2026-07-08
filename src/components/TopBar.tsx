@@ -7,8 +7,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import SettingsModal from './SettingsModal'
 import HelpModal from './HelpModal'
-import { showToast } from './Toast'
-import { getTranslations, normalizeLang } from '../utils/i18n'
+import { getTranslations } from '../utils/i18n'
 import { helpContentData } from '../utils/helpContent'
 
 // =============================================================================
@@ -16,7 +15,7 @@ import { helpContentData } from '../utils/helpContent'
 // =============================================================================
 
 const TopBar: React.FC = () => {
-  const { user, setUser, dark, setDark, lang, setLang, apiBase, setLoading } = useAppContext()
+  const { user, setUser, dark, setDark, lang, apiBase, setLoading } = useAppContext()
   const navigate = useNavigate()
   const location = useLocation()
   
@@ -67,12 +66,6 @@ const TopBar: React.FC = () => {
   }
 
   const toggleTheme = () => setDark(!dark)
-
-  const handleLanguageChange = (value: string) => {
-    const newLang = normalizeLang(value)
-    setLang(newLang)
-    showToast(translations.settings?.languageUpdated || 'Idioma actualizado')
-  }
 
   // ---------------------------------------------------------------------
   // Resolución de título y ayuda contextual según la ruta
@@ -139,19 +132,6 @@ const TopBar: React.FC = () => {
       </div>
 
       <div className="topbar-right">
-        <label className="sr-only" htmlFor="language-select">{translations.common?.language || 'Idioma'}</label>
-        <select
-          id="language-select"
-          className="topbar-select"
-          value={normalizeLang(lang)}
-          onChange={event => handleLanguageChange(event.target.value)}
-          aria-label={translations.common?.language || 'Idioma'}
-          title={translations.common?.language || 'Idioma'}
-        >
-          <option value="es">ES</option>
-          <option value="en">EN</option>
-        </select>
-
         <button className="icon-btn" onClick={toggleTheme} title={translations.common?.theme || 'Tema'}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
