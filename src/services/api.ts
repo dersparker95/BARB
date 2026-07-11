@@ -308,6 +308,35 @@ export const createApiService = (
           body: JSON.stringify(payload),
         }),
 
+      /**
+       * Sube imágenes adjuntas de una consulta de Debug antes de enviar el
+       * mensaje. ChatDebugRequest (chat.debug) viaja en JSON puro y no
+       * soporta multipart, por eso este paso va separado, igual que
+       * `documents` para los documentos de la base de conocimiento.
+       *
+       * Args:
+       *     formData:
+       *         FormData con uno o más archivos bajo la clave 'files'.
+       *
+       * Returns:
+       *     { attachments: [...] } con los metadatos de cada archivo subido.
+       */
+      debugAttachments: async (formData: FormData) => {
+        const res = await fetch(joinPath(apiBase, '/chat/debug/attachments'), {
+          method: 'POST',
+          headers: {
+            ...(getToken()
+              ? { Authorization: `Bearer ${getToken()}` }
+              : {}),
+          },
+          body: formData,
+        })
+
+        if (!res.ok) throw new Error(await res.text())
+
+        return res.json()
+      },
+
       documents: async (formData: FormData) => {
         const res = await fetch(joinPath(apiBase, '/documents/upload'), {
           method: 'POST',

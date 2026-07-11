@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -13,7 +14,28 @@ from typing import Any, Optional
 
 import bcrypt
 import httpx
+import psycopg2
 from dotenv import load_dotenv
+
+# chromadb y pypdf son dependencias del RAG de manuales técnicos (búsqueda de
+# similitud contra la colección "barb_manuals"). Se importan de forma
+# defensiva: si todavía no están en requirements.txt / instaladas en el
+# entorno, el servidor debe seguir levantando igual, solo que sin RAG de
+# manuales (get_manuals_collection() devuelve None y todo lo que dependa de
+# eso se degrada a "sin resultados" en vez de tumbar el proceso).
+try:
+    import chromadb
+    _CHROMA_AVAILABLE = True
+except ImportError:
+    chromadb = None
+    _CHROMA_AVAILABLE = False
+
+try:
+    from pypdf import PdfReader
+    _PYPDF_AVAILABLE = True
+except ImportError:
+    PdfReader = None
+    _PYPDF_AVAILABLE = False
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
@@ -44,6 +66,13 @@ DATABASE_URL = os.getenv(
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Ruta de persistencia de Chroma (base vectorial de manuales técnicos) y
+# nombre de la colección. "barb_manuals" es el nombre real ya usado en el
+# chroma.sqlite3 existente del proyecto — se mantiene por defecto para que
+# esto apunte al mismo store sin configuración adicional.
+CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "/app/chroma_db")
+CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "barb_manuals")
 
 # =============================================================================
 # MOTORES Y CLIENTES
@@ -874,6 +903,11 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     language: Optional[str] = "es"
     machine: Optional[str] = None
+    # El frontend (api.chat.send) ya manda este campo desde antes; el modelo
+    # simplemente no lo declaraba, así que Pydantic lo descartaba en
+    # silencio. No filtra por manual todavía (index_document_in_chroma no
+    # guarda esa metadata aún), pero al menos ya no se pierde el valor.
+    active_manual: Optional[str] = None
     # Limita el historial a las últimas 10 interacciones para evitar exceder el contexto del LLM.
     history: list[MessageItem] = Field(default_factory=list, max_length=10)
 
@@ -1971,33 +2005,57 @@ async def create_work_order(request: Request):
 @app.post("/documents/upload", dependencies=[Depends(require_action("subir_documentos"))])
 async def upload_document(file: UploadFile = File(...)):
     """
-    Acepta y persiste archivos PDF para su posterior indexación en el motor RAG.
+    Acepta y persiste archivos PDF, y los indexa en la base vectorial Chroma
+    ("barb_manuals") para búsqueda de similitud desde /api/chat y /api/chat/debug.
+
+    La indexación es best-effort: si la extracción de texto o Chroma fallan
+    (ej. PDF escaneado sin texto, o chromadb no instalado), el archivo igual
+    queda guardado en disco y el endpoint responde 200 con chunks_indexed: 0
+    e indexing_warning explicando el motivo, en vez de fallar la subida
+    completa por un problema del pipeline de RAG.
 
     Args:
         file:
             Archivo recibido desde el cliente HTTP.
 
     Returns:
-        Metadatos de localización del archivo persistido.
+        Metadatos de localización del archivo persistido, más chunks_indexed
+        e indexing_warning (motivo si chunks_indexed es 0).
 
     Raises:
         HTTPException(415):
-            Si el archivo no es de tipo application/pdf.
+            Si el archivo no es un PDF (ni por content_type ni por extensión).
     """
     content_type = (file.content_type or "").strip().lower()
-    if content_type != "application/pdf":
+    original_filename = Path(file.filename or "").name
+
+    # Algunos clientes (curl, ciertas libs de FormData, proxies) mandan un
+    # content_type genérico como application/octet-stream para PDFs
+    # perfectamente válidos. Se acepta si CUALQUIERA de los dos indicadores
+    # (header o extensión del nombre de archivo) confirma que es un PDF, en
+    # vez de rechazar subidas legítimas por depender ciegamente del header.
+    is_pdf_content_type = content_type == "application/pdf"
+    is_pdf_extension = original_filename.lower().endswith(".pdf")
+    if not (is_pdf_content_type or is_pdf_extension):
         raise HTTPException(status_code=415, detail="Solo se permiten archivos PDF (application/pdf).")
 
     doc_dir = UPLOAD_DIR / "documents"
     doc_dir.mkdir(parents=True, exist_ok=True)
 
     stored = store_upload_file(file, doc_dir, "doc")
+
+    index_result = await asyncio.to_thread(
+        index_document_in_chroma, stored["stored_path"], stored["original_name"], stored["file_id"]
+    )
+
     return {
         "id": stored["file_id"],
         "filename": stored["stored_name"],
         "original_name": stored["original_name"],
         "content_type": "application/pdf",
         "path": str(stored["stored_path"]),
+        "chunks_indexed": index_result["chunks_indexed"],
+        "indexing_warning": index_result["warning"],
     }
 
 
@@ -2117,6 +2175,73 @@ def get_technicians():
 # variante de diagnóstico.
 #
 
+# Cantidad máxima de OTs históricas a inyectar como contexto RAG en el
+# prompt del sistema. Se limita para no saturar el contexto del LLM.
+DEBUG_HISTORY_LIMIT = 5
+
+
+def fetch_recent_machine_failures(maquina_id: int, limit: int = DEBUG_HISTORY_LIMIT) -> list[dict]:
+    """
+    Recupera las fallas más recientes registradas para una máquina, para usarlas
+    como contexto RAG (Retrieval-Augmented Generation) en el chat de diagnóstico.
+
+    Args:
+        maquina_id:
+            Identificador primario de la máquina (maquina.maquina_id).
+        limit:
+            Máximo de OTs históricas a incluir.
+
+    Returns:
+        Lista de OTs recientes ordenadas de la más reciente a la más antigua.
+        Lista vacía si el equipo no tiene historial o la consulta falla.
+    """
+    try:
+        return _query_all(
+            """
+            SELECT
+                ot.numero_ot,
+                ot.descripcion_problema,
+                ot.descripcion_reparacion,
+                ot.resolution,
+                ot.estado,
+                ot.severity,
+                ot.fecha_creacion,
+                ot.fecha_cierre
+            FROM orden_trabajo ot
+            WHERE ot.maquina_id = %(maquina_id)s
+            ORDER BY ot.fecha_creacion DESC
+            LIMIT %(limit)s
+            """,
+            {"maquina_id": maquina_id, "limit": limit},
+        )
+    except Exception as e:
+        print(f"Error consultando historial de fallas para máquina {maquina_id}: {e}")
+        return []
+
+
+def format_failure_history_for_prompt(rows: list[dict]) -> str:
+    """
+    Convierte el historial de OTs recuperado de la base de datos en texto plano
+    legible, listo para inyectarse en el system_content del LLM.
+
+    Args:
+        rows:
+            Registros de orden_trabajo devueltos por fetch_recent_machine_failures.
+
+    Returns:
+        Texto con una línea por OT, de la más reciente a la más antigua.
+    """
+    lines = []
+    for row in rows:
+        fecha = row["fecha_creacion"].strftime("%Y-%m-%d") if row.get("fecha_creacion") else "fecha N/A"
+        problema = row.get("descripcion_problema") or "sin descripción registrada"
+        resolucion = row.get("resolution") or row.get("descripcion_reparacion") or "sin resolución registrada"
+        estado = row.get("estado") or "desconocido"
+        lines.append(
+            f"- [{fecha}] OT {row['numero_ot']}: {problema}. Estado: {estado}. Resolución: {resolucion}."
+        )
+    return "\n".join(lines)
+
 
 @app.post("/api/chat", dependencies=[Depends(require_route("docchat"))])
 @app.post("/chat", dependencies=[Depends(require_route("docchat"))])
@@ -2143,8 +2268,12 @@ async def chat(payload: ChatRequest):
     if not DEEPSEEK_API_KEY:
         raise HTTPException(status_code=500, detail="API Key de IA no configurada en el servidor.")
 
+    # corpus_version entra en la cache_key para que subir un manual nuevo
+    # invalide automáticamente las respuestas cacheadas que no lo conocían,
+    # sin tener que purgar el caché a mano.
+    corpus_version = await asyncio.to_thread(get_manuals_corpus_version)
     cache_key = hashlib.sha256(
-        f"chat:{payload.language}:{payload.message.strip()}".encode("utf-8")
+        f"chat:{payload.language}:{corpus_version}:{payload.message.strip()}".encode("utf-8")
     ).hexdigest()
 
     cached = cache_get(cache_key)
@@ -2156,6 +2285,23 @@ async def chat(payload: ChatRequest):
         system_content += f" Idioma de respuesta: {payload.language}."
     if payload.machine:
         system_content += f" Máquina en contexto: {payload.machine}."
+
+    # Búsqueda de similitud en "barb_manuals": este es el chat de documentos
+    # (docchat), el consumidor principal esperado del vectorial — antes no
+    # llamaba a Chroma en absoluto y devolvía "sources" hardcodeado como si
+    # sí lo hiciera.
+    manual_chunks = await asyncio.to_thread(query_manual_chunks, payload.message, 4)
+    if manual_chunks:
+        manual_text = "\n".join(
+            f"- (Fuente: {c['source']}, pág. {c['page']}): {c['text'][:600]}"
+            for c in manual_chunks
+        )
+        system_content += (
+            " Fragmentos relevantes de manuales técnicos indexados (RAG):\n"
+            f"{manual_text}\n"
+            " Responde basándote en estos fragmentos cuando sean pertinentes,"
+            " y cita la fuente (nombre de archivo y página) si los usas."
+        )
 
     messages: list[dict] = [{"role": "system", "content": system_content}]
 
@@ -2174,9 +2320,19 @@ async def chat(payload: ChatRequest):
         )
 
         reply = response.choices[0].message.content
+
+        # Antes esto era un string fijo ("Base de Conocimiento BARB") sin
+        # relación con lo que de verdad se usó. Ahora refleja los manuales
+        # realmente recuperados por Chroma, o un fallback genérico si la
+        # colección está vacía / no hubo resultados relevantes.
+        if manual_chunks:
+            sources = sorted({c["source"] for c in manual_chunks})
+        else:
+            sources = ["Base de Conocimiento BARB (sin manuales indexados relevantes)"]
+
         result = {
             "reply": reply,
-            "sources": ["Base de Conocimiento BARB"],
+            "sources": sources,
             "language": payload.language,
         }
 
@@ -2190,6 +2346,200 @@ async def chat(payload: ChatRequest):
         raise HTTPException(status_code=502, detail=f"Error de comunicación con el motor de IA: {type(e).__name__}")
 
 
+_chroma_client = None
+_chroma_collection = None
+
+
+def get_manuals_collection():
+    """
+    Devuelve (inicializando de forma perezosa si hace falta) la colección
+    Chroma persistente "barb_manuals" usada como base vectorial de manuales
+    técnicos.
+
+    Returns:
+        La colección de Chroma, o None si chromadb no está instalado o la
+        inicialización falla — el resto del sistema debe seguir funcionando
+        sin RAG de manuales en ese caso, no romperse.
+    """
+    global _chroma_client, _chroma_collection
+    if not _CHROMA_AVAILABLE:
+        return None
+    if _chroma_collection is not None:
+        return _chroma_collection
+    try:
+        _chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+        _chroma_collection = _chroma_client.get_or_create_collection(name=CHROMA_COLLECTION_NAME)
+        return _chroma_collection
+    except Exception as e:
+        print(f"⚠️ No se pudo inicializar Chroma en {CHROMA_DB_PATH}: {e}")
+        return None
+
+
+def get_manuals_corpus_version() -> int:
+    """
+    Devuelve el tamaño actual de la colección "barb_manuals" (cantidad de
+    fragmentos indexados). Se usa para invalidar el caché de /api/chat: si
+    alguien sube un manual nuevo entre dos preguntas iguales, el conteo
+    cambia, la cache_key cambia, y la respuesta cacheada vieja (que no
+    conocía ese manual) deja de reutilizarse — sin necesidad de purgar nada
+    activamente, solo expira sola por TTL.
+
+    Returns:
+        Cantidad de fragmentos en la colección, o 0 si Chroma no está
+        disponible (en cuyo caso el caché simplemente se comporta como antes,
+        sin distinguir versiones del corpus).
+    """
+    collection = get_manuals_collection()
+    if collection is None:
+        return 0
+    try:
+        return collection.count()
+    except Exception:
+        return 0
+
+
+def extract_pdf_chunks(pdf_path: Path, chunk_size: int = 1000, overlap: int = 150) -> list[dict]:
+    """
+    Extrae el texto de un PDF y lo parte en fragmentos con solapamiento,
+    listos para indexarse como embeddings.
+
+    Args:
+        pdf_path:
+            Ruta al PDF ya persistido en disco.
+        chunk_size:
+            Tamaño máximo de cada fragmento, en caracteres.
+        overlap:
+            Caracteres de solapamiento entre fragmentos consecutivos, para no
+            cortar contexto relevante justo en el borde de un chunk.
+
+    Returns:
+        Lista de {"text": ..., "page": ...}; vacía si pypdf no está instalado
+        o el PDF no tiene texto extraíble (ej. escaneado sin OCR).
+    """
+    if not _PYPDF_AVAILABLE:
+        return []
+    try:
+        reader = PdfReader(str(pdf_path))
+    except Exception as e:
+        print(f"Error leyendo PDF {pdf_path.name}: {e}")
+        return []
+
+    chunks: list[dict] = []
+    for page_num, page in enumerate(reader.pages, start=1):
+        text = (page.extract_text() or "").strip()
+        if not text:
+            continue
+        start = 0
+        while start < len(text):
+            piece = text[start:start + chunk_size].strip()
+            if piece:
+                chunks.append({"text": piece, "page": page_num})
+            start += max(chunk_size - overlap, 1)
+    return chunks
+
+
+def index_document_in_chroma(pdf_path: Path, original_name: str, document_id: str) -> dict:
+    """
+    Extrae el texto de un manual PDF y agrega sus fragmentos a la colección
+    "barb_manuals" de Chroma. Es best-effort: si falla, el documento sigue
+    guardado en disco de todas formas — upload_document() no depende de que
+    esto tenga éxito para responder 200.
+
+    Args:
+        pdf_path:
+            Ruta al PDF en disco (stored_path de store_upload_file).
+        original_name:
+            Nombre original del archivo, usado como referencia de fuente.
+        document_id:
+            file_id generado por store_upload_file, para namespacear los IDs
+            de cada fragmento y evitar colisiones entre documentos.
+
+    Returns:
+        {"chunks_indexed": int, "warning": str | None}. `warning` explica por
+        qué chunks_indexed quedó en 0 (chromadb no instalado, PDF sin texto
+        extraíble, etc.) en vez de devolver un 0 silencioso que no le dice
+        nada al operador que subió el manual.
+    """
+    if not _CHROMA_AVAILABLE:
+        return {
+            "chunks_indexed": 0,
+            "warning": "chromadb no está instalado en el servidor; el PDF se guardó pero no se indexó.",
+        }
+
+    collection = get_manuals_collection()
+    if collection is None:
+        return {
+            "chunks_indexed": 0,
+            "warning": "No se pudo conectar con la base vectorial Chroma; el PDF se guardó pero no se indexó.",
+        }
+
+    if not _PYPDF_AVAILABLE:
+        return {
+            "chunks_indexed": 0,
+            "warning": "pypdf no está instalado en el servidor; no se pudo extraer texto del PDF.",
+        }
+
+    chunks = extract_pdf_chunks(pdf_path)
+    if not chunks:
+        return {
+            "chunks_indexed": 0,
+            "warning": "No se pudo extraer texto del PDF (¿es un documento escaneado sin OCR?); no se indexó.",
+        }
+
+    try:
+        collection.add(
+            ids=[f"{document_id}-p{c['page']}-{i}" for i, c in enumerate(chunks)],
+            documents=[c["text"] for c in chunks],
+            metadatas=[
+                {"source": original_name, "page": c["page"], "document_id": document_id}
+                for c in chunks
+            ],
+        )
+        return {"chunks_indexed": len(chunks), "warning": None}
+    except Exception as e:
+        print(f"Error indexando {original_name} en Chroma: {e}")
+        return {
+            "chunks_indexed": 0,
+            "warning": f"Se extrajo el texto pero falló el indexado en Chroma ({type(e).__name__}).",
+        }
+
+
+def query_manual_chunks(query_text: str, n_results: int = 4) -> list[dict]:
+    """
+    Busca en "barb_manuals" los fragmentos más similares semánticamente a
+    query_text — búsqueda de similitud real (embeddings), no full-text.
+
+    Args:
+        query_text:
+            Consulta del usuario (payload.message en chat_debug).
+        n_results:
+            Máximo de fragmentos a devolver.
+
+    Returns:
+        Lista de {"text", "source", "page"}; vacía si no hay colección
+        disponible, está vacía, o la consulta falla.
+    """
+    collection = get_manuals_collection()
+    if collection is None:
+        return []
+
+    try:
+        count = collection.count()
+        if count == 0:
+            return []
+        results = collection.query(query_texts=[query_text], n_results=min(n_results, count))
+    except Exception as e:
+        print(f"Error consultando manuales en Chroma: {e}")
+        return []
+
+    docs = (results.get("documents") or [[]])[0]
+    metas = (results.get("metadatas") or [[]])[0]
+    return [
+        {"text": doc, "source": meta.get("source", "manual"), "page": meta.get("page")}
+        for doc, meta in zip(docs, metas)
+    ]
+
+
 @app.post("/api/chat/debug", dependencies=[Depends(require_route("debug"))])
 @app.post("/chat/debug", dependencies=[Depends(require_route("debug"))])
 async def chat_debug(payload: ChatDebugRequest):
@@ -2197,6 +2547,12 @@ async def chat_debug(payload: ChatDebugRequest):
     Variante de /chat para la pantalla de Debug: fuerza contexto de diagnóstico
     (máquina + datos de sensores) en el prompt del sistema. No usa caché porque
     cada sesión de debug es contextual y no debe reutilizar respuestas de otras.
+
+    A diferencia de /chat, este endpoint no depende de que el cliente envíe el
+    historial de fallas: si viene un machineId, consulta directamente la tabla
+    orden_trabajo y adjunta las últimas fallas del equipo como contexto RAG,
+    para que el LLM pueda razonar sobre patrones repetitivos sin ayuda del
+    frontend.
 
     Args:
         payload:
@@ -2219,8 +2575,54 @@ async def chat_debug(payload: ChatDebugRequest):
         + " Estás en modo DEBUG/diagnóstico: prioriza causas probables, pasos de verificación"
         " y acciones correctivas concretas."
     )
+
     if payload.machineId:
         system_content += f" Máquina en contexto: {payload.machineId}."
+
+        # Consulta automática de OTs previas del equipo (núcleo RAG del MVP):
+        # no depende de que el frontend envíe el historial, se extrae aquí
+        # directamente de la base de datos.
+        try:
+            maquina_id = int(payload.machineId)
+        except (TypeError, ValueError):
+            maquina_id = None
+
+        if maquina_id is not None:
+            failure_rows = await asyncio.to_thread(
+                fetch_recent_machine_failures, maquina_id, DEBUG_HISTORY_LIMIT
+            )
+            if failure_rows:
+                failure_history_text = format_failure_history_for_prompt(failure_rows)
+                system_content += (
+                    " Historial reciente de fallas registradas para este equipo (de la más"
+                    f" reciente a la más antigua):\n{failure_history_text}\n"
+                    " Usa este historial para identificar patrones de falla repetitiva,"
+                    " priorizar el diagnóstico más probable y proponer acciones correctivas"
+                    " concretas orientadas a evitar que la falla se repita."
+                )
+
+        # TODO (futuro): si el manual indexado está asociado a una máquina o
+        # disciplina específica, se podría filtrar la búsqueda de Chroma con
+        # `where={"machine": payload.machineId}` una vez que index_document_in_chroma
+        # también guarde esa metadata (hoy solo guarda source/page/document_id).
+
+    # Búsqueda de similitud en la base vectorial Chroma ("barb_manuals"):
+    # agrega pasajes de manuales técnicos relevantes al mensaje del usuario.
+    # No depende de machineId — aplica a cualquier consulta de Debug.
+    manual_chunks = await asyncio.to_thread(query_manual_chunks, payload.message, 4)
+    if manual_chunks:
+        manual_text = "\n".join(
+            f"- (Fuente: {c['source']}, pág. {c['page']}): {c['text'][:600]}"
+            for c in manual_chunks
+        )
+        system_content += (
+            " Fragmentos relevantes de manuales técnicos indexados (RAG):\n"
+            f"{manual_text}\n"
+            " Usa estos fragmentos como referencia técnica adicional cuando sean"
+            " pertinentes al problema descrito, y cita la fuente (nombre de"
+            " archivo y página) si los usas en tu respuesta."
+        )
+
     if payload.sensorData:
         system_content += f" Datos de sensores actuales: {json.dumps(payload.sensorData, default=str)}."
     if payload.attachments:
@@ -2246,6 +2648,125 @@ async def chat_debug(payload: ChatDebugRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error de comunicación con el motor de IA: {type(e).__name__}")
+
+
+@app.post("/api/chat/debug/attachments", dependencies=[Depends(require_route("debug"))])
+@app.post("/chat/debug/attachments", dependencies=[Depends(require_route("debug"))])
+async def upload_chat_debug_attachments(
+    files: list[UploadFile] = File(...),
+    session_id: Optional[str] = Form(None),
+    machine_id: Optional[str] = Form(None),
+):
+    """
+    Persiste imágenes adjuntadas en una consulta de Debug y devuelve sus
+    metadatos de referencia, listos para incluirse en el campo `attachments`
+    del siguiente POST a /api/chat/debug (ChatDebugRequest.attachments).
+
+    ChatDebugRequest viaja como JSON y no soporta multipart, por lo que la
+    subida de archivos se resuelve en un paso previo separado: el frontend
+    primero sube las imágenes aquí y luego referencia lo devuelto en la
+    llamada de chat.
+
+    A diferencia de la primera versión de este endpoint, los archivos ya no
+    son puramente efímeros: el metadato de cada adjunto (no el binario) queda
+    trazado en la tabla chat_debug_attachment, atado al session_id de la
+    conversación y, si viene, al maquina_id en contexto (FK real a
+    maquina.maquina_id, ON DELETE SET NULL si el equipo se elimina después).
+
+    Args:
+        files:
+            Imágenes (JPEG/PNG/WEBP) enviadas como multipart/form-data.
+        session_id:
+            Identificador de la sesión de Debug (ChatDebugRequest.sessionId
+            generado en el cliente), para correlacionar adjuntos con su chat.
+        machine_id:
+            Máquina en contexto al momento de subir el adjunto, si hay una
+            seleccionada. Se valida como entero; si no es válido o no viene,
+            se guarda como NULL en vez de fallar la subida completa (el
+            adjunto no depende de tener un equipo válido para persistirse).
+
+    Returns:
+        {"attachments": [...]} con un registro de metadatos por archivo.
+
+    Raises:
+        HTTPException(415):
+            Si algún archivo no es una imagen JPEG/PNG/WEBP.
+    """
+    if not files:
+        return {"attachments": []}
+
+    maquina_id = None
+    if machine_id:
+        try:
+            maquina_id = int(machine_id)
+        except (TypeError, ValueError):
+            maquina_id = None
+
+    chat_dir = UPLOAD_DIR / "chat-debug"
+    chat_dir.mkdir(parents=True, exist_ok=True)
+
+    attachments: list[dict] = []
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            # Crea la tabla si no existe (mismo patrón lazy que chat_feedback
+            # más arriba); en una BD ya establecida esto sería una migración
+            # aparte en vez de un CREATE TABLE IF NOT EXISTS en caliente.
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chat_debug_attachment (
+                    attachment_id SERIAL PRIMARY KEY,
+                    session_id    VARCHAR(64),
+                    maquina_id    INTEGER REFERENCES maquina(maquina_id) ON DELETE SET NULL,
+                    original_name VARCHAR(255) NOT NULL,
+                    stored_name   VARCHAR(255) NOT NULL,
+                    content_type  VARCHAR(50) NOT NULL,
+                    created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+                );
+                """
+            )
+            conn.commit()
+
+            for file in files:
+                content_type = (file.content_type or "").strip().lower()
+                if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+                    raise HTTPException(status_code=415, detail="Solo se permiten imágenes JPEG, PNG o WEBP.")
+
+                stored = store_upload_file(file, chat_dir, "chatdbg")
+
+                cursor.execute(
+                    """
+                    INSERT INTO chat_debug_attachment
+                        (session_id, maquina_id, original_name, stored_name, content_type)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING attachment_id
+                    """,
+                    (session_id, maquina_id, stored["original_name"], stored["stored_name"], content_type),
+                )
+                row = cursor.fetchone()
+                conn.commit()
+
+                attachments.append(
+                    {
+                        "id": row["attachment_id"],
+                        "filename": stored["stored_name"],
+                        "original_name": stored["original_name"],
+                        "content_type": content_type,
+                    }
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al guardar metadatos de adjuntos: {str(e)}")
+    finally:
+        if conn:
+            release_db_connection(conn)
+
+    return {"attachments": attachments}
+
 
 # =============================================================================
 # ENDPOINTS — HISTORIAL DE CHAT Y FEEDBACK
@@ -2296,20 +2817,30 @@ def create_debug_report(payload: dict):
     (reports.send -> POST /reports/debug) pero el formulario de Report.tsx
     nunca lo invocaba realmente, así que ningún reporte se guardaba jamás.
 
+    maquina_id y tecnico_id son llaves foráneas obligatorias (maquina.maquina_id
+    y usuario.usuario_id): se validan como enteros antes de tocar la base de
+    datos, y si de todos modos no existen en sus tablas de referencia, la
+    violación de FK de Postgres se traduce a un 422 explícito en vez de un
+    500 genérico.
+
     Args:
         payload:
             maquina_id, tecnico_id, issue_description, severity (requeridos), resolution, actions_taken, additional_notes, downtime_minutes (opcionales).
 
     Returns:
         report_number y reporte_id del registro creado.
+
+    Raises:
+        HTTPException(400):
+            maquina_id o tecnico_id ausentes o no numéricos.
+        HTTPException(422):
+            issue_description vacío, o maquina_id/tecnico_id no existen en el esquema.
     """
-    maquina_id = payload.get("maquina_id")
-    tecnico_id = payload.get("tecnico_id")
+    maquina_id = safe_int(payload.get("maquina_id"), "maquina_id")
+    tecnico_id = safe_int(payload.get("tecnico_id"), "tecnico_id")
     issue_description = safe_text(payload.get("issue_description"), "")
     severity = safe_text(payload.get("severity"), "medium").lower()
 
-    if not maquina_id or not tecnico_id:
-        raise HTTPException(status_code=422, detail="maquina_id y tecnico_id son obligatorios.")
     if not issue_description.strip():
         raise HTTPException(status_code=422, detail="issue_description es obligatorio.")
     if severity not in ("low", "medium", "high", "critical"):
@@ -2345,6 +2876,13 @@ def create_debug_report(payload: dict):
             row = cursor.fetchone()
             conn.commit()
         return {"status": "success", "reporte_id": row["reporte_id"], "report_number": row["report_number"]}
+    except psycopg2.errors.ForeignKeyViolation:
+        if conn:
+            conn.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail="maquina_id o tecnico_id no corresponden a registros existentes.",
+        )
     except Exception as e:
         if conn:
             conn.rollback()
