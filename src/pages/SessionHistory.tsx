@@ -30,32 +30,36 @@ export default function SessionHistory() {
   // Estados
   // ---------------------------------------------------------------------
 
-  const { apiBase } = useAppContext()
+  const { api } = useAppContext()
   const [sessions, setSessions] = useState<SavedSession[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSession, setSelectedSession] = useState<SavedSession | null>(null)
-
-  // FIX: se elimina el dominio de Render hardcodeado (mismo patrón corregido
-  // en AppContext.tsx/Dashboard.tsx/api.ts). apiBase ya viene resuelto del
-  // contexto (incluye el fallback a VITE_API_URL).
-  const apiRoot = (apiBase || '').replace(/\/$/, '')
+  const [error, setError] = useState<string | null>(null)
 
   // ---------------------------------------------------------------------
   // Efectos
   // ---------------------------------------------------------------------
 
   useEffect(() => {
-    fetch(`${apiRoot}/chat-sessions`)
-      .then(res => res.json())
-      .then(data => {
+    let cancelled = false
+    api.chat.getSessions()
+      .then((data: any) => {
+        if (cancelled) return
         setSessions(Array.isArray(data) ? data : [])
-        setLoading(false)
       })
-      .catch(err => {
+      .catch((err: any) => {
+        if (cancelled) return
         console.error("Error cargando historial:", err)
-        setLoading(false)
+        // permisos.py restringe /api/chat-sessions a supervisor/gerente/admin;
+        // si alguien llega acá sin ese rol (ej. por URL directa), el mensaje
+        // real del backend dice "El rol '...' no tiene acceso a 'history'."
+        setError(err?.message || 'No se pudo cargar el historial de sesiones.')
       })
-  }, [apiRoot])
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [api])
 
   // ---------------------------------------------------------------------
   // Render
@@ -75,6 +79,8 @@ export default function SessionHistory() {
         <div className="sh-table-panel">
           {loading ? (
             <div className="sh-empty">Cargando memoria de BARB...</div>
+          ) : error ? (
+            <div className="sh-empty">⚠️ {error}</div>
           ) : sessions.length === 0 ? (
             <div className="sh-empty">No hay sesiones guardadas aún.</div>
           ) : (

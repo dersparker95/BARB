@@ -359,6 +359,11 @@ export const createApiService = (
           body: JSON.stringify(payload),
         }),
 
+      getSessions: async () =>
+        callAPI<any>(apiBase, '/chat-sessions', {
+          method: 'GET',
+        }),
+
       feedback: async (payload: {
         message_content: string
         rating: string

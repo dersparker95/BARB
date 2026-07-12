@@ -34,7 +34,8 @@ export default function DebugChat() {
   // máquina, no en estado local — antes se usaba useState([]) acá mismo, lo
   // que perdía el chat al cambiar de equipo o navegar fuera de la pantalla,
   // y hacía que el historial nunca se sintiera "guardado" en ningún lado.
-  const messages = getDebugMessages(selectedMachineId)
+  const HISTORY_KEY = selectedMachineId || '_general'
+  const messages = getDebugMessages(HISTORY_KEY)
 
   // Imágenes adjuntas pendientes de enviar en el próximo mensaje.
   // Cada item: { file: File, preview: string (object URL) }
@@ -129,14 +130,13 @@ export default function DebugChat() {
   const send = async () => {
     const query = input.trim()
     if ((!query && attachments.length === 0) || loading || diagnosisClosed) return
-    if (!selectedMachineId) return
 
     const pendingAttachments = attachments
 
     setLoading(true)
     setInput('')
     setAttachments([])
-    pushDebugMessage(selectedMachineId, {
+    pushDebugMessage(HISTORY_KEY, {
       role: 'user',
       content: query,
       images: pendingAttachments.map(a => a.preview)
@@ -150,7 +150,7 @@ export default function DebugChat() {
       if (pendingAttachments.length > 0) {
         const formData = new FormData()
         formData.append('session_id', sessionId)
-        formData.append('machine_id', selectedMachineId)
+        if (selectedMachineId) formData.append('machine_id', selectedMachineId)
         pendingAttachments.forEach(a => formData.append('files', a.file, a.file.name))
 
         const uploadData = await api.chat.debugAttachments(formData)
@@ -168,12 +168,12 @@ export default function DebugChat() {
       })
 
       if (data && data.reply) {
-        pushDebugMessage(selectedMachineId, { role: 'assistant', content: data.reply })
+        pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: data.reply })
       } else {
-        pushDebugMessage(selectedMachineId, { role: 'assistant', content: '⚠️ Error de conexión con el motor de IA.' })
+        pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: '⚠️ Error de conexión con el motor de IA.' })
       }
     } catch (err) {
-      pushDebugMessage(selectedMachineId, { role: 'assistant', content: '⚠️ Servidor inalcanzable.' })
+      pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: '⚠️ Servidor inalcanzable.' })
     } finally {
       setLoading(false)
       pendingAttachments.forEach(a => URL.revokeObjectURL(a.preview))
@@ -211,7 +211,7 @@ export default function DebugChat() {
 
     if (!maquinaId) return
     if (!tecnicoId) {
-      pushDebugMessage(maquinaId, { role: 'assistant', content: '⚠️ No se pudo identificar al técnico de la sesión. Vuelve a iniciar sesión e intenta de nuevo.' })
+      pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: '⚠️ No se pudo identificar al técnico de la sesión. Vuelve a iniciar sesión e intenta de nuevo.' })
       return
     }
 
@@ -237,14 +237,14 @@ export default function DebugChat() {
       // esta pantalla (api.chat.debug, api.chat.feedback, api.machines...).
       const data = await api.reports.send(payload)
 
-      pushDebugMessage(maquinaId, {
+      pushDebugMessage(HISTORY_KEY, {
         role: 'assistant',
         content: `✅ Diagnóstico finalizado. Reporte ${data.report_number} generado correctamente.`
       })
       setDiagnosisClosed(true)
     } catch (err) {
       const detail = err?.message || err?.detail || 'No se pudo generar el reporte de diagnóstico.'
-      pushDebugMessage(maquinaId, { role: 'assistant', content: `⚠️ ${detail}` })
+      pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: `⚠️ ${detail}` })
     } finally {
       setFinalizing(false)
     }
@@ -294,6 +294,7 @@ export default function DebugChat() {
         {selectedMachine && (
           <div className="panel-section debug-history">
             <span className="panel-label debug-history-label">Historial de OTs ({machineHistory.length})</span>
+            <p className="debug-sidebar-hint">✓ Se envía automáticamente a la IA en cada mensaje, no hace falta seleccionarlo.</p>
 
             <div className="debug-history-list">
               {machineHistory.length === 0 ? (
@@ -364,7 +365,7 @@ export default function DebugChat() {
         <div className="chat-messages" ref={areaRef}>
           {messages.length === 0 ? (
             <div className="debug-empty-state">
-              Selecciona un equipo en el panel lateral o haz una pregunta directa. El historial de fallas se analiza automáticamente.
+              Escribe una pregunta directa, o selecciona un equipo en el panel lateral para que la IA use su historial de fallas automáticamente.
             </div>
           ) : (
             messages.map((msg, idx) => (
@@ -422,9 +423,9 @@ export default function DebugChat() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={loading || diagnosisClosed || !selectedMachineId}
+              disabled={loading || diagnosisClosed}
               className="icon-btn"
-              title={!selectedMachineId ? 'Selecciona un equipo primero' : 'Adjuntar imágenes'}
+              title="Adjuntar imágenes"
             >
               📎
             </button>
@@ -433,20 +434,14 @@ export default function DebugChat() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-              placeholder={
-                diagnosisClosed
-                  ? 'El diagnóstico fue finalizado.'
-                  : !selectedMachineId
-                    ? 'Selecciona un equipo en el panel lateral para empezar a conversar...'
-                    : 'Escribe tu consulta analítica...'
-              }
+              placeholder={diagnosisClosed ? 'El diagnóstico fue finalizado.' : 'Escribe tu consulta analítica...'}
               className="debug-input"
               rows={2}
-              disabled={diagnosisClosed || !selectedMachineId}
+              disabled={diagnosisClosed}
             />
             <button
               onClick={send}
-              disabled={loading || diagnosisClosed || !selectedMachineId || (!input.trim() && attachments.length === 0)}
+              disabled={loading || diagnosisClosed || (!input.trim() && attachments.length === 0)}
               className="btn btn-primary debug-send-btn"
             >
               Enviar
