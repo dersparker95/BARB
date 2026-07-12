@@ -3173,7 +3173,14 @@ def create_debug_report(payload: dict):
 async def get_chat_sessions():
     """Recupera el historial de todas las sesiones de chat guardadas."""
     try:
-        rows = _query_all("SELECT * FROM chat_session ORDER BY created_at DESC LIMIT 50")
+        # La columna de fecha en la tabla `chat_session` se llama `saved_at`,
+        # no `created_at` (el nombre que usan el INSERT de arriba y el
+        # frontend). Antes esto tiraba 500: "column \"created_at\" does not
+        # exist", y por eso SessionHistory.tsx nunca cargaba nada. Se
+        # alias-ea aquí en vez de migrar la BD o tocar el frontend.
+        rows = _query_all(
+            "SELECT *, saved_at AS created_at FROM chat_session ORDER BY saved_at DESC LIMIT 50"
+        )
         for row in rows:
             if isinstance(row.get("created_at"), datetime):
                 row["created_at"] = row["created_at"].isoformat()
