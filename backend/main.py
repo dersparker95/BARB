@@ -3055,8 +3055,18 @@ async def upload_chat_debug_attachments(
 
 @app.post("/api/chat-sessions", dependencies=[Depends(require_route("docchat"))])
 @app.post("/chat-sessions", dependencies=[Depends(require_route("docchat"))])
-async def save_chat_session(payload: ChatSessionRequest):
-    """Guarda una sesión completa de chat (memoria RAG) en PostgreSQL."""
+async def save_chat_session(payload: ChatSessionRequest, sesion: dict = Depends(get_sesion_actual)):
+    """Guarda una sesión completa de chat (memoria RAG) en PostgreSQL.
+
+    FIX: la tabla real (01_tablas.sql) define la columna de título como
+    `titulo`, no `title`, y exige `empresa_id` (NOT NULL, FK a EMPRESA).
+    El INSERT anterior usaba `title` (columna inexistente) y nunca
+    enviaba `empresa_id`, por lo que todo guardado fallaba con 500 y el
+    botón "Guardar Sesión" del DocChat siempre terminaba en estado de
+    error. `empresa_id` y `usuario_id` ahora se toman de la sesión
+    autenticada (get_sesion_actual) en vez de confiar en el payload del
+    cliente.
+    """
     conn = None
     try:
         conn = get_db_connection()
@@ -3064,15 +3074,16 @@ async def save_chat_session(payload: ChatSessionRequest):
             cursor.execute(
                 """
                 INSERT INTO chat_session (
-                    title, saved_by, discipline, plant_id, plant_name, 
+                    empresa_id, usuario_id, titulo, saved_by, discipline, plant_id, plant_name,
                     machine_id, machine_name, active_manual, messages, metadata
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING session_id;
                 """,
                 (
-                    payload.title, payload.saved_by, payload.discipline, 
-                    payload.plant_id, payload.plant_name, payload.machine_id, 
-                    payload.machine_name, payload.active_manual, 
+                    sesion["empresa_id"], sesion["usuario_id"],
+                    payload.title, payload.saved_by, payload.discipline,
+                    payload.plant_id, payload.plant_name, payload.machine_id,
+                    payload.machine_name, payload.active_manual,
                     json.dumps(payload.messages), json.dumps(payload.metadata_info)
                 )
             )

@@ -102,7 +102,7 @@ def get_sesion_actual(authorization: str = Header(..., alias="Authorization")) -
 
     sesion = _query_one(
         """
-        SELECT u.usuario_id, u.rol, u.activo
+        SELECT u.usuario_id, u.empresa_id, u.rol, u.activo
         FROM sesion s
         JOIN usuario u ON u.usuario_id = s.usuario_id
         WHERE s.token = %(token)s AND s.expira_en > NOW()
@@ -112,7 +112,11 @@ def get_sesion_actual(authorization: str = Header(..., alias="Authorization")) -
     if not sesion or not sesion.get("activo", True):
         raise HTTPException(status_code=401, detail="Sesión inválida o expirada. Vuelve a iniciar sesión.")
 
-    return {"usuario_id": int(sesion["usuario_id"]), "rol": _normalizar_rol(sesion["rol"])}
+    return {
+        "usuario_id": int(sesion["usuario_id"]),
+        "empresa_id": int(sesion["empresa_id"]),
+        "rol": _normalizar_rol(sesion["rol"]),
+    }
 
 
 def get_rol_actual(authorization: str = Header(..., alias="Authorization")) -> str:
