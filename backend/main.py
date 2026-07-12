@@ -3181,16 +3181,36 @@ def create_debug_report(payload: dict):
 
 
 @app.get("/api/chat-sessions", dependencies=[Depends(require_route("history"))])
-async def get_chat_sessions():
-    """Recupera el historial de todas las sesiones de chat guardadas."""
+async def get_chat_sessions(sesion: dict = Depends(get_sesion_actual)):
+    """Recupera el historial de sesiones de chat guardadas por la empresa del usuario actual."""
     try:
         # La columna de fecha en la tabla `chat_session` se llama `saved_at`,
         # no `created_at` (el nombre que usan el INSERT de arriba y el
         # frontend). Antes esto tiraba 500: "column \"created_at\" does not
         # exist", y por eso SessionHistory.tsx nunca cargaba nada. Se
         # alias-ea aquí en vez de migrar la BD o tocar el frontend.
+        #
+        # FIX: mismo problema con `titulo` vs `title` — SessionHistory.tsx
+        # lee `session.title` en toda la pantalla (tabla y panel de
+        # detalle), pero la columna real se llama `titulo`. Sin este
+        # alias, cada fila llegaba con título en blanco y las sesiones
+        # guardadas recientemente eran indistinguibles/parecían no estar.
+        #
+        # FIX: se agrega el filtro por empresa_id (tomado de la sesión
+        # autenticada, no del cliente) — antes este endpoint devolvía las
+        # sesiones de TODAS las empresas a cualquier usuario con acceso a
+        # "history", lo que además de ser un problema de aislamiento de
+        # datos, era inconsistente con save_chat_session, que sí guarda
+        # empresa_id.
         rows = _query_all(
-            "SELECT *, saved_at AS created_at FROM chat_session ORDER BY saved_at DESC LIMIT 50"
+            """
+            SELECT *, saved_at AS created_at, titulo AS title
+            FROM chat_session
+            WHERE empresa_id = %(empresa_id)s
+            ORDER BY saved_at DESC
+            LIMIT 50
+            """,
+            {"empresa_id": sesion["empresa_id"]},
         )
         for row in rows:
             if isinstance(row.get("created_at"), datetime):
