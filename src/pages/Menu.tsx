@@ -258,7 +258,7 @@ const Menu: React.FC = () => {
             lo vieran, hicieran clic, y el backend les devolviera 403 en
             /api/chat-sessions. */}
         {['supervisor', 'gerente', 'admin'].includes(user?.role) && (
-          <button className="menu-card" onClick={() => navigate('/session-history')}>
+        <button className="menu-card" onClick={() => navigate('/history')}>
             <div className="menu-card-icon blue">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" strokeWidth="2" aria-hidden="true">
                 <circle cx="12" cy="12" r="9" />
