@@ -253,6 +253,19 @@ const Menu: React.FC = () => {
           </div>
         </button>
 
+        <button className="menu-card" onClick={() => navigate('/session-history')}>
+          <div className="menu-card-icon blue">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" strokeWidth="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <polyline points="12 7 12 12 16 14" />
+            </svg>
+          </div>
+          <div className="menu-card-text">
+            <h3>{t.menu?.sessionHistoryTitle || 'Historial de Sesiones'}</h3>
+            <p>{t.menu?.sessionHistoryDescription || 'Revisa conversaciones y diagnósticos anteriores'}</p>
+          </div>
+        </button>
+
         {user?.role === 'admin' && (
           <>
             <button className="menu-card menu-card--purple" onClick={() => navigate('/dashboard')}>

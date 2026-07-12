@@ -1696,6 +1696,70 @@ body {
 .debug-send-btn {
   align-self: flex-end;
 }
+
+/* =============================================================================
+   GRUPO "FINALIZAR DIAGNÓSTICO" EN EL TOPBAR (SELECT DE SEVERIDAD + BOTÓN)
+   =============================================================================
+   Sin estas reglas, .form-select (width:100%) se expande dentro del flex de
+   .debug-topbar (justify-content:space-between) y puede desbordar en
+   pantallas angostas. Se acota el ancho y, bajo 640px (mismo corte que
+   .debug-topbar-sub), el grupo pasa a una segunda fila en vez de apretujarse
+   junto al título.
+   */
+.debug-finalize-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.debug-severity-select {
+  width: auto;
+  max-width: 110px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.debug-finalize-btn {
+  white-space: nowrap;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .debug-topbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .debug-finalize-group {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .debug-severity-select {
+    max-width: 96px;
+    font-size: 11px;
+  }
+
+  .debug-finalize-btn {
+    font-size: 11px;
+    padding: 8px 10px;
+  }
+}
+
+@media (max-width: 380px) {
+  .debug-finalize-group {
+    flex-wrap: wrap;
+  }
+
+  .debug-severity-select,
+  .debug-finalize-btn {
+    flex: 1 1 auto;
+  }
+}
  
 /* =============================================================================
    RESPONSIVE: PANEL-LEFT COMO DRAWER YA CUBIERTO ARRIBA.

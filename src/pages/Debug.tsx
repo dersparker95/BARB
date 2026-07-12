@@ -14,7 +14,7 @@ import ChatBubble, { Thinking } from '../components/ChatBubble'
 // =============================================================================
 
 export default function DebugChat() {
-  const { user, api } = useAppContext()
+  const { user, api, getDebugMessages, pushDebugMessage } = useAppContext()
 
   const location = useLocation()
 
@@ -23,13 +23,18 @@ export default function DebugChat() {
   // ---------------------------------------------------------------------
 
   const [input, setInput] = useState('')
-  const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   const [machines, setMachines] = useState([])
   const [workOrders, setWorkOrders] = useState([])
   const [selectedMachineId, setSelectedMachineId] = useState(null)
+
+  // Los mensajes viven en AppContext (debugMessagesByMachine), uno por
+  // máquina, no en estado local — antes se usaba useState([]) acá mismo, lo
+  // que perdía el chat al cambiar de equipo o navegar fuera de la pantalla,
+  // y hacía que el historial nunca se sintiera "guardado" en ningún lado.
+  const messages = getDebugMessages(selectedMachineId)
 
   // Imágenes adjuntas pendientes de enviar en el próximo mensaje.
   // Cada item: { file: File, preview: string (object URL) }
@@ -43,13 +48,27 @@ export default function DebugChat() {
   const areaRef = useRef(null)
   const fileInputRef = useRef(null)
 
-  // Identificador estable de esta sesión de Debug, enviado en cada llamada a
-  // /api/chat/debug (ChatDebugRequest.sessionId) para correlacionar mensajes.
-  const sessionIdRef = useRef(
+  // Identificador de la sesión de Debug actual, enviado en cada llamada a
+  // /api/chat/debug (ChatDebugRequest.sessionId). Antes era un único
+  // useRef fijo para todo el ciclo de vida del componente: si cambiabas de
+  // máquina sin recargar la página, diagnosisClosed (de la máquina previa)
+  // seguía en true y el input quedaba bloqueado para SIEMPRE, sin importar
+  // qué equipo eligieras después. Ahora ambos se regeneran por máquina.
+  const [sessionId, setSessionId] = useState(() =>
     (typeof crypto !== 'undefined' && crypto.randomUUID)
       ? crypto.randomUUID()
       : `debug-${Date.now()}-${Math.random().toString(36).slice(2)}`
   )
+
+  useEffect(() => {
+    setDiagnosisClosed(false)
+    setFinalizing(false)
+    setSessionId(
+      (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `debug-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    )
+  }, [selectedMachineId])
 
   // ---------------------------------------------------------------------
   // Efectos: carga de datos, navegación entrante y auto-scroll
@@ -110,17 +129,18 @@ export default function DebugChat() {
   const send = async () => {
     const query = input.trim()
     if ((!query && attachments.length === 0) || loading || diagnosisClosed) return
+    if (!selectedMachineId) return
 
     const pendingAttachments = attachments
 
     setLoading(true)
     setInput('')
     setAttachments([])
-    setMessages(prev => [...prev, {
+    pushDebugMessage(selectedMachineId, {
       role: 'user',
       content: query,
       images: pendingAttachments.map(a => a.preview)
-    }])
+    })
 
     try {
       // Paso 1: si hay imágenes, se suben primero por separado (multipart)
@@ -129,8 +149,8 @@ export default function DebugChat() {
       let uploadedAttachments = []
       if (pendingAttachments.length > 0) {
         const formData = new FormData()
-        formData.append('session_id', sessionIdRef.current)
-        if (selectedMachineId) formData.append('machine_id', selectedMachineId)
+        formData.append('session_id', sessionId)
+        formData.append('machine_id', selectedMachineId)
         pendingAttachments.forEach(a => formData.append('files', a.file, a.file.name))
 
         const uploadData = await api.chat.debugAttachments(formData)
@@ -140,7 +160,7 @@ export default function DebugChat() {
       // Paso 2: llamada real a /api/chat/debug vía el servicio centralizado,
       // que ya adjunta el token de sesión automáticamente.
       const data = await api.chat.debug({
-        sessionId: sessionIdRef.current,
+        sessionId,
         machineId: selectedMachineId,
         message: query,
         attachments: uploadedAttachments,
@@ -148,12 +168,12 @@ export default function DebugChat() {
       })
 
       if (data && data.reply) {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
+        pushDebugMessage(selectedMachineId, { role: 'assistant', content: data.reply })
       } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Error de conexión con el motor de IA.' }])
+        pushDebugMessage(selectedMachineId, { role: 'assistant', content: '⚠️ Error de conexión con el motor de IA.' })
       }
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Servidor inalcanzable.' }])
+      pushDebugMessage(selectedMachineId, { role: 'assistant', content: '⚠️ Servidor inalcanzable.' })
     } finally {
       setLoading(false)
       pendingAttachments.forEach(a => URL.revokeObjectURL(a.preview))
@@ -189,12 +209,9 @@ export default function DebugChat() {
     const maquinaId = selectedMachineId
     const tecnicoId = user?.id
 
-    if (!maquinaId) {
-      setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Selecciona un equipo antes de finalizar el diagnóstico.' }])
-      return
-    }
+    if (!maquinaId) return
     if (!tecnicoId) {
-      setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ No se pudo identificar al técnico de la sesión. Vuelve a iniciar sesión e intenta de nuevo.' }])
+      pushDebugMessage(maquinaId, { role: 'assistant', content: '⚠️ No se pudo identificar al técnico de la sesión. Vuelve a iniciar sesión e intenta de nuevo.' })
       return
     }
 
@@ -220,14 +237,14 @@ export default function DebugChat() {
       // esta pantalla (api.chat.debug, api.chat.feedback, api.machines...).
       const data = await api.reports.send(payload)
 
-      setMessages(prev => [...prev, {
+      pushDebugMessage(maquinaId, {
         role: 'assistant',
         content: `✅ Diagnóstico finalizado. Reporte ${data.report_number} generado correctamente.`
-      }])
+      })
       setDiagnosisClosed(true)
     } catch (err) {
       const detail = err?.message || err?.detail || 'No se pudo generar el reporte de diagnóstico.'
-      setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ ${detail}` }])
+      pushDebugMessage(maquinaId, { role: 'assistant', content: `⚠️ ${detail}` })
     } finally {
       setFinalizing(false)
     }
@@ -375,13 +392,13 @@ export default function DebugChat() {
 
         <div className="input-zone">
           {attachments.length > 0 && (
-            <div className="debug-attachments-strip">
+            <div className="dc-pending-images">
               {attachments.map((a, i) => (
-                <div key={i} className="debug-attachment-thumb">
-                  <img src={a.preview} alt={a.file.name} />
+                <div key={i} className="dc-pending-image">
+                  <img className="dc-pending-image-thumb" src={a.preview} alt={a.file.name} />
                   <button
                     type="button"
-                    className="debug-attachment-remove"
+                    className="dc-pending-image-remove"
                     onClick={() => removeAttachment(i)}
                     title="Quitar imagen"
                   >
@@ -405,9 +422,9 @@ export default function DebugChat() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={loading || diagnosisClosed}
-              className="icon-btn debug-attach-btn"
-              title="Adjuntar imágenes"
+              disabled={loading || diagnosisClosed || !selectedMachineId}
+              className="icon-btn"
+              title={!selectedMachineId ? 'Selecciona un equipo primero' : 'Adjuntar imágenes'}
             >
               📎
             </button>
@@ -416,14 +433,20 @@ export default function DebugChat() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-              placeholder={diagnosisClosed ? 'El diagnóstico fue finalizado.' : 'Escribe tu consulta analítica...'}
+              placeholder={
+                diagnosisClosed
+                  ? 'El diagnóstico fue finalizado.'
+                  : !selectedMachineId
+                    ? 'Selecciona un equipo en el panel lateral para empezar a conversar...'
+                    : 'Escribe tu consulta analítica...'
+              }
               className="debug-input"
               rows={2}
-              disabled={diagnosisClosed}
+              disabled={diagnosisClosed || !selectedMachineId}
             />
             <button
               onClick={send}
-              disabled={loading || diagnosisClosed || (!input.trim() && attachments.length === 0)}
+              disabled={loading || diagnosisClosed || !selectedMachineId || (!input.trim() && attachments.length === 0)}
               className="btn btn-primary debug-send-btn"
             >
               Enviar
