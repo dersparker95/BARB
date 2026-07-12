@@ -259,7 +259,6 @@ export default function DocChat() {
     setDiscipline,
     setPlant,
     setDocMachine,
-    selectedMachine,
     setSelectedMachine,
     user,
     lang,
@@ -285,6 +284,7 @@ export default function DocChat() {
   const [catalogsLoading, setCatalogsLoading] = useState(false)
 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [savedTitle, setSavedTitle] = useState('')
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [sessionTitle, setSessionTitle] = useState('')
 
@@ -581,17 +581,43 @@ export default function DocChat() {
    * Guardar sesión
    * -------------------------------------------------------------------------- */
 
+  // Nombre estandarizado: disciplina · equipo/planta · fecha y hora.
+  // No se llama al LLM para esto (costaría una llamada extra por cada
+  // guardado solo para un título); en vez de eso se arma un formato fijo
+  // y predecible a partir de los mismos datos de contexto que ya viajan en
+  // el payload, para que SessionHistory.tsx pueda mostrar/filtrar sesiones
+  // de forma consistente.
+  const buildStandardTitle = useCallback(() => {
+    const parts = [
+      discipline || null,
+      selectedMachineRecord
+        ? normalizeMachineLabel(selectedMachineRecord)
+        : normalizePlantLabel(selectedPlantRecord),
+      new Date().toLocaleString(nLang === 'en' ? 'en-US' : 'es-CL', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    ].filter(Boolean)
+
+    return parts.join(' · ')
+  }, [discipline, selectedMachineRecord, selectedPlantRecord, nLang])
+
   const saveSession = useCallback(async (title: string) => {
     if (!docMessages.length) return
 
     setSaveStatus('saving')
     setSaveModalOpen(false)
 
+    const finalTitle = title.trim() || buildStandardTitle()
+
     const machineRecord = selectedMachineRecord
     const plantRecord = selectedPlantRecord
 
     const payload = {
-      title: title.trim() || `Sesión ${new Date().toLocaleString(nLang === 'en' ? 'en-US' : 'es-CL')}`,
+      title: finalTitle,
       saved_by: user?.name ?? 'operador',
       discipline: discipline ?? null,
       plant_id: plant ? String(plant) : null,
@@ -618,9 +644,10 @@ export default function DocChat() {
       // sesión expirada (401), a diferencia del fetch manual anterior.
       await api.chat.saveSession(payload)
 
+      setSavedTitle(finalTitle)
       setSaveStatus('saved')
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000)
+      saveTimerRef.current = setTimeout(() => setSaveStatus('idle'), 4000)
     } catch (error) {
       console.error('[DocChat] Error guardando sesión:', error)
       setSaveStatus('error')
@@ -638,17 +665,18 @@ export default function DocChat() {
     user?.name,
     nLang,
     api,
+    buildStandardTitle,
   ])
 
   const openSaveModal = useCallback(() => {
     if (!docMessages.length) return
-    const firstUserMsg = docMessages.find(m => m.role === 'user')
-    const autoTitle = firstUserMsg
-      ? firstUserMsg.content.slice(0, 60).replace(/\n/g, ' ')
-      : `Sesión ${new Date().toLocaleDateString()}`
-    setSessionTitle(autoTitle)
+    // Prefill con el nombre estandarizado (disciplina · equipo/planta ·
+    // fecha); antes usaba los primeros 60 caracteres del primer mensaje,
+    // lo que producía títulos inconsistentes y a veces cortados a mitad
+    // de palabra. El usuario igual puede editarlo antes de guardar.
+    setSessionTitle(buildStandardTitle())
     setSaveModalOpen(true)
-  }, [docMessages])
+  }, [docMessages, buildStandardTitle])
 
   /* ---------------------------------------------------------------------------
    * Envío de consulta
@@ -661,7 +689,16 @@ export default function DocChat() {
     setLoading(true)
     setInput('')
 
-    const chatMachine = selectedMachine ?? docMachine
+    // Antes: `selectedMachine ?? docMachine`. Dos bugs:
+    // 1) `selectedMachine` es estado global compartido con otras páginas —
+    //    si llega "sucio" de otra pantalla, el chat filtraba por una máquina
+    //    que el dropdown de esta página ni mostraba como seleccionada.
+    // 2) Cuando no hay máquina elegida, `docMachine` vale el string literal
+    //    'all', que el backend interpreta como texto libre y lo inyecta al
+    //    prompt como "Máquina en contexto: all." (ver main.py:2420).
+    // `docMachine` ya es la fuente de verdad de este filtro, así que basta
+    // con normalizar 'all' a undefined.
+    const chatMachine = docMachine && docMachine !== 'all' ? docMachine : undefined
 
     const inputElement = document.getElementById('doc-input') as HTMLTextAreaElement | null
     inputElement?.style.setProperty('height', 'auto')
@@ -716,7 +753,6 @@ export default function DocChat() {
     input,
     loading,
     discipline,
-    selectedMachine,
     docMachine,
     docMessages,
     api,
@@ -984,6 +1020,12 @@ export default function DocChat() {
                   </>
                 )}
               </button>
+
+              {saveStatus === 'saved' && savedTitle && (
+                <p className="dc-save-toast" role="status">
+                  ✅ Sesión guardada correctamente: <strong>{savedTitle}</strong>
+                </p>
+              )}
             </div>
           )}
         </div>
