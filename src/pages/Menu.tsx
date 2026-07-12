@@ -464,7 +464,7 @@ const Menu: React.FC = () => {
                   )}
                 </button>
                 <button className="btn btn-outline" type="button" onClick={closeUpload} disabled={isUploading}>
-                  {t.common?.cancel || 'Cancelar'}
+                  {t.common?.cancel || 'cancelar'}
                 </button>
               </div>
             </form>
