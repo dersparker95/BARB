@@ -1695,6 +1695,8 @@ body {
  
 .debug-send-btn {
   align-self: flex-end;
+  width: auto;
+  flex-shrink: 0;
 }
 
 /* =============================================================================
