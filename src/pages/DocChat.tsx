@@ -247,7 +247,6 @@ const getWorkOrderPriority = (ot: WorkOrderRecord): string =>
 
 export default function DocChat() {
   const {
-    apiBase,
     api,
     discipline,
     plant,
@@ -300,11 +299,6 @@ export default function DocChat() {
 
   const t = useMemo(() => getTranslations(lang), [lang])
   const nLang = normalizeLang(lang)
-
-  const apiRoot = useMemo(
-    () => (apiBase || '').replace(/\/$/, ''),
-    [apiBase],
-  )
 
   /* ---------------------------------------------------------------------------
    * Estado derivado
@@ -619,21 +613,10 @@ export default function DocChat() {
     }
 
     try {
-      // No existe un método saveSession en el servicio `api`, así que se usa
-      // fetch directo inyectando el token de sesión manualmente.
-      const response = await fetch(`${apiRoot}/chat-sessions`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('barb_token')}`
-        },
-        body: JSON.stringify(payload),
-      })
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(err.detail ?? `HTTP ${response.status}`)
-      }
+      // Usa el servicio `api.chat.saveSession` centralizado: resuelve
+      // correctamente el prefijo /api, adjunta el token vigente y maneja
+      // sesión expirada (401), a diferencia del fetch manual anterior.
+      await api.chat.saveSession(payload)
 
       setSaveStatus('saved')
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
@@ -654,7 +637,7 @@ export default function DocChat() {
     activeManual,
     user?.name,
     nLang,
-    apiRoot,
+    api,
   ])
 
   const openSaveModal = useCallback(() => {
@@ -702,55 +685,29 @@ export default function DocChat() {
       }))
 
     try {
-      // Usa fetch directo (en vez del servicio `api`) para poder enviar el payload
-      // completo con imágenes y manual activo, inyectando el token manualmente.
-      const response = await fetch(`${apiRoot}/chat`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('barb_token')}`
-        },
-        body: JSON.stringify({
-          message: query,
-          language: nLang,
-          machine: chatMachine,
-          history: recentHistory,
-          active_manual: activeManual?.name ?? null,
-          images: pendingImages.map(img => img.dataUrl),
-        }),
-      })
+      // Usa el servicio `api.chat.send` centralizado (mismo prefijo /api,
+      // token y manejo de 401 que el resto de la app) en vez de fetch manual.
+      const data = (await api.chat.send({
+        message: query,
+        language: nLang,
+        machine: chatMachine,
+        history: recentHistory,
+        active_manual: activeManual?.name ?? null,
+        images: pendingImages.map(img => img.dataUrl),
+      })) as ChatApiResponse
 
-      if (response.ok) {
-        const data = (await response.json()) as ChatApiResponse
-        pushDocMessage({ role: 'assistant', content: data.reply, timestamp: Date.now() })
-        setLoading(false)
-        return
-      }
-
-      if (response.status === 503) {
-        pushDocMessage({
-          role: 'assistant',
-          content:
-            t.docChat?.serviceUnavailable ??
-            'El servicio de IA no está disponible temporalmente. Inténtalo de nuevo en unos minutos.',
-          timestamp: Date.now(),
-        })
-        setLoading(false)
-        return
-      }
-
-      const errorData = await response.json().catch(() => ({}))
-      pushDocMessage({
-        role: 'assistant',
-        content: `Falla en la IA en la nube: ${errorData.detail ?? `Error ${response.status}`}`,
-        timestamp: Date.now(),
-      })
+      pushDocMessage({ role: 'assistant', content: data.reply, timestamp: Date.now() })
       setLoading(false)
-      return
-    } catch {
+    } catch (error: any) {
+      const msg = String(error?.message ?? '')
+      const isServiceUnavailable = msg.includes('503')
+
       pushDocMessage({
         role: 'assistant',
-        content: 'No se pudo conectar con el servidor. Verifica tu conexión o contacta al administrador.',
+        content: isServiceUnavailable
+          ? (t.docChat?.serviceUnavailable ??
+             'El servicio de IA no está disponible temporalmente. Inténtalo de nuevo en unos minutos.')
+          : `No se pudo conectar con el servidor: ${msg || 'Error desconocido'}`,
         timestamp: Date.now(),
       })
       setLoading(false)
@@ -762,7 +719,7 @@ export default function DocChat() {
     selectedMachine,
     docMachine,
     docMessages,
-    apiRoot,
+    api,
     nLang,
     pushDocMessage,
     pendingImages,
@@ -1167,17 +1124,12 @@ export default function DocChat() {
                 msg={message}
                 side={message.role === 'user' ? 'user' : 'bot'}
                 onFeedback={(msg, rating) => {
-                  // Fetch directo (no usa el servicio `api`) porque este callback vive
-                  // fuera del ciclo de vida del componente; recupera el token
-                  // directamente de localStorage en vez de depender del contexto.
-                  fetch(`${apiRoot}/chat-feedback`, {
-                    method: 'POST',
-                    headers: { 
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${localStorage.getItem('barb_token')}`
-                    },
-                    body: JSON.stringify({ message_content: msg.content, rating })
-                  }).catch(err => console.error("Error enviando feedback:", err));
+                  // Usa api.chat.feedback: el backend solo expone
+                  // /api/chat-feedback (sin alias sin prefijo), por lo que el
+                  // fetch manual anterior fallaba con 404.
+                  api.chat
+                    .feedback({ message_content: msg.content, rating })
+                    .catch(err => console.error('Error enviando feedback:', err))
                 }}
               />
             ))
