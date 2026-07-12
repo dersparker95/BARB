@@ -3063,14 +3063,14 @@ async def save_chat_session(payload: ChatSessionRequest):
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
                 """
-                INSERT INTO chat_session (
-                    title, saved_by, discipline, plant_id, plant_name, 
+                    INSERT INTO chat_session (
+                    empresa_id, titulo, saved_by, discipline, plant_id, plant_name, 
                     machine_id, machine_name, active_manual, messages, metadata
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING session_id;
-                """,
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING session_id;
+                    """,
                 (
-                    payload.title, payload.saved_by, payload.discipline, 
+                    1, payload.title, payload.saved_by, payload.discipline, 
                     payload.plant_id, payload.plant_name, payload.machine_id, 
                     payload.machine_name, payload.active_manual, 
                     json.dumps(payload.messages), json.dumps(payload.metadata_info)
