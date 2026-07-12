@@ -14,17 +14,20 @@ import { showToast } from '../components/Toast'
 // TIPOS
 // =============================================================================
 
-type UploadCategory = 'all' | 'electrical' | 'mechanical' | 'hydraulic' | 'pneumatic' | 'automation'
-
 interface UploadFormState {
   title: string
-  discipline: UploadCategory
+  // discipline_id / maquina_id reales (como string, por el <select>), no los
+  // slugs inventados que había antes ('electrical', 'pump_e4', etc.) — esos
+  // no correspondían a ninguna fila real de las tablas disciplina/maquina,
+  // así que el filtrado de RAG por equipo nunca podría haber funcionado.
+  discipline: string
   machine: string
   notes: string
   file: File | null
 }
 
-type MachineOption = { value: string; label: string }
+type CatalogOption = { id: number; name: string }
+type MachineCatalogOption = { id: number; name: string; discipline_id: number | null }
 
 // =============================================================================
 // CONSTANTES
@@ -32,47 +35,21 @@ type MachineOption = { value: string; label: string }
 
 const EMPTY_UPLOAD: UploadFormState = {
   title: '',
-  discipline: 'all',
+  discipline: '',
   machine: '',
   notes: '',
   file: null,
 }
 
-const ACCEPTED_FILE_TYPES = '.pdf,.doc,.docx,.txt,.md,.xls,.xlsx,.png,.jpg,.jpeg'
-
-const MACHINE_OPTIONS_BY_DISCIPLINE: Record<Exclude<UploadCategory, 'all'>, MachineOption[]> = {
-  electrical: [
-    { value: 'motor_drive_d1', label: 'Motor Drive D1' },
-    { value: 'mcc_01', label: 'MCC-01' },
-    { value: 'tablero_fuerza_a', label: 'Tablero de Fuerza A' },
-  ],
-  mechanical: [
-    { value: 'pump_e4', label: 'Pump E4' },
-    { value: 'chancador_primario', label: 'Chancador Primario' },
-    { value: 'harnero_vibratorio', label: 'Harnero Vibratorio' },
-  ],
-  hydraulic: [
-    { value: 'pump_e4', label: 'Pump E4' },
-    { value: 'unidad_hidraulica_h1', label: 'Unidad Hidráulica H1' },
-  ],
-  pneumatic: [
-    { value: 'compresor_p1', label: 'Compresor Principal P1' },
-    { value: 'linea_aire_a1', label: 'Línea de Aire A1' },
-  ],
-  automation: [
-    { value: 'plc_linea_1', label: 'PLC Línea 1' },
-    { value: 'hmi_central', label: 'HMI Central' },
-  ],
-}
+// Solo PDF y DOCX se indexan en el vectorial hoy (ver upload_document en el
+// backend) — los demás formatos que antes se aceptaban acá (.doc viejo,
+// .txt, .md, .xls/.xlsx, imágenes) se guardarían pero nunca se indexarían,
+// así que se sacan del selector para no prometer algo que no pasa.
+const ACCEPTED_FILE_TYPES = '.pdf,.docx'
 
 // =============================================================================
 // UTILIDADES
 // =============================================================================
-
-const getMachineOptions = (discipline: UploadCategory): MachineOption[] => {
-  if (discipline === 'all') return []
-  return MACHINE_OPTIONS_BY_DISCIPLINE[discipline]
-}
 
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`
@@ -101,7 +78,43 @@ const Menu: React.FC = () => {
   const [isDragActive, setIsDragActive] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
 
+  // Catálogos reales de disciplina/máquina (antes eran listas hardcodeadas
+  // con slugs que no correspondían a ninguna fila real en la base de datos).
+  const [disciplines, setDisciplines] = useState<CatalogOption[]>([])
+  const [machines, setMachines] = useState<MachineCatalogOption[]>([])
+
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // ---------------------------------------------------------------------
+  // Carga de catálogos (solo si el usuario puede subir documentos, ya que
+  // el formulario de subida está detrás de user?.role === 'admin')
+  // ---------------------------------------------------------------------
+
+  useEffect(() => {
+    if (user?.role !== 'admin') return
+    let cancelled = false
+
+    const loadCatalogs = async () => {
+      try {
+        const [disciplinesData, machinesData] = await Promise.all([
+          api.disciplines(),
+          api.machines(),
+        ])
+        if (cancelled) return
+        setDisciplines((disciplinesData || []).map((d: any) => ({ id: d.id, name: d.name })))
+        setMachines((machinesData || []).map((m: any) => ({
+          id: m.id,
+          name: m.name,
+          discipline_id: m.discipline_id ?? null,
+        })))
+      } catch (error) {
+        console.error('Error cargando catálogos de disciplina/máquina:', error)
+      }
+    }
+
+    loadCatalogs()
+    return () => { cancelled = true }
+  }, [user?.role, api])
 
   // ---------------------------------------------------------------------
   // Handlers
@@ -124,10 +137,16 @@ const Menu: React.FC = () => {
   }
 
   const canSubmit = uploadForm.title.trim().length > 0 && uploadForm.file !== null && !isUploading
-  const machineOptions = useMemo(() => getMachineOptions(uploadForm.discipline), [uploadForm.discipline])
+  const machineOptions = useMemo(() => {
+    if (!uploadForm.discipline) return []
+    const disciplineId = Number(uploadForm.discipline)
+    return machines
+      .filter(m => m.discipline_id === disciplineId)
+      .map(m => ({ value: String(m.id), label: m.name }))
+  }, [machines, uploadForm.discipline])
 
   useEffect(() => {
-    if (uploadForm.discipline === 'all') {
+    if (!uploadForm.discipline) {
       if (uploadForm.machine) setUploadForm(prev => ({ ...prev, machine: '' }))
       return
     }
@@ -159,7 +178,7 @@ const Menu: React.FC = () => {
       showToast(nLang === 'en' ? '⚠️ No file selected' : '⚠️ No has seleccionado ningún archivo')
       return
     }
-    if (uploadForm.discipline !== 'all' && !uploadForm.machine) {
+    if (uploadForm.discipline && !uploadForm.machine) {
       showToast(nLang === 'en' ? '⚠️ Select a machine' : '⚠️ Selecciona una máquina')
       return
     }
@@ -304,16 +323,14 @@ const Menu: React.FC = () => {
                   id="upload-discipline"
                   className="form-select"
                   value={uploadForm.discipline}
-                  onChange={event => setUploadForm(prev => ({ ...prev, discipline: event.target.value as UploadCategory, machine: '' }))}
+                  onChange={event => setUploadForm(prev => ({ ...prev, discipline: event.target.value, machine: '' }))}
                   aria-label={t.common?.discipline || 'Disciplina'}
                   disabled={isUploading}
                 >
-                  <option value="all">{t.common?.all || 'General'}</option>
-                  <option value="electrical">{nLang === 'en' ? 'Electrical' : 'Eléctrica'}</option>
-                  <option value="mechanical">{nLang === 'en' ? 'Mechanical' : 'Mecánica'}</option>
-                  <option value="hydraulic">{nLang === 'en' ? 'Hydraulic' : 'Hidráulica'}</option>
-                  <option value="pneumatic">{nLang === 'en' ? 'Pneumatic' : 'Neumática'}</option>
-                  <option value="automation">{nLang === 'en' ? 'Automation' : 'Automatización'}</option>
+                  <option value="">{t.common?.all || 'General'}</option>
+                  {disciplines.map(d => (
+                    <option key={d.id} value={String(d.id)}>{d.name}</option>
+                  ))}
                 </select>
               </div>
 
@@ -325,10 +342,10 @@ const Menu: React.FC = () => {
                   value={uploadForm.machine}
                   onChange={event => setUploadForm(prev => ({ ...prev, machine: event.target.value }))}
                   aria-label={t.common?.machine || 'Máquina'}
-                  disabled={isUploading || uploadForm.discipline === 'all'}
+                  disabled={isUploading || !uploadForm.discipline}
                 >
                   <option value="">
-                    {uploadForm.discipline === 'all'
+                    {!uploadForm.discipline
                       ? (nLang === 'en' ? 'Select a discipline first' : 'Selecciona primero una disciplina')
                       : (nLang === 'en' ? 'Select machine...' : 'Seleccionar máquina...')}
                   </option>

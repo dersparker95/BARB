@@ -1,5 +1,21 @@
 from __future__ import annotations
 
+# Chroma exige sqlite3 >= 3.35; la mayoría de las imágenes Linux (incluyendo
+# lo que corre en Render) traen una versión de sqlite3 del sistema más
+# vieja, lo que hace que chromadb.PersistentClient falle al arrancar con un
+# RuntimeError de versión. pysqlite3-binary (ya está en requirements.txt)
+# es el shim estándar para esto: hay que reemplazar el módulo sqlite3 ANTES
+# de que cualquier otra cosa (en particular chromadb) lo importe. Se hace
+# de forma defensiva: si pysqlite3-binary no está instalado, sqlite3 sigue
+# siendo el del sistema — chromadb fallará más abajo igual, pero de forma
+# controlada (ver _CHROMA_AVAILABLE) en vez de romper este import.
+try:
+    __import__("pysqlite3")
+    import sys as _sys
+    _sys.modules["sqlite3"] = _sys.modules.pop("pysqlite3")
+except ImportError:
+    pass
+
 import asyncio
 import hashlib
 import json
@@ -36,6 +52,13 @@ try:
 except ImportError:
     PdfReader = None
     _PYPDF_AVAILABLE = False
+
+try:
+    import docx2txt
+    _DOCX2TXT_AVAILABLE = True
+except ImportError:
+    docx2txt = None
+    _DOCX2TXT_AVAILABLE = False
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
@@ -2003,10 +2026,23 @@ async def create_work_order(request: Request):
 
 @app.post("/api/documents/upload", dependencies=[Depends(require_action("subir_documentos"))])
 @app.post("/documents/upload", dependencies=[Depends(require_action("subir_documentos"))])
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None),
+    discipline: Optional[str] = Form(None),
+    machine: Optional[str] = Form(None),
+    notes: Optional[str] = Form(None),
+):
     """
-    Acepta y persiste archivos PDF, y los indexa en la base vectorial Chroma
-    ("barb_manuals") para búsqueda de similitud desde /api/chat y /api/chat/debug.
+    Acepta y persiste archivos PDF o DOCX, los indexa en la base vectorial
+    Chroma ("barb_manuals") para búsqueda de similitud desde /api/chat y
+    /api/chat/debug, y guarda su metadata en la tabla `documento`.
+
+    `discipline` y `machine` llegan como los IDs reales de las tablas
+    `disciplina`/`maquina` (el frontend — Menu.tsx — los puebla desde
+    /api/disciplines y /api/machines, no con texto libre), pero se aceptan
+    como opcionales: un manual general no tiene por qué estar atado a un
+    equipo o disciplina específicos.
 
     La indexación es best-effort: si la extracción de texto o Chroma fallan
     (ej. PDF escaneado sin texto, o chromadb no instalado), el archivo igual
@@ -2016,7 +2052,15 @@ async def upload_document(file: UploadFile = File(...)):
 
     Args:
         file:
-            Archivo recibido desde el cliente HTTP.
+            Archivo recibido desde el cliente HTTP (PDF o DOCX).
+        title:
+            Nombre descriptivo del documento.
+        discipline:
+            disciplina_id (como string) al que pertenece el manual, si aplica.
+        machine:
+            maquina_id (como string) al que pertenece el manual, si aplica.
+        notes:
+            Notas internas libres.
 
     Returns:
         Metadatos de localización del archivo persistido, más chunks_indexed
@@ -2024,35 +2068,129 @@ async def upload_document(file: UploadFile = File(...)):
 
     Raises:
         HTTPException(415):
-            Si el archivo no es un PDF (ni por content_type ni por extensión).
+            Si el archivo no es PDF ni DOCX (ni por content_type ni por extensión).
     """
     content_type = (file.content_type or "").strip().lower()
     original_filename = Path(file.filename or "").name
+    ext = original_filename.lower().rsplit(".", 1)[-1] if "." in original_filename else ""
 
     # Algunos clientes (curl, ciertas libs de FormData, proxies) mandan un
-    # content_type genérico como application/octet-stream para PDFs
+    # content_type genérico como application/octet-stream para archivos
     # perfectamente válidos. Se acepta si CUALQUIERA de los dos indicadores
-    # (header o extensión del nombre de archivo) confirma que es un PDF, en
-    # vez de rechazar subidas legítimas por depender ciegamente del header.
-    is_pdf_content_type = content_type == "application/pdf"
-    is_pdf_extension = original_filename.lower().endswith(".pdf")
-    if not (is_pdf_content_type or is_pdf_extension):
-        raise HTTPException(status_code=415, detail="Solo se permiten archivos PDF (application/pdf).")
+    # (header o extensión) confirma un formato soportado, en vez de rechazar
+    # subidas legítimas por depender ciegamente del header.
+    pdf_docx_content_types = {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+    is_supported_content_type = content_type in pdf_docx_content_types
+    is_supported_extension = ext in ("pdf", "docx")
+    if not (is_supported_content_type or is_supported_extension):
+        raise HTTPException(
+            status_code=415,
+            detail="Solo se permiten archivos PDF o DOCX por ahora (.doc, .txt, .md, .xls/.xlsx e imágenes aún no se indexan).",
+        )
 
     doc_dir = UPLOAD_DIR / "documents"
     doc_dir.mkdir(parents=True, exist_ok=True)
 
     stored = store_upload_file(file, doc_dir, "doc")
 
+    # Los IDs de disciplina/máquina son opcionales y se validan de forma
+    # suave: un valor inválido no debe tumbar la subida, solo se guarda como
+    # NULL (documento general, sin filtro de equipo/disciplina).
+    discipline_id = None
+    if discipline:
+        try:
+            discipline_id = int(discipline)
+        except (TypeError, ValueError):
+            discipline_id = None
+
+    machine_id = None
+    if machine:
+        try:
+            machine_id = int(machine)
+        except (TypeError, ValueError):
+            machine_id = None
+
+    doc_title = (title or "").strip() or stored["original_name"]
+
     index_result = await asyncio.to_thread(
-        index_document_in_chroma, stored["stored_path"], stored["original_name"], stored["file_id"]
+        index_document_in_chroma,
+        stored["stored_path"],
+        stored["original_name"],
+        stored["file_id"],
+        doc_title,
+        discipline_id,
+        machine_id,
     )
+
+    # Persistencia en Postgres (tabla creada en caliente, mismo patrón que
+    # chat_feedback / chat_debug_attachment): permite listar/administrar
+    # documentos más adelante, algo que hoy no existe en absoluto — solo se
+    # podía subir, nunca ver ni borrar lo ya subido.
+    conn = None
+    documento_id = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS documento (
+                    documento_id  SERIAL PRIMARY KEY,
+                    title         VARCHAR(255) NOT NULL,
+                    discipline_id INTEGER REFERENCES disciplina(disciplina_id) ON DELETE SET NULL,
+                    maquina_id    INTEGER REFERENCES maquina(maquina_id) ON DELETE SET NULL,
+                    notes         TEXT,
+                    original_name VARCHAR(255) NOT NULL,
+                    stored_name   VARCHAR(255) NOT NULL,
+                    file_id       VARCHAR(64) NOT NULL,
+                    chunks_indexed INTEGER NOT NULL DEFAULT 0,
+                    created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+                );
+                """
+            )
+            conn.commit()
+            cursor.execute(
+                """
+                INSERT INTO documento
+                    (title, discipline_id, maquina_id, notes, original_name, stored_name, file_id, chunks_indexed)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING documento_id
+                """,
+                (
+                    doc_title,
+                    discipline_id,
+                    machine_id,
+                    safe_text(notes, None),
+                    stored["original_name"],
+                    stored["stored_name"],
+                    stored["file_id"],
+                    index_result["chunks_indexed"],
+                ),
+            )
+            documento_id = cursor.fetchone()["documento_id"]
+            conn.commit()
+    except Exception as e:
+        # No se aborta la subida por esto: el archivo ya está en disco y
+        # (si tuvo éxito) ya se indexó en Chroma. Perder solo el registro
+        # administrativo en Postgres es preferible a perder el archivo.
+        if conn:
+            conn.rollback()
+        print(f"Error guardando metadata de documento en Postgres: {e}")
+    finally:
+        if conn:
+            release_db_connection(conn)
 
     return {
         "id": stored["file_id"],
+        "documento_id": documento_id,
         "filename": stored["stored_name"],
         "original_name": stored["original_name"],
-        "content_type": "application/pdf",
+        "title": doc_title,
+        "discipline_id": discipline_id,
+        "machine_id": machine_id,
+        "content_type": content_type or f"application/{ext}",
         "path": str(stored["stored_path"]),
         "chunks_indexed": index_result["chunks_indexed"],
         "indexing_warning": index_result["warning"],
@@ -2286,11 +2424,23 @@ async def chat(payload: ChatRequest):
     if payload.machine:
         system_content += f" Máquina en contexto: {payload.machine}."
 
+    # payload.machine puede llegar como maquina_id real (numérico) o como un
+    # nombre libre, según qué pantalla llame a /api/chat — se intenta usar
+    # como filtro solo si es numérico; si no, se busca sin filtrar por
+    # máquina (query_manual_chunks igual hace fallback si el filtro no
+    # encuentra nada).
+    machine_filter = None
+    if payload.machine:
+        try:
+            machine_filter = int(payload.machine)
+        except (TypeError, ValueError):
+            machine_filter = None
+
     # Búsqueda de similitud en "barb_manuals": este es el chat de documentos
     # (docchat), el consumidor principal esperado del vectorial — antes no
     # llamaba a Chroma en absoluto y devolvía "sources" hardcodeado como si
     # sí lo hiciera.
-    manual_chunks = await asyncio.to_thread(query_manual_chunks, payload.message, 4)
+    manual_chunks = await asyncio.to_thread(query_manual_chunks, payload.message, 4, machine_filter)
     if manual_chunks:
         manual_text = "\n".join(
             f"- (Fuente: {c['source']}, pág. {c['page']}): {c['text'][:600]}"
@@ -2438,62 +2588,171 @@ def extract_pdf_chunks(pdf_path: Path, chunk_size: int = 1000, overlap: int = 15
     return chunks
 
 
-def index_document_in_chroma(pdf_path: Path, original_name: str, document_id: str) -> dict:
+def extract_docx_chunks(docx_path: Path, chunk_size: int = 1000, overlap: int = 150) -> list[dict]:
     """
-    Extrae el texto de un manual PDF y agrega sus fragmentos a la colección
-    "barb_manuals" de Chroma. Es best-effort: si falla, el documento sigue
-    guardado en disco de todas formas — upload_document() no depende de que
-    esto tenga éxito para responder 200.
+    Extrae el texto de un DOCX y lo parte en fragmentos con solapamiento.
+    A diferencia de un PDF, un .docx no tiene páginas reales (el paginado es
+    de renderizado, no del archivo), así que "page" queda como None — el
+    fragmento se referencia solo por su posición en el texto extraído.
 
     Args:
-        pdf_path:
-            Ruta al PDF en disco (stored_path de store_upload_file).
+        docx_path:
+            Ruta al DOCX ya persistido en disco.
+        chunk_size:
+            Tamaño máximo de cada fragmento, en caracteres.
+        overlap:
+            Caracteres de solapamiento entre fragmentos consecutivos.
+
+    Returns:
+        Lista de {"text": ..., "page": None}; vacía si docx2txt no está
+        instalado o el documento no tiene texto extraíble.
+    """
+    if not _DOCX2TXT_AVAILABLE:
+        return []
+    try:
+        text = (docx2txt.process(str(docx_path)) or "").strip()
+    except Exception as e:
+        print(f"Error leyendo DOCX {docx_path.name}: {e}")
+        return []
+
+    if not text:
+        return []
+
+    chunks: list[dict] = []
+    start = 0
+    while start < len(text):
+        piece = text[start:start + chunk_size].strip()
+        if piece:
+            chunks.append({"text": piece, "page": None})
+        start += max(chunk_size - overlap, 1)
+    return chunks
+
+
+def extract_document_chunks(doc_path: Path, original_name: str) -> list[dict]:
+    """
+    Despacha la extracción de texto según la extensión del archivo original.
+
+    Args:
+        doc_path:
+            Ruta al archivo persistido en disco.
         original_name:
-            Nombre original del archivo, usado como referencia de fuente.
+            Nombre original (se usa para inferir el tipo por extensión, ya
+            que stored_name en disco no necesariamente la conserva).
+
+    Returns:
+        Lista de fragmentos de texto, o [] si la extensión no es soportada
+        para indexación (aunque el archivo igual haya sido guardado).
+    """
+    ext = original_name.lower().rsplit(".", 1)[-1] if "." in original_name else ""
+    if ext == "pdf":
+        return extract_pdf_chunks(doc_path)
+    if ext == "docx":
+        return extract_docx_chunks(doc_path)
+    return []
+
+
+def index_document_in_chroma(
+    doc_path: Path,
+    original_name: str,
+    document_id: str,
+    title: Optional[str] = None,
+    discipline_id: Optional[int] = None,
+    machine_id: Optional[int] = None,
+) -> dict:
+    """
+    Extrae el texto de un manual (PDF o DOCX) y agrega sus fragmentos a la
+    colección "barb_manuals" de Chroma, con metadata de título/disciplina/
+    máquina para poder filtrar búsquedas por equipo más adelante.
+
+    Es best-effort: si falla, el documento sigue guardado en disco de todas
+    formas — upload_document() no depende de que esto tenga éxito para
+    responder 200.
+
+    Args:
+        doc_path:
+            Ruta al archivo en disco (stored_path de store_upload_file).
+        original_name:
+            Nombre original del archivo, usado como referencia de fuente y
+            para elegir el extractor correcto por extensión.
         document_id:
             file_id generado por store_upload_file, para namespacear los IDs
             de cada fragmento y evitar colisiones entre documentos.
+        title:
+            Título ingresado por quien sube el documento (metadata).
+        discipline_id:
+            disciplina_id real (tabla disciplina), si el documento aplica a
+            una disciplina específica; None para manuales generales.
+        machine_id:
+            maquina_id real (tabla maquina), si el documento aplica a un
+            equipo específico; None para manuales generales.
 
     Returns:
         {"chunks_indexed": int, "warning": str | None}. `warning` explica por
-        qué chunks_indexed quedó en 0 (chromadb no instalado, PDF sin texto
-        extraíble, etc.) en vez de devolver un 0 silencioso que no le dice
-        nada al operador que subió el manual.
+        qué chunks_indexed quedó en 0 (chromadb no instalado, sin texto
+        extraíble, extensión no soportada, etc.) en vez de devolver un 0
+        silencioso que no le dice nada al operador que subió el manual.
     """
     if not _CHROMA_AVAILABLE:
         return {
             "chunks_indexed": 0,
-            "warning": "chromadb no está instalado en el servidor; el PDF se guardó pero no se indexó.",
+            "warning": "chromadb no está instalado en el servidor; el archivo se guardó pero no se indexó.",
         }
 
     collection = get_manuals_collection()
     if collection is None:
         return {
             "chunks_indexed": 0,
-            "warning": "No se pudo conectar con la base vectorial Chroma; el PDF se guardó pero no se indexó.",
+            "warning": "No se pudo conectar con la base vectorial Chroma; el archivo se guardó pero no se indexó.",
         }
 
-    if not _PYPDF_AVAILABLE:
+    ext = original_name.lower().rsplit(".", 1)[-1] if "." in original_name else ""
+    if ext == "pdf" and not _PYPDF_AVAILABLE:
         return {
             "chunks_indexed": 0,
             "warning": "pypdf no está instalado en el servidor; no se pudo extraer texto del PDF.",
         }
+    if ext == "docx" and not _DOCX2TXT_AVAILABLE:
+        return {
+            "chunks_indexed": 0,
+            "warning": "docx2txt no está instalado en el servidor; no se pudo extraer texto del DOCX.",
+        }
+    if ext not in ("pdf", "docx"):
+        return {
+            "chunks_indexed": 0,
+            "warning": f"Formato .{ext or '?'} no soportado para indexación (solo PDF y DOCX por ahora).",
+        }
 
-    chunks = extract_pdf_chunks(pdf_path)
+    chunks = extract_document_chunks(doc_path, original_name)
     if not chunks:
         return {
             "chunks_indexed": 0,
-            "warning": "No se pudo extraer texto del PDF (¿es un documento escaneado sin OCR?); no se indexó.",
+            "warning": "No se pudo extraer texto del archivo (¿es un PDF escaneado sin OCR, o un documento vacío?); no se indexó.",
         }
 
+    # Metadata de cada fragmento: Chroma no acepta valores None en `where`,
+    # así que los campos opcionales se omiten en vez de guardarse como None
+    # (guardar {"machine_id": None} rompería un filtro where={"machine_id": X}
+    # más adelante en algunas versiones de Chroma).
+    base_metadata = {"source": original_name, "document_id": document_id}
+    if title:
+        base_metadata["title"] = title
+    if discipline_id is not None:
+        base_metadata["discipline_id"] = discipline_id
+    if machine_id is not None:
+        base_metadata["machine_id"] = machine_id
+
     try:
+        metadatas = []
+        for c in chunks:
+            meta = dict(base_metadata)
+            if c.get("page") is not None:
+                meta["page"] = c["page"]
+            metadatas.append(meta)
+
         collection.add(
-            ids=[f"{document_id}-p{c['page']}-{i}" for i, c in enumerate(chunks)],
+            ids=[f"{document_id}-{i}" for i, _ in enumerate(chunks)],
             documents=[c["text"] for c in chunks],
-            metadatas=[
-                {"source": original_name, "page": c["page"], "document_id": document_id}
-                for c in chunks
-            ],
+            metadatas=metadatas,
         )
         return {"chunks_indexed": len(chunks), "warning": None}
     except Exception as e:
@@ -2504,16 +2763,23 @@ def index_document_in_chroma(pdf_path: Path, original_name: str, document_id: st
         }
 
 
-def query_manual_chunks(query_text: str, n_results: int = 4) -> list[dict]:
+def query_manual_chunks(query_text: str, n_results: int = 4, machine_id: Optional[int] = None) -> list[dict]:
     """
     Busca en "barb_manuals" los fragmentos más similares semánticamente a
     query_text — búsqueda de similitud real (embeddings), no full-text.
 
     Args:
         query_text:
-            Consulta del usuario (payload.message en chat_debug).
+            Consulta del usuario (payload.message en chat_debug/chat).
         n_results:
             Máximo de fragmentos a devolver.
+        machine_id:
+            Si viene, intenta acotar la búsqueda a manuales indexados con ese
+            maquina_id. Es un filtro "suave": si no hay resultados para ese
+            equipo específico (por ejemplo porque el manual todavía no fue
+            etiquetado con esa máquina, o es un manual general), cae
+            automáticamente a una búsqueda sin filtro en vez de devolver []
+            y dejar al usuario sin ninguna referencia.
 
     Returns:
         Lista de {"text", "source", "page"}; vacía si no hay colección
@@ -2523,21 +2789,32 @@ def query_manual_chunks(query_text: str, n_results: int = 4) -> list[dict]:
     if collection is None:
         return []
 
-    try:
+    def _run_query(where: Optional[dict]):
         count = collection.count()
         if count == 0:
             return []
-        results = collection.query(query_texts=[query_text], n_results=min(n_results, count))
+        kwargs = {"query_texts": [query_text], "n_results": min(n_results, count)}
+        if where:
+            kwargs["where"] = where
+        results = collection.query(**kwargs)
+        docs = (results.get("documents") or [[]])[0]
+        metas = (results.get("metadatas") or [[]])[0]
+        return [
+            {"text": doc, "source": meta.get("source", "manual"), "page": meta.get("page")}
+            for doc, meta in zip(docs, metas)
+        ]
+
+    try:
+        if machine_id is not None:
+            filtered = _run_query({"machine_id": machine_id})
+            if filtered:
+                return filtered
+            # Sin resultados para esa máquina puntual: fallback a manuales
+            # generales en vez de dejar al usuario sin nada.
+        return _run_query(None)
     except Exception as e:
         print(f"Error consultando manuales en Chroma: {e}")
         return []
-
-    docs = (results.get("documents") or [[]])[0]
-    metas = (results.get("metadatas") or [[]])[0]
-    return [
-        {"text": doc, "source": meta.get("source", "manual"), "page": meta.get("page")}
-        for doc, meta in zip(docs, metas)
-    ]
 
 
 @app.post("/api/chat/debug", dependencies=[Depends(require_route("debug"))])
@@ -2579,37 +2856,37 @@ async def chat_debug(payload: ChatDebugRequest):
     if payload.machineId:
         system_content += f" Máquina en contexto: {payload.machineId}."
 
-        # Consulta automática de OTs previas del equipo (núcleo RAG del MVP):
-        # no depende de que el frontend envíe el historial, se extrae aquí
-        # directamente de la base de datos.
+    # Se calcula fuera del bloque anterior porque también lo usa la búsqueda
+    # de manuales más abajo, no solo el historial de OTs.
+    maquina_id = None
+    if payload.machineId:
         try:
             maquina_id = int(payload.machineId)
         except (TypeError, ValueError):
             maquina_id = None
 
-        if maquina_id is not None:
-            failure_rows = await asyncio.to_thread(
-                fetch_recent_machine_failures, maquina_id, DEBUG_HISTORY_LIMIT
+    if maquina_id is not None:
+        # Consulta automática de OTs previas del equipo (núcleo RAG del MVP):
+        # no depende de que el frontend envíe el historial, se extrae aquí
+        # directamente de la base de datos.
+        failure_rows = await asyncio.to_thread(
+            fetch_recent_machine_failures, maquina_id, DEBUG_HISTORY_LIMIT
+        )
+        if failure_rows:
+            failure_history_text = format_failure_history_for_prompt(failure_rows)
+            system_content += (
+                " Historial reciente de fallas registradas para este equipo (de la más"
+                f" reciente a la más antigua):\n{failure_history_text}\n"
+                " Usa este historial para identificar patrones de falla repetitiva,"
+                " priorizar el diagnóstico más probable y proponer acciones correctivas"
+                " concretas orientadas a evitar que la falla se repita."
             )
-            if failure_rows:
-                failure_history_text = format_failure_history_for_prompt(failure_rows)
-                system_content += (
-                    " Historial reciente de fallas registradas para este equipo (de la más"
-                    f" reciente a la más antigua):\n{failure_history_text}\n"
-                    " Usa este historial para identificar patrones de falla repetitiva,"
-                    " priorizar el diagnóstico más probable y proponer acciones correctivas"
-                    " concretas orientadas a evitar que la falla se repita."
-                )
-
-        # TODO (futuro): si el manual indexado está asociado a una máquina o
-        # disciplina específica, se podría filtrar la búsqueda de Chroma con
-        # `where={"machine": payload.machineId}` una vez que index_document_in_chroma
-        # también guarde esa metadata (hoy solo guarda source/page/document_id).
 
     # Búsqueda de similitud en la base vectorial Chroma ("barb_manuals"):
     # agrega pasajes de manuales técnicos relevantes al mensaje del usuario.
-    # No depende de machineId — aplica a cualquier consulta de Debug.
-    manual_chunks = await asyncio.to_thread(query_manual_chunks, payload.message, 4)
+    # Si hay maquina_id, intenta acotar la búsqueda a manuales de ese equipo
+    # (con fallback automático a manuales generales si no hay coincidencias).
+    manual_chunks = await asyncio.to_thread(query_manual_chunks, payload.message, 4, maquina_id)
     if manual_chunks:
         manual_text = "\n".join(
             f"- (Fuente: {c['source']}, pág. {c['page']}): {c['text'][:600]}"
