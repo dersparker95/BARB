@@ -1099,7 +1099,7 @@ export default function DocChat() {
 
         {saveModalOpen && (
           <div
-            className="modal-overlay"
+            className="modal-overlay open"
             onClick={e => {
               if (e.target === e.currentTarget) setSaveModalOpen(false)
             }}
