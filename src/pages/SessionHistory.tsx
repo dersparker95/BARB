@@ -2,9 +2,10 @@
 // IMPORTS
 // =============================================================================
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useAppContext } from '../context/AppContext'
 import ChatBubble from '../components/ChatBubble'
+import { getTranslations } from '../utils/i18n'
 
 // =============================================================================
 // TIPOS
@@ -30,7 +31,8 @@ export default function SessionHistory() {
   // Estados
   // ---------------------------------------------------------------------
 
-  const { api } = useAppContext()
+  const { api, lang } = useAppContext()
+  const t = useMemo(() => getTranslations(lang), [lang])
   const [sessions, setSessions] = useState<SavedSession[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSession, setSelectedSession] = useState<SavedSession | null>(null)
@@ -53,7 +55,7 @@ export default function SessionHistory() {
         // permisos.py restringe /api/chat-sessions a supervisor/gerente/admin;
         // si alguien llega acá sin ese rol (ej. por URL directa), el mensaje
         // real del backend dice "El rol '...' no tiene acceso a 'history'."
-        setError(err?.message || 'No se pudo cargar el historial de sesiones.')
+        setError(err?.message || (t.sessionHistory?.loadError || 'No se pudo cargar el historial de sesiones.'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -68,9 +70,9 @@ export default function SessionHistory() {
   return (
     <div className="sh-page">
       <div className="sh-header">
-        <h1 className="sh-title">📚 Historial de Diagnósticos</h1>
+        <h1 className="sh-title">{t.sessionHistory?.title || '📚 Historial de Diagnósticos'}</h1>
         <p className="sh-subtitle">
-          Registro de auditoría y consultas previas realizadas a la IA.
+          {t.sessionHistory?.subtitle || 'Registro de auditoría y consultas previas realizadas a la IA.'}
         </p>
       </div>
 
@@ -78,20 +80,20 @@ export default function SessionHistory() {
         {/* Panel Izquierdo: Tabla de Sesiones */}
         <div className="sh-table-panel">
           {loading ? (
-            <div className="sh-empty">Cargando memoria de BARB...</div>
+            <div className="sh-empty">{t.sessionHistory?.loadingMemory || 'Cargando memoria de BARB...'}</div>
           ) : error ? (
             <div className="sh-empty">⚠️ {error}</div>
           ) : sessions.length === 0 ? (
-            <div className="sh-empty">No hay sesiones guardadas aún.</div>
+            <div className="sh-empty">{t.sessionHistory?.noSessions || 'No hay sesiones guardadas aún.'}</div>
           ) : (
             <div className="sh-table-scroll">
               <table className="sh-table">
                 <thead>
                   <tr>
-                    <th>Fecha</th>
-                    <th>Título / Problema</th>
-                    <th>Técnico</th>
-                    <th>Equipo</th>
+                    <th>{t.sessionHistory?.colDate || 'Fecha'}</th>
+                    <th>{t.sessionHistory?.colTitle || 'Título / Problema'}</th>
+                    <th>{t.sessionHistory?.colTechnician || 'Técnico'}</th>
+                    <th>{t.sessionHistory?.colEquipment || 'Equipo'}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -102,14 +104,14 @@ export default function SessionHistory() {
                       className={selectedSession?.session_id === session.session_id ? 'active' : ''}
                     >
                       <td className="sh-td-date">
-                        {new Date(session.created_at).toLocaleDateString()}
+                        {new Date(session.created_at).toLocaleDateString(lang === 'en' ? 'en-US' : 'es-CL')}
                       </td>
                       <td className="sh-td-title">
                         {session.title}
                       </td>
-                      <td>{session.saved_by || 'Operador'}</td>
+                      <td>{session.saved_by || (t.common?.operator || 'Operador')}</td>
                       <td>
-                        {session.machine_name || session.discipline || 'General'}
+                        {session.machine_name || session.discipline || (t.sessionHistory?.generalLabel || 'General')}
                       </td>
                     </tr>
                   ))}
@@ -126,13 +128,15 @@ export default function SessionHistory() {
               <div>
                 <h3 className="sh-detail-title">{selectedSession.title}</h3>
                 <div className="sh-detail-meta">
-                  <span>📍 {selectedSession.plant_name || 'Planta'}</span>
-                  <span>⚙️ {selectedSession.machine_name || 'General'}</span>
+                  <span>📍 {selectedSession.plant_name || (t.sessionHistory?.plantLabel || 'Planta')}</span>
+                  <span>⚙️ {selectedSession.machine_name || (t.sessionHistory?.generalLabel || 'General')}</span>
                 </div>
               </div>
               <button
                 onClick={() => setSelectedSession(null)}
                 className="sh-detail-close"
+                aria-label={t.common?.close || 'Cerrar'}
+                title={t.common?.close || 'Cerrar'}
               >
                 ✕
               </button>

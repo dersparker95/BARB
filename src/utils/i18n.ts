@@ -218,6 +218,9 @@ export type TranslationTree = {
     emptyContext: string
     inputPlaceholder: string
     uploadManual: string
+    saveSession: string
+    sessionTitle: string
+    serviceUnavailable: string
   }
   settings: {
     title: string
@@ -267,6 +270,8 @@ export type TranslationTree = {
     uploadTitle: string
     uploadDescription: string
     uploadHint: string
+    sessionHistoryTitle: string
+    sessionHistoryDescription: string
   }
   debug: {
     machineInformation: string
@@ -290,6 +295,32 @@ export type TranslationTree = {
     chipChecklist: string
     inputPlaceholder: string
     takePhoto: string
+    sidebarTitle: string
+    panelLabel: string
+    selectMachineHint: string
+    selectMachinePlaceholder: string
+    otHistory: (count: number) => string
+    otHistoryHint: string
+    noOtHistory: string
+    selectEquipmentTitle: string
+    headerTitle: string
+    headerSub: string
+    severityTitle: string
+    finalizeTitle: string
+    finalizeDone: string
+    finalizingText: string
+    finalizeButton: string
+    emptyState: string
+    removeImage: string
+    attachImages: string
+    inputPlaceholderClosed: string
+    inputPlaceholderOpen: string
+    connectionError: string
+    serverUnreachable: string
+    technicianNotFound: string
+    defaultIssueDescription: string
+    reportGenerated: (reportNumber: string) => string
+    reportError: string
   }
   machineMemory: {
     title: string
@@ -297,6 +328,19 @@ export type TranslationTree = {
     noHistoryDescription: string
     operator: string
     noHistoryDesc: string
+  }
+  sessionHistory: {
+    title: string
+    subtitle: string
+    loadingMemory: string
+    noSessions: string
+    colDate: string
+    colTitle: string
+    colTechnician: string
+    colEquipment: string
+    generalLabel: string
+    plantLabel: string
+    loadError: string
   }
 }
 
@@ -379,7 +423,8 @@ const translations: Record<AppLang, TranslationTree> = {
       backendError: 'No se pudo conectar con el backend de Plant Memory en este momento.',
       lmStudioOffline: 'El asistente está desconectado temporalmente. Revisa la conexión de LM Studio.',
       assignedOts: 'OTs asignadas', fragments: 'fragmentos', emptyContext: 'Selecciona una disciplina para empezar a chatear con la documentación',
-      inputPlaceholder: 'Escribe tu pregunta', uploadManual: 'Cargar manual'
+      inputPlaceholder: 'Escribe tu pregunta', uploadManual: 'Cargar manual', saveSession: 'Guardar Sesión',
+      sessionTitle: 'Título de la sesión', serviceUnavailable: 'El servicio de IA no está disponible temporalmente. Inténtalo de nuevo en unos minutos.'
     },
     settings: {
       title: 'Configuración', appearanceLanguage: 'Apariencia e idioma', darkTheme: 'Tema oscuro', account: 'Cuenta',
@@ -399,7 +444,8 @@ const translations: Record<AppLang, TranslationTree> = {
       title: 'Menú principal', documentChatTitle: 'Asistente Documental', documentChatDescription: 'Consulta manuales y procedimientos',
       topologyTitle: 'Topología de planta', topologyDescription: 'Mapa interactivo de máquinas', dashboardTitle: 'Dashboard KPI',
       dashboardDescription: 'Métricas y reportes', adminBadge: 'ADMIN', uploadTitle: 'Subir documentos',
-      uploadDescription: 'Sube archivos al repositorio documental', uploadHint: 'El archivo se guardará en el repositorio documental seguro.'
+      uploadDescription: 'Sube archivos al repositorio documental', uploadHint: 'El archivo se guardará en el repositorio documental seguro.',
+      sessionHistoryTitle: 'Historial de Sesiones', sessionHistoryDescription: 'Revisa conversaciones y diagnósticos anteriores'
     },
     debug: {
       machineInformation: 'Información de la máquina', specifications: 'Especificaciones', status: 'Estado', category: 'Categoría',
@@ -408,11 +454,30 @@ const translations: Record<AppLang, TranslationTree> = {
       equipmentInfo: 'Información del Equipo', specs: 'Especificaciones', strictMode: 'Modo Estricto BARB Activado',
       strictModeDesc: 'La IA está bloqueada para responder solo temas industriales.', startSession: 'Inicia la sesión de diagnóstico',
       selectMachine: 'Selecciona una máquina desde la topología', chipSecurity: 'Riesgos de seguridad', chipMaintenance: 'Mantenimiento preventivo',
-      chipChecklist: 'Generar Checklist', inputPlaceholder: 'Describe el problema para que BARB lo analice...', takePhoto: 'Tomar foto del problema'
+      chipChecklist: 'Generar Checklist', inputPlaceholder: 'Describe el problema para que BARB lo analice...', takePhoto: 'Tomar foto del problema',
+      sidebarTitle: 'Equipos', panelLabel: '🛠️ Diagnóstico de Equipos', selectMachineHint: 'Selecciona una máquina para analizar su patrón de fallas con IA.',
+      selectMachinePlaceholder: 'Seleccionar equipo...', otHistory: (count: number) => `Historial de OTs (${count})`,
+      otHistoryHint: '✓ Se envía automáticamente a la IA en cada mensaje, no hace falta seleccionarlo.', noOtHistory: 'Este equipo no tiene historial de fallas reportadas.',
+      selectEquipmentTitle: 'Seleccionar Equipo', headerTitle: 'Debug & Análisis Predictivo', headerSub: 'Analiza causas raíz y solicita sugerencias de mantenimiento.',
+      severityTitle: 'Severidad del reporte', finalizeTitle: 'Compila el resumen de la conversación y solicita el reporte',
+      finalizeDone: '✅ Diagnóstico Finalizado', finalizingText: 'Generando reporte…', finalizeButton: '🏁 Finalizar Diagnóstico',
+      emptyState: 'Escribe una pregunta directa, o selecciona un equipo en el panel lateral para que la IA use su historial de fallas automáticamente.',
+      removeImage: 'Quitar imagen', attachImages: 'Adjuntar imágenes', inputPlaceholderClosed: 'El diagnóstico fue finalizado.',
+      inputPlaceholderOpen: 'Escribe tu consulta analítica...', connectionError: '⚠️ Error de conexión con el motor de IA.',
+      serverUnreachable: '⚠️ Servidor inalcanzable.', technicianNotFound: '⚠️ No se pudo identificar al técnico de la sesión. Vuelve a iniciar sesión e intenta de nuevo.',
+      defaultIssueDescription: 'Diagnóstico asistido por IA (sin descripción inicial).',
+      reportGenerated: (reportNumber: string) => `✅ Diagnóstico finalizado. Reporte ${reportNumber} generado correctamente.`,
+      reportError: 'No se pudo generar el reporte de diagnóstico.'
     },
     machineMemory: {
       title: 'Memoria de máquina', noHistoryTitle: 'No hay historial disponible', noHistoryDescription: 'No existen órdenes de trabajo o reportes previos para esta máquina.',
       operator: 'Operador', noHistoryDesc: 'No existen órdenes de trabajo ni reportes pasados para este equipo.'
+    },
+    sessionHistory: {
+      title: '📚 Historial de Diagnósticos', subtitle: 'Registro de auditoría y consultas previas realizadas a la IA.',
+      loadingMemory: 'Cargando memoria de BARB...', noSessions: 'No hay sesiones guardadas aún.', colDate: 'Fecha',
+      colTitle: 'Título / Problema', colTechnician: 'Técnico', colEquipment: 'Equipo', generalLabel: 'General',
+      plantLabel: 'Planta', loadError: 'No se pudo cargar el historial de sesiones.'
     },
   },
   en: {
@@ -473,7 +538,8 @@ const translations: Record<AppLang, TranslationTree> = {
       sendPrompt: 'Send chat message', inputHint: 'Enter to send · Shift+Enter new line', emptyTitle: 'Select a discipline to start',
       emptyDescription: 'You can change plant, discipline and machine from the side panel.', backendError: 'Could not connect to the Plant Memory backend right now.',
       lmStudioOffline: 'The assistant is temporarily disconnected. Check LM Studio connection.', assignedOts: 'Assigned OTs', fragments: 'fragments',
-      emptyContext: 'Select a discipline to start chatting with documentation', inputPlaceholder: 'Type your question', uploadManual: 'Upload manual'
+      emptyContext: 'Select a discipline to start chatting with documentation', inputPlaceholder: 'Type your question', uploadManual: 'Upload manual',
+      saveSession: 'Save Session', sessionTitle: 'Session title', serviceUnavailable: 'The AI service is temporarily unavailable. Please try again in a few minutes.'
     },
     settings: {
       title: 'Settings', appearanceLanguage: 'Appearance & language', darkTheme: 'Dark theme', account: 'Account', systemConnections: 'System & connections',
@@ -490,18 +556,38 @@ const translations: Record<AppLang, TranslationTree> = {
       title: 'Main Menu', documentChatTitle: 'Document Chat', documentChatDescription: 'Chat with plant manuals and documentation by discipline',
       topologyTitle: 'Plant Topology', topologyDescription: 'View machines and their connections in the plant', dashboardTitle: 'OT Dashboard',
       dashboardDescription: 'Work order dashboard — automatic tickets, start/close times, maintenance KPIs', adminBadge: 'ADMIN',
-      uploadTitle: 'Document upload', uploadDescription: 'Upload manuals, technical sheets or procedures.', uploadHint: 'The file will be stored in the document repository.'
+      uploadTitle: 'Document upload', uploadDescription: 'Upload manuals, technical sheets or procedures.', uploadHint: 'The file will be stored in the document repository.',
+      sessionHistoryTitle: 'Session History', sessionHistoryDescription: 'Review previous conversations and diagnostics'
     },
     debug: {
       machineInformation: 'Machine information', specifications: 'Specifications', status: 'Status', category: 'Category', sessionId: 'Session ID',
       startDebugging: 'Start debugging session', issuePlaceholder: 'Describe the issue or ask questions…', attachPhoto: 'Attach photo', generateReport: 'Generate & Send Report',
       poweredBy: 'Powered by FastAPI', equipmentInfo: 'Equipment Info', specs: 'Specifications', strictMode: 'Strict Mode Enabled', strictModeDesc: 'AI is locked to answer industrial topics only.',
       startSession: 'Start diagnostics session', selectMachine: 'Select a machine from topology', chipSecurity: 'Safety risks', chipMaintenance: 'Preventive maintenance',
-      chipChecklist: 'Generate Checklist', inputPlaceholder: 'Describe the issue for BARB to analyze...', takePhoto: 'Take photo'
+      chipChecklist: 'Generate Checklist', inputPlaceholder: 'Describe the issue for BARB to analyze...', takePhoto: 'Take photo',
+      sidebarTitle: 'Equipment', panelLabel: '🛠️ Equipment Diagnostics', selectMachineHint: 'Select a machine to analyze its failure pattern with AI.',
+      selectMachinePlaceholder: 'Select equipment...', otHistory: (count: number) => `WO History (${count})`,
+      otHistoryHint: '✓ Automatically sent to the AI with every message, no need to select it.', noOtHistory: 'This equipment has no reported failure history.',
+      selectEquipmentTitle: 'Select Equipment', headerTitle: 'Debug & Predictive Analysis', headerSub: 'Analyze root causes and request maintenance suggestions.',
+      severityTitle: 'Report severity', finalizeTitle: 'Compiles the conversation summary and requests the report',
+      finalizeDone: '✅ Diagnosis Finished', finalizingText: 'Generating report…', finalizeButton: '🏁 Finish Diagnosis',
+      emptyState: 'Type a direct question, or select equipment from the side panel so the AI automatically uses its failure history.',
+      removeImage: 'Remove image', attachImages: 'Attach images', inputPlaceholderClosed: 'The diagnosis has been finished.',
+      inputPlaceholderOpen: 'Type your analytical query...', connectionError: '⚠️ Connection error with the AI engine.',
+      serverUnreachable: '⚠️ Server unreachable.', technicianNotFound: '⚠️ Could not identify the session technician. Please log in again and retry.',
+      defaultIssueDescription: 'AI-assisted diagnosis (no initial description).',
+      reportGenerated: (reportNumber: string) => `✅ Diagnosis finished. Report ${reportNumber} generated successfully.`,
+      reportError: 'Could not generate the diagnosis report.'
     },
     machineMemory: {
       title: 'Machine memory', noHistoryTitle: 'No history available', noHistoryDescription: 'There are no past work orders or reports for this machine.', operator: 'Operator',
       noHistoryDesc: 'There are no past work orders or reports for this machine.'
+    },
+    sessionHistory: {
+      title: '📚 Diagnostics History', subtitle: 'Audit log and previous queries made to the AI.',
+      loadingMemory: 'Loading BARB memory...', noSessions: 'No sessions saved yet.', colDate: 'Date',
+      colTitle: 'Title / Issue', colTechnician: 'Technician', colEquipment: 'Equipment', generalLabel: 'General',
+      plantLabel: 'Plant', loadError: 'Could not load session history.'
     },
   },
 }

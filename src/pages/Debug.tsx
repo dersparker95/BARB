@@ -8,13 +8,16 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAppContext } from '../context/AppContext'
 import ChatBubble, { Thinking } from '../components/ChatBubble'
+import { getTranslations } from '../utils/i18n'
 
 // =============================================================================
 // COMPONENTE PRINCIPAL: DEBUG CHAT
 // =============================================================================
 
 export default function DebugChat() {
-  const { user, api, getDebugMessages, pushDebugMessage } = useAppContext()
+  const { user, api, getDebugMessages, pushDebugMessage, lang } = useAppContext()
+
+  const t = useMemo(() => getTranslations(lang), [lang])
 
   const location = useLocation()
 
@@ -170,10 +173,10 @@ export default function DebugChat() {
       if (data && data.reply) {
         pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: data.reply })
       } else {
-        pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: '⚠️ Error de conexión con el motor de IA.' })
+        pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: t.debug?.connectionError || '⚠️ Error de conexión con el motor de IA.' })
       }
     } catch (err) {
-      pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: '⚠️ Servidor inalcanzable.' })
+      pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: t.debug?.serverUnreachable || '⚠️ Servidor inalcanzable.' })
     } finally {
       setLoading(false)
       pendingAttachments.forEach(a => URL.revokeObjectURL(a.preview))
@@ -211,7 +214,7 @@ export default function DebugChat() {
 
     if (!maquinaId) return
     if (!tecnicoId) {
-      pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: '⚠️ No se pudo identificar al técnico de la sesión. Vuelve a iniciar sesión e intenta de nuevo.' })
+      pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: t.debug?.technicianNotFound || '⚠️ No se pudo identificar al técnico de la sesión. Vuelve a iniciar sesión e intenta de nuevo.' })
       return
     }
 
@@ -227,7 +230,7 @@ export default function DebugChat() {
       const payload = {
         maquina_id: maquinaId,
         tecnico_id: tecnicoId,
-        issue_description: firstUserMessage?.content || 'Diagnóstico asistido por IA (sin descripción inicial).',
+        issue_description: firstUserMessage?.content || (t.debug?.defaultIssueDescription || 'Diagnóstico asistido por IA (sin descripción inicial).'),
         severity,
         summary
       }
@@ -239,11 +242,11 @@ export default function DebugChat() {
 
       pushDebugMessage(HISTORY_KEY, {
         role: 'assistant',
-        content: `✅ Diagnóstico finalizado. Reporte ${data.report_number} generado correctamente.`
+        content: t.debug?.reportGenerated ? t.debug.reportGenerated(data.report_number) : `✅ Diagnóstico finalizado. Reporte ${data.report_number} generado correctamente.`
       })
       setDiagnosisClosed(true)
     } catch (err) {
-      const detail = err?.message || err?.detail || 'No se pudo generar el reporte de diagnóstico.'
+      const detail = err?.message || err?.detail || (t.debug?.reportError || 'No se pudo generar el reporte de diagnóstico.')
       pushDebugMessage(HISTORY_KEY, { role: 'assistant', content: `⚠️ ${detail}` })
     } finally {
       setFinalizing(false)
@@ -266,7 +269,7 @@ export default function DebugChat() {
 
       <div className={`panel-left debug-sidebar ${isSidebarOpen ? 'debug-sidebar--open' : ''}`}>
         <div className="debug-sidebar-mobile-header">
-          <span className="debug-sidebar-mobile-title">Equipos</span>
+          <span className="debug-sidebar-mobile-title">{t.debug?.sidebarTitle || 'Equipos'}</span>
           <button
             onClick={() => setIsSidebarOpen(false)}
             className="icon-btn"
@@ -276,15 +279,15 @@ export default function DebugChat() {
         </div>
 
         <div className="panel-section">
-          <span className="panel-label">🛠️ Diagnóstico de Equipos</span>
-          <p className="debug-sidebar-hint">Selecciona una máquina para analizar su patrón de fallas con IA.</p>
+          <span className="panel-label">{t.debug?.panelLabel || '🛠️ Diagnóstico de Equipos'}</span>
+          <p className="debug-sidebar-hint">{t.debug?.selectMachineHint || 'Selecciona una máquina para analizar su patrón de fallas con IA.'}</p>
 
           <select
             className="form-select w-full"
             value={selectedMachineId || ''}
             onChange={e => setSelectedMachineId(e.target.value)}
           >
-            <option value="">Seleccionar equipo...</option>
+            <option value="">{t.debug?.selectMachinePlaceholder || 'Seleccionar equipo...'}</option>
             {machines.map(m => (
               <option key={m.id || m.maquina_id} value={m.id || m.maquina_id}>{m.name || m.nombre}</option>
             ))}
@@ -293,17 +296,17 @@ export default function DebugChat() {
 
         {selectedMachine && (
           <div className="panel-section debug-history">
-            <span className="panel-label debug-history-label">Historial de OTs ({machineHistory.length})</span>
-            <p className="debug-sidebar-hint">✓ Se envía automáticamente a la IA en cada mensaje, no hace falta seleccionarlo.</p>
+            <span className="panel-label debug-history-label">{t.debug?.otHistory ? t.debug.otHistory(machineHistory.length) : `Historial de OTs (${machineHistory.length})`}</span>
+            <p className="debug-sidebar-hint">{t.debug?.otHistoryHint || '✓ Se envía automáticamente a la IA en cada mensaje, no hace falta seleccionarlo.'}</p>
 
             <div className="debug-history-list">
               {machineHistory.length === 0 ? (
-                <div className="debug-history-empty">Este equipo no tiene historial de fallas reportadas.</div>
+                <div className="debug-history-empty">{t.debug?.noOtHistory || 'Este equipo no tiene historial de fallas reportadas.'}</div>
               ) : (
                 machineHistory.map((ot, i) => (
                   <div key={i} className="debug-history-card">
                     <div className="debug-history-card-title">{ot.title || ot.numero_ot}</div>
-                    <div className="debug-history-card-desc">{ot.description || ot.descripcion_problema || 'Sin descripción.'}</div>
+                    <div className="debug-history-card-desc">{ot.description || ot.descripcion_problema || (t.common?.noDescription || 'Sin descripción.')}</div>
                     <div className="debug-history-card-meta">
                       <span className="capitalize">{ot.status || ot.estado}</span>
                       <span>{ot.createdAt ? ot.createdAt.slice(0, 10) : ''}</span>
@@ -322,7 +325,7 @@ export default function DebugChat() {
             type="button"
             className="icon-btn debug-sidebar-toggle"
             onClick={() => setIsSidebarOpen(true)}
-            title="Seleccionar Equipo"
+            title={t.debug?.selectEquipmentTitle || 'Seleccionar Equipo'}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="3" y1="12" x2="21" y2="12"></line>
@@ -332,8 +335,8 @@ export default function DebugChat() {
           </button>
 
           <div>
-            <h2 className="topbar-title">Debug & Análisis Predictivo</h2>
-            <p className="debug-topbar-sub">Analiza causas raíz y solicita sugerencias de mantenimiento.</p>
+            <h2 className="topbar-title">{t.debug?.headerTitle || 'Debug & Análisis Predictivo'}</h2>
+            <p className="debug-topbar-sub">{t.debug?.headerSub || 'Analiza causas raíz y solicita sugerencias de mantenimiento.'}</p>
           </div>
 
           <div className="debug-finalize-group">
@@ -342,12 +345,12 @@ export default function DebugChat() {
               value={severity}
               onChange={e => setSeverity(e.target.value)}
               disabled={finalizing || diagnosisClosed}
-              title="Severidad del reporte"
+              title={t.debug?.severityTitle || 'Severidad del reporte'}
             >
-              <option value="low">Baja</option>
-              <option value="medium">Media</option>
-              <option value="high">Alta</option>
-              <option value="critical">Crítica</option>
+              <option value="low">{t.common?.low || 'Baja'}</option>
+              <option value="medium">{t.common?.medium || 'Media'}</option>
+              <option value="high">{t.common?.high || 'Alta'}</option>
+              <option value="critical">{t.common?.critical || 'Crítica'}</option>
             </select>
 
             <button
@@ -355,9 +358,9 @@ export default function DebugChat() {
               onClick={finalizeDiagnosis}
               disabled={finalizing || diagnosisClosed || messages.length === 0}
               className="btn btn-outline debug-finalize-btn"
-              title="Compila el resumen de la conversación y solicita el reporte"
+              title={t.debug?.finalizeTitle || 'Compila el resumen de la conversación y solicita el reporte'}
             >
-              {diagnosisClosed ? '✅ Diagnóstico Finalizado' : finalizing ? 'Generando reporte…' : '🏁 Finalizar Diagnóstico'}
+              {diagnosisClosed ? (t.debug?.finalizeDone || '✅ Diagnóstico Finalizado') : finalizing ? (t.debug?.finalizingText || 'Generando reporte…') : (t.debug?.finalizeButton || '🏁 Finalizar Diagnóstico')}
             </button>
           </div>
         </div>
@@ -365,7 +368,7 @@ export default function DebugChat() {
         <div className="chat-messages" ref={areaRef}>
           {messages.length === 0 ? (
             <div className="debug-empty-state">
-              Escribe una pregunta directa, o selecciona un equipo en el panel lateral para que la IA use su historial de fallas automáticamente.
+              {t.debug?.emptyState || 'Escribe una pregunta directa, o selecciona un equipo en el panel lateral para que la IA use su historial de fallas automáticamente.'}
             </div>
           ) : (
             messages.map((msg, idx) => (
@@ -401,7 +404,7 @@ export default function DebugChat() {
                     type="button"
                     className="dc-pending-image-remove"
                     onClick={() => removeAttachment(i)}
-                    title="Quitar imagen"
+                    title={t.debug?.removeImage || 'Quitar imagen'}
                   >
                     ✕
                   </button>
@@ -425,7 +428,7 @@ export default function DebugChat() {
               onClick={() => fileInputRef.current?.click()}
               disabled={loading || diagnosisClosed}
               className="icon-btn"
-              title="Adjuntar imágenes"
+              title={t.debug?.attachImages || 'Adjuntar imágenes'}
             >
               📎
             </button>
@@ -434,7 +437,7 @@ export default function DebugChat() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-              placeholder={diagnosisClosed ? 'El diagnóstico fue finalizado.' : 'Escribe tu consulta analítica...'}
+              placeholder={diagnosisClosed ? (t.debug?.inputPlaceholderClosed || 'El diagnóstico fue finalizado.') : (t.debug?.inputPlaceholderOpen || 'Escribe tu consulta analítica...')}
               className="debug-input"
               rows={2}
               disabled={diagnosisClosed}
@@ -444,7 +447,7 @@ export default function DebugChat() {
               disabled={loading || diagnosisClosed || (!input.trim() && attachments.length === 0)}
               className="btn btn-primary debug-send-btn"
             >
-              Enviar
+              {t.common?.send || 'Enviar'}
             </button>
           </div>
         </div>

@@ -742,7 +742,7 @@ export default function DocChat() {
       pushDocMessage({
         role: 'assistant',
         content: isServiceUnavailable
-          ? (t.docChat?.serviceUnavailable ??
+          ? (t.docchat?.serviceUnavailable ??
              'El servicio de IA no está disponible temporalmente. Inténtalo de nuevo en unos minutos.')
           : `No se pudo conectar con el servidor: ${msg || 'Error desconocido'}`,
         timestamp: Date.now(),
@@ -945,7 +945,7 @@ export default function DocChat() {
                 clearDocMessages()
               }}
             >
-              <option value="">{t.docChat?.selectDiscipline ?? 'Seleccionar disciplina...'}</option>
+              <option value="">{t.docchat?.selectDiscipline ?? 'Seleccionar disciplina...'}</option>
               {disciplines.map((disciplineRecord, index) => {
                 const name = normalizeCatalogName(disciplineRecord)
                 const id = disciplineRecord.id ?? disciplineRecord.disciplina_id ?? index
@@ -973,7 +973,7 @@ export default function DocChat() {
                 clearDocMessages()
               }}
             >
-              <option value="">{t.docChat?.selectMachine ?? 'Seleccionar máquina...'}</option>
+              <option value="">{t.docchat?.selectMachine ?? 'Seleccionar máquina...'}</option>
               {availableMachines.map(machine => (
                 <option key={String(machine.id)} value={String(machine.id)}>
                   {normalizeMachineLabel(machine) || String(machine.id)}
@@ -1016,7 +1016,7 @@ export default function DocChat() {
                       <polyline points="17 21 17 13 7 13 7 21"/>
                       <polyline points="7 3 7 8 15 8"/>
                     </svg>
-                    {t.docChat?.saveSession ?? 'Guardar Sesión'}
+                    {t.docchat?.saveSession ?? 'Guardar Sesión'}
                   </>
                 )}
               </button>
@@ -1047,7 +1047,7 @@ export default function DocChat() {
               {[
                 activeManual.pages ? `${activeManual.pages} ${t.common?.page ?? 'p'}` : '',
                 activeManual.chunks.length
-                  ? `${activeManual.chunks.length} ${t.docChat?.fragments ?? 'fragmentos'}`
+                  ? `${activeManual.chunks.length} ${t.docchat?.fragments ?? 'fragmentos'}`
                   : '',
               ]
                 .filter(Boolean)
@@ -1067,7 +1067,7 @@ export default function DocChat() {
         <div className="context-tags">
           {!discipline ? (
             <span className="ctx-empty">
-              {t.docChat?.emptyContext ?? 'Selecciona una disciplina para comenzar.'}
+              {t.docchat?.emptyContext ?? 'Selecciona una disciplina para comenzar.'}
             </span>
           ) : (
             <>
@@ -1111,7 +1111,7 @@ export default function DocChat() {
                   <polyline points="17 21 17 13 7 13 7 21"/>
                   <polyline points="7 3 7 8 15 8"/>
                 </svg>
-                {t.docChat?.saveSession ?? 'Guardar sesión'}
+                {t.docchat?.saveSession ?? 'Guardar sesión'}
               </h3>
               <p className="dc-save-modal-meta">
                 {docMessages.length} mensajes · {discipline ?? '—'} ·{' '}
@@ -1119,7 +1119,7 @@ export default function DocChat() {
               </p>
 
               <label htmlFor="session-title-input" className="dc-save-modal-label">
-                {t.docChat?.sessionTitle ?? 'Título de la sesión'}
+                {t.docchat?.sessionTitle ?? 'Título de la sesión'}
               </label>
               <input
                 id="session-title-input"
@@ -1149,7 +1149,7 @@ export default function DocChat() {
                   onClick={() => void saveSession(sessionTitle)}
                   className="btn btn-primary"
                 >
-                  {t.docChat?.saveSession ?? 'Guardar'}
+                  {t.docchat?.saveSession ?? 'Guardar'}
                 </button>
               </div>
             </div>
@@ -1199,17 +1199,17 @@ export default function DocChat() {
             }}
           >
             <label htmlFor="doc-input" className="sr-only">
-              {t.docChat?.inputPlaceholder ?? 'Escribe tu pregunta'}
+              {t.docchat?.inputPlaceholder ?? 'Escribe tu pregunta'}
             </label>
 
             <textarea
               id="doc-input"
               rows={1}
               value={input}
-              title={t.docChat?.inputPlaceholder ?? 'Escribe tu pregunta'}
-              aria-label={t.docChat?.inputPlaceholder ?? 'Escribe tu pregunta'}
+              title={t.docchat?.inputPlaceholder ?? 'Escribe tu pregunta'}
+              aria-label={t.docchat?.inputPlaceholder ?? 'Escribe tu pregunta'}
               placeholder={
-                t.docChat?.inputPlaceholder ??
+                t.docchat?.inputPlaceholder ??
                 'Pregunta por procedimientos, especificaciones o mantenimiento...'
               }
               disabled={!discipline || loading}
@@ -1252,7 +1252,7 @@ export default function DocChat() {
           </div>
 
           <div className="input-hint">
-            {t.docChat?.inputHint ?? 'Enter para enviar · Shift+Enter nueva línea · '}
+            {t.docchat?.inputHint ?? 'Enter para enviar · Shift+Enter nueva línea · '}
             {activeManual
               ? activeManual.name.slice(0, 30)
               : 'Powered by API externa'}
@@ -1263,8 +1263,8 @@ export default function DocChat() {
             type="file"
             accept=".pdf,.txt,.md"
             className="hidden"
-            title={t.docChat?.uploadManual ?? 'Cargar manual'}
-            aria-label={t.docChat?.uploadManual ?? 'Cargar manual'}
+            title={t.docchat?.uploadManual ?? 'Cargar manual'}
+            aria-label={t.docchat?.uploadManual ?? 'Cargar manual'}
             onChange={event => {
               void handleFiles(event.target.files)
               event.currentTarget.value = ''
