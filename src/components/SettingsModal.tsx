@@ -150,7 +150,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
             <div className="settings-block">
               <div className="settings-row">
                 <div className="sr-label">{t.settings?.appVersion || 'Versión'}</div>
-                <div className="settings-version">3.1.0 (Producción)</div>
+                <div className="settings-version">3.1.0 ({t.settings?.productionLabel || 'Producción'})</div>
               </div>
 
               <div className="settings-row">
@@ -176,7 +176,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
                   onClick={testConnections}
                   disabled={isTesting}
                 >
-                  {isTesting ? 'Ping...' : (t.settings?.testConnections || 'Test')}
+                  {isTesting ? (t.settings?.testingShort || 'Ping...') : (t.settings?.testConnections || 'Test')}
                 </button>
               </div>
             </div>

@@ -74,10 +74,10 @@ const TicketTable: React.FC<TicketTableProps> = ({ tickets, onSelect }) => {
               >
                 <td className="ot-table-id">{ticket.id || 'N/A'}</td>
                 <td className="ot-table-title-cell">
-                  <div className="ot-table-title">{ticket.title || 'Sin Título'}</div>
+                  <div className="ot-table-title">{ticket.title || (t.common?.untitled || 'Sin Título')}</div>
                   <div className="ot-table-subtitle">{machineLabel}</div>
                 </td>
-                <td>{ticket.createdBy || 'Operador'}</td>
+                <td>{ticket.createdBy || (t.common?.operator || 'Operador')}</td>
                 <td>
                   <span className={`ot-dur ${durationVariant}`}>{safeDuration}m</span>
                 </td>

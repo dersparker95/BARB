@@ -179,17 +179,17 @@ export default function FinancialDashboard({ timeRange }) {
           <div className="fin-chart-card">
             <div className="fin-chart-header">
               <div>
-                <h3 className="fin-chart-title">Top Equipos</h3>
-                <p className="fin-chart-subtitle">Rendimiento por métrica</p>
+                <h3 className="fin-chart-title">{t.financial?.topMachinesTitle || 'Top Equipos'}</h3>
+                <p className="fin-chart-subtitle">{t.financial?.topMachinesSubtitle || 'Rendimiento por métrica'}</p>
               </div>
               <select
                 value={machineView}
                 onChange={e => setMachineView(e.target.value)}
                 className="filter-select"
               >
-                <option value="ots">Volumen OTs</option>
-                <option value="mttr">MTTR (Minutos)</option>
-                <option value="ahorro">Ahorro Generado</option>
+                <option value="ots">{t.financial?.viewOts || 'Volumen OTs'}</option>
+                <option value="mttr">{t.financial?.viewMttr || 'MTTR (Minutos)'}</option>
+                <option value="ahorro">{t.financial?.viewAhorro || 'Ahorro Generado'}</option>
               </select>
             </div>
 

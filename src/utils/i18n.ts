@@ -78,6 +78,12 @@ export type TranslationTree = {
     prev: string
     technician: string
     duration: string
+    action: string
+    view: string
+    urgent: string
+    understood: string
+    errorLoadingCatalogs: string
+    fillDetails: string
   }
   statuses: {
     pending: string
@@ -123,6 +129,11 @@ export type TranslationTree = {
     performanceTitle: string
     measured: string
     estimated: string
+    topMachinesTitle: string
+    topMachinesSubtitle: string
+    viewOts: string
+    viewMttr: string
+    viewAhorro: string
   }
   dashboard: {
     title: string
@@ -181,6 +192,7 @@ export type TranslationTree = {
     maintenance: string
     logout: string
     settings: string
+    helpGuide: string
   }
   topology: {
     title: string
@@ -241,6 +253,8 @@ export type TranslationTree = {
     username: string
     role: string
     guest: string
+    testingShort: string
+    productionLabel: string
   }
   login: {
     title: string
@@ -342,6 +356,29 @@ export type TranslationTree = {
     plantLabel: string
     loadError: string
   }
+  ticketDetail: {
+    confirmDelete: (id: string) => string
+    deletedSuccess: string
+    deleteError: string
+    exportPdf: string
+    advanceStatus: string
+    advancedToast: string
+    deleteWorkOrder: string
+    pdfDocTitle: (id: string) => string
+    pdfMachine: string
+    pdfTechnician: string
+    pdfPriority: string
+    pdfStatus: string
+    pdfDate: string
+    pdfDescription: string
+    pdfFooter: string
+  }
+  chatBubble: {
+    thanksFeedback: string
+    registeredFeedback: string
+    goodResponse: string
+    badResponse: string
+  }
 }
 
 // =============================================================================
@@ -367,7 +404,10 @@ const translations: Record<AppLang, TranslationTree> = {
       backToMenu: 'Volver al menú', goToLogin: 'Ir al Login', success: 'Éxito', error: 'Error',
       severity: 'Severidad', low: 'Baja', medium: 'Media', high: 'Alta', critical: 'Crítica', minutes: 'minutos',
       operator: 'Operador', untitled: 'Sin título', noDescription: 'Sin descripción', plant: 'Planta',
-      discipline: 'Disciplina', next: 'Siguiente', prev: 'Anterior', technician: 'Técnico', duration: 'Duración'
+      discipline: 'Disciplina', next: 'Siguiente', prev: 'Anterior', technician: 'Técnico', duration: 'Duración',
+      action: 'Acciones', view: 'Ver', urgent: 'Urgente', understood: 'Entendido',
+      errorLoadingCatalogs: 'No se pudieron cargar los catálogos. Verifica la conexión.',
+      fillDetails: 'Ingresa los detalles para generar y asignar la orden.'
     },
     statuses: {
       pending: 'Pendiente', assigned: 'Asignada', in_progress: 'En Progreso', completed: 'Completada',
@@ -382,7 +422,9 @@ const translations: Record<AppLang, TranslationTree> = {
       efficiency: 'Eficiencia Resolución', efficiencySub: 'OTs completadas dentro del SLA (24h)', directCost: 'Costo Directo',
       directCostSub: 'Repuestos y servicios facturados', mtbf: 'MTBF Global', mtbfSub: 'Tiempo Medio Entre Fallas (Horas)',
       mtbfNeedData: 'Requiere historial min. 2 fallas', healthTitle: 'Salud Operacional: Backlog', healthSub: 'Tendencia diaria de OTs Abiertas vs Cerradas (14 d).',
-      performanceTitle: 'Rendimiento por Máquina', measured: 'Medido', estimated: 'Estimado'
+      performanceTitle: 'Rendimiento por Máquina', measured: 'Medido', estimated: 'Estimado',
+      topMachinesTitle: 'Top Equipos', topMachinesSubtitle: 'Rendimiento por métrica',
+      viewOts: 'Volumen OTs', viewMttr: 'MTTR (Minutos)', viewAhorro: 'Ahorro Generado'
     },
     dashboard: {
       title: 'Órdenes de Trabajo', totalWorkOrders: 'Total OTs', activeWorkOrders: 'OTs activas', completedWorkOrders: 'Completadas',
@@ -404,7 +446,8 @@ const translations: Record<AppLang, TranslationTree> = {
     topbar: {
       admin: 'ADMIN', apiOnline: 'API', documentChat: 'Chat de documentos', machineDebug: 'Diagnóstico de máquina',
       plantTopology: 'Topología de planta', machineMemory: 'Memoria de máquina', debugReport: 'Reporte de sesión',
-      mainMenu: 'Menú principal', maintenance: 'Mantenimiento de planta', logout: 'Salir', settings: 'Configuración'
+      mainMenu: 'Menú principal', maintenance: 'Mantenimiento de planta', logout: 'Salir', settings: 'Configuración',
+      helpGuide: 'Guía de esta pantalla'
     },
     topology: {
       title: 'Topología de planta', zoomIn: 'Acercar', zoomOut: 'Alejar', resetView: 'Reiniciar vista',
@@ -432,7 +475,7 @@ const translations: Record<AppLang, TranslationTree> = {
       lmStudioEndpoint: 'Endpoint LM Studio', testConnections: 'Probar conexiones', testingConnections: 'Probando conexión a FastAPI y LM Studio…',
       apiOkLmOffline: '✅ FastAPI · ❌ LM Studio (No detectado)', apiOkLmOk: '✅ FastAPI · ✅ LM Studio',
       saveChanges: 'Guardar cambios', savedLocally: 'Configuración guardada localmente', languageUpdated: 'Idioma actualizado',
-      username: 'Usuario', role: 'Rol', guest: 'Invitado'
+      username: 'Usuario', role: 'Rol', guest: 'Invitado', testingShort: 'Probando...', productionLabel: 'Producción'
     },
     login: {
       title: 'BARB', subtitle: 'Sistema de mantenimiento de planta', usernamePlaceholder: 'Usuario', passwordPlaceholder: 'Contraseña',
@@ -479,6 +522,18 @@ const translations: Record<AppLang, TranslationTree> = {
       colTitle: 'Título / Problema', colTechnician: 'Técnico', colEquipment: 'Equipo', generalLabel: 'General',
       plantLabel: 'Planta', loadError: 'No se pudo cargar el historial de sesiones.'
     },
+    ticketDetail: {
+      confirmDelete: (id: string) => `¿Eliminar la OT ${id}?`, deletedSuccess: '🗑️ OT eliminada correctamente',
+      deleteError: '❌ No se pudo eliminar la OT', exportPdf: 'Exportar PDF', advanceStatus: 'Avanzar estado →',
+      advancedToast: 'OT Avanzada →', deleteWorkOrder: 'Eliminar OT',
+      pdfDocTitle: (id: string) => `Orden de Trabajo: ${id}`, pdfMachine: 'Máquina:', pdfTechnician: 'Técnico:',
+      pdfPriority: 'Prioridad:', pdfStatus: 'Estado:', pdfDate: 'Fecha:', pdfDescription: 'Descripción:',
+      pdfFooter: 'Reporte generado automáticamente por plataforma BARB.'
+    },
+    chatBubble: {
+      thanksFeedback: '¡Gracias por el feedback!', registeredFeedback: 'Registrado para mejorar.',
+      goodResponse: 'Buena respuesta', badResponse: 'Mala respuesta'
+    },
   },
   en: {
     common: {
@@ -491,7 +546,10 @@ const translations: Record<AppLang, TranslationTree> = {
       forbiddenMessage: 'You do not have permission to access this page.', backToMenu: 'Back to menu', goToLogin: 'Go to Login',
       success: 'Success', error: 'Error', severity: 'Severity', low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
       minutes: 'minutes', operator: 'Operator', untitled: 'Untitled', noDescription: 'No description', plant: 'Plant', discipline: 'Discipline',
-      next: 'Next', prev: 'Prev', technician: 'Technician', duration: 'Duration'
+      next: 'Next', prev: 'Prev', technician: 'Technician', duration: 'Duration',
+      action: 'Actions', view: 'View', urgent: 'Urgent', understood: 'Got it',
+      errorLoadingCatalogs: 'Could not load the catalogs. Check your connection.',
+      fillDetails: 'Enter the details to generate and assign the order.'
     },
     statuses: {
       pending: 'Pending', assigned: 'Assigned', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled', overdue: 'Overdue',
@@ -505,7 +563,9 @@ const translations: Record<AppLang, TranslationTree> = {
       efficiency: 'Resolution Efficiency', efficiencySub: 'Work orders completed within SLA (24h)', directCost: 'Direct Cost',
       directCostSub: 'Billed parts and services', mtbf: 'Global MTBF', mtbfSub: 'Mean Time Between Failures (Hours)',
       mtbfNeedData: 'Requires min. 2 failures history', healthTitle: 'Operational Health: Backlog', healthSub: 'Daily trend of Open vs Closed WOs (14 d).',
-      performanceTitle: 'Machine Performance', measured: 'Measured', estimated: 'Estimated'
+      performanceTitle: 'Machine Performance', measured: 'Measured', estimated: 'Estimated',
+      topMachinesTitle: 'Top Machines', topMachinesSubtitle: 'Performance by metric',
+      viewOts: 'WO Volume', viewMttr: 'MTTR (Minutes)', viewAhorro: 'Savings Generated'
     },
     dashboard: {
       title: 'Work Orders', totalWorkOrders: 'Total WOs', activeWorkOrders: 'Active WOs', completedWorkOrders: 'Completed', mttr: 'MTTR (min)',
@@ -524,7 +584,8 @@ const translations: Record<AppLang, TranslationTree> = {
     },
     topbar: {
       admin: 'ADMIN', apiOnline: 'API', documentChat: 'Document Chat', machineDebug: 'Machine Debug', plantTopology: 'Plant Topology',
-      machineMemory: 'Machine Memory', debugReport: 'Session Report', mainMenu: 'Main Menu', maintenance: 'Plant Maintenance', logout: 'Log out', settings: 'Settings'
+      machineMemory: 'Machine Memory', debugReport: 'Session Report', mainMenu: 'Main Menu', maintenance: 'Plant Maintenance', logout: 'Log out', settings: 'Settings',
+      helpGuide: 'Guide for this screen'
     },
     topology: {
       title: 'Plant topology', zoomIn: 'Zoom in', zoomOut: 'Zoom out', resetView: 'Reset view', goToDebug: 'Go to Debug', history: 'History',
@@ -545,7 +606,8 @@ const translations: Record<AppLang, TranslationTree> = {
       title: 'Settings', appearanceLanguage: 'Appearance & language', darkTheme: 'Dark theme', account: 'Account', systemConnections: 'System & connections',
       appVersion: 'App version', fastApiEndpoint: 'FastAPI endpoint', lmStudioEndpoint: 'LM Studio endpoint', testConnections: 'Test connections',
       testingConnections: 'Testing FastAPI and LM Studio connection…', apiOkLmOffline: '✅ FastAPI · ❌ LM Studio (Not detected)', apiOkLmOk: '✅ FastAPI · ✅ LM Studio',
-      saveChanges: 'Save changes', savedLocally: 'Configuration saved locally', languageUpdated: 'Language updated', username: 'Username', role: 'Role', guest: 'Guest'
+      saveChanges: 'Save changes', savedLocally: 'Configuration saved locally', languageUpdated: 'Language updated', username: 'Username', role: 'Role', guest: 'Guest',
+      testingShort: 'Testing...', productionLabel: 'Production'
     },
     login: {
       title: 'BARB', subtitle: 'Plant maintenance system', usernamePlaceholder: 'Username', passwordPlaceholder: 'Password', loginButton: 'Login',
@@ -588,6 +650,18 @@ const translations: Record<AppLang, TranslationTree> = {
       loadingMemory: 'Loading BARB memory...', noSessions: 'No sessions saved yet.', colDate: 'Date',
       colTitle: 'Title / Issue', colTechnician: 'Technician', colEquipment: 'Equipment', generalLabel: 'General',
       plantLabel: 'Plant', loadError: 'Could not load session history.'
+    },
+    ticketDetail: {
+      confirmDelete: (id: string) => `Delete work order ${id}?`, deletedSuccess: '🗑️ Work order deleted successfully',
+      deleteError: '❌ Could not delete the work order', exportPdf: 'Export PDF', advanceStatus: 'Advance Status →',
+      advancedToast: 'Work Order Advanced →', deleteWorkOrder: 'Delete OT',
+      pdfDocTitle: (id: string) => `Work Order: ${id}`, pdfMachine: 'Machine:', pdfTechnician: 'Technician:',
+      pdfPriority: 'Priority:', pdfStatus: 'Status:', pdfDate: 'Date:', pdfDescription: 'Description:',
+      pdfFooter: 'Report automatically generated by the BARB platform.'
+    },
+    chatBubble: {
+      thanksFeedback: 'Thanks for the feedback!', registeredFeedback: 'Registered for improvement.',
+      goodResponse: 'Good response', badResponse: 'Bad response'
     },
   },
 }

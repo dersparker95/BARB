@@ -4,8 +4,10 @@
 // IMPORTS
 // =============================================================================
 
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Message, SourceHit } from '../types'
+import { useAppContext } from '../context/AppContext'
+import { getTranslations } from '../utils/i18n'
 
 // =============================================================================
 // COMPONENTE: INDICADOR DE ESCRITURA
@@ -83,6 +85,8 @@ const ChatBubble: React.FC<{
   onFeedback?: (msg: Message, rating: 'good' | 'bad') => void;
 }> = ({ msg, side = 'bot', sources, elapsed, fromAPI, onFeedback }) => {
   const isUser = side === 'user'
+  const { lang } = useAppContext()
+  const t = useMemo(() => getTranslations(lang), [lang])
 
   // Prioriza las fuentes embebidas por el backend RAG sobre las recibidas por prop.
   const finalSources = msg.sources || sources || []
@@ -117,21 +121,21 @@ const ChatBubble: React.FC<{
           {/* Los botones de feedback solo aplican a respuestas de BARB, no a mensajes del usuario. */}
           {!isUser && (
             <div className="feedback-actions">
-              {feedback === 'good' && <span className="feedback-msg feedback-msg--good">¡Gracias por el feedback!</span>}
-              {feedback === 'bad' && <span className="feedback-msg feedback-msg--bad">Registrado para mejorar.</span>}
+              {feedback === 'good' && <span className="feedback-msg feedback-msg--good">{t.chatBubble?.thanksFeedback || '¡Gracias por el feedback!'}</span>}
+              {feedback === 'bad' && <span className="feedback-msg feedback-msg--bad">{t.chatBubble?.registeredFeedback || 'Registrado para mejorar.'}</span>}
 
               {!feedback && (
                 <>
                   <button
                     onClick={() => handleFeedback('good')}
-                    title="Buena respuesta"
+                    title={t.chatBubble?.goodResponse || 'Buena respuesta'}
                     className="feedback-btn"
                   >
                     👍
                   </button>
                   <button
                     onClick={() => handleFeedback('bad')}
-                    title="Mala respuesta"
+                    title={t.chatBubble?.badResponse || 'Mala respuesta'}
                     className="feedback-btn"
                   >
                     👎

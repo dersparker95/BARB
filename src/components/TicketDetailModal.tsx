@@ -71,18 +71,18 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
     // por eso usa valores fijos en vez de var() — es la única excepción permitida.
     const html = `
       <div style="font-family: Arial, sans-serif; padding: 40px; color: #333;">
-        <h1 style="border-bottom: 2px solid #2563eb; padding-bottom: 10px;">Orden de Trabajo: ${ticket.id}</h1>
-        <h2>${ticket.title || 'Sin Título'}</h2>
+        <h1 style="border-bottom: 2px solid #2563eb; padding-bottom: 10px;">${t.ticketDetail?.pdfDocTitle ? t.ticketDetail.pdfDocTitle(ticket.id) : `Orden de Trabajo: ${ticket.id}`}</h1>
+        <h2>${ticket.title || (t.common?.untitled || 'Sin Título')}</h2>
         <table style="width: 100%; text-align: left; margin-top: 20px; border-collapse: collapse;">
-          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Máquina:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${ticket.machineName || ticket.machineId || 'N/A'}</td></tr>
-          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Técnico:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${ticket.createdBy || 'Operador'}</td></tr>
-          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Prioridad:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${(ticket.priority || '').toUpperCase()}</td></tr>
-          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Estado:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${(t.statuses?.[currentStatus] || WO_STATUS_LABEL?.[currentStatus] || currentStatus).toUpperCase()}</td></tr>
-          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Fecha:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${new Date(ticket.createdAt || Date.now()).toLocaleString()}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>${t.ticketDetail?.pdfMachine || 'Máquina:'}</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${ticket.machineName || ticket.machineId || 'N/A'}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>${t.ticketDetail?.pdfTechnician || 'Técnico:'}</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${ticket.createdBy || (t.common?.operator || 'Operador')}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>${t.ticketDetail?.pdfPriority || 'Prioridad:'}</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${(ticket.priority || '').toUpperCase()}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>${t.ticketDetail?.pdfStatus || 'Estado:'}</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${(t.statuses?.[currentStatus] || WO_STATUS_LABEL?.[currentStatus] || currentStatus).toUpperCase()}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>${t.ticketDetail?.pdfDate || 'Fecha:'}</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${new Date(ticket.createdAt || Date.now()).toLocaleString(lang === 'en' ? 'en-US' : 'es-CL')}</td></tr>
         </table>
-        <h3 style="margin-top: 30px;">Descripción:</h3>
-        <p style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">${ticket.description || 'Sin descripción'}</p>
-        <div style="margin-top: 50px; font-size: 12px; color: #64748b;">Reporte generado automáticamente por plataforma BARB.</div>
+        <h3 style="margin-top: 30px;">${t.ticketDetail?.pdfDescription || 'Descripción:'}</h3>
+        <p style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">${ticket.description || (t.common?.noDescription || 'Sin descripción')}</p>
+        <div style="margin-top: 50px; font-size: 12px; color: #64748b;">${t.ticketDetail?.pdfFooter || 'Reporte generado automáticamente por plataforma BARB.'}</div>
       </div>
     `
     w.document.write(html)
@@ -97,16 +97,16 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
   const closeTicket = () => onUpdateStatus(ticket.id, 'completed')
 
   const handleDelete = async () => {
-    const confirmed = window.confirm(`¿Eliminar la OT ${ticket.id}?`)
+    const confirmed = window.confirm(t.ticketDetail?.confirmDelete ? t.ticketDetail.confirmDelete(ticket.id) : `¿Eliminar la OT ${ticket.id}?`)
     if (!confirmed) return
 
     try {
       await onDelete(ticket.id)
       onClose()
-      showToast('🗑️ OT eliminada correctamente')
+      showToast(t.ticketDetail?.deletedSuccess || '🗑️ OT eliminada correctamente')
     } catch (error) {
       console.error('Error deleting work order from modal', error)
-      showToast('❌ No se pudo eliminar la OT')
+      showToast(t.ticketDetail?.deleteError || '❌ No se pudo eliminar la OT')
     }
   }
 
@@ -125,7 +125,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
         <div className="modal-header">
           <div>
             <div className="ot-detail-num">{ticket.id}</div>
-            <h2 className="ot-detail-modal-title">{ticket.title || 'Sin Título'}</h2>
+            <h2 className="ot-detail-modal-title">{ticket.title || (t.common?.untitled || 'Sin Título')}</h2>
           </div>
           <button className="modal-close" onClick={onClose} aria-label={t.common?.close || 'Cerrar'}>✕</button>
         </div>
@@ -158,7 +158,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
             </div>
             <div className="ot-detail-field">
               <div className="ot-detail-label">{t.common?.technician || 'Técnico'}</div>
-              <div className="ot-detail-val">{ticket.createdBy || 'Operador'}</div>
+              <div className="ot-detail-val">{ticket.createdBy || (t.common?.operator || 'Operador')}</div>
             </div>
             <div className="ot-detail-field">
               <div className="ot-detail-label">{t.common?.status || 'Estado'}</div>
@@ -177,7 +177,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
           </div>
 
           <div className="ot-detail-description">
-            <strong>{t.common?.description || 'Descripción'}:</strong> {ticket.description || 'Sin detalles adicionales.'}
+            <strong>{t.common?.description || 'Descripción'}:</strong> {ticket.description || (t.common?.noDescription || 'Sin detalles adicionales.')}
           </div>
 
           <div className="ot-detail-actions">
@@ -185,20 +185,20 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
               {t.common?.close || 'Cerrar'}
             </button>
             <button className="btn btn-sm btn-blue" onClick={exportPdf}>
-              📄 {lang === 'en' ? 'Export PDF' : 'Exportar PDF'}
+              📄 {t.ticketDetail?.exportPdf || (lang === 'en' ? 'Export PDF' : 'Exportar PDF')}
             </button>
             <button
               className="btn btn-sm btn-outline"
               disabled={currentIndex === statusOrder.length - 1}
-              onClick={() => { advance(); showToast(`OT Avanzada →`); }}
+              onClick={() => { advance(); showToast(t.ticketDetail?.advancedToast || 'OT Avanzada →'); }}
             >
-              {lang === 'en' ? 'Advance Status →' : 'Avanzar estado →'}
+              {t.ticketDetail?.advanceStatus || (lang === 'en' ? 'Advance Status →' : 'Avanzar estado →')}
             </button>
             <button
               className="btn btn-sm btn-outline btn-danger ml-auto"
               onClick={() => { void handleDelete() }}
             >
-              {lang === 'en' ? 'Delete OT' : 'Eliminar OT'}
+              {t.ticketDetail?.deleteWorkOrder || (lang === 'en' ? 'Delete OT' : 'Eliminar OT')}
             </button>
           </div>
         </div>

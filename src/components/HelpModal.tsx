@@ -2,7 +2,9 @@
 // IMPORTS
 // =============================================================================
 
-import React from 'react'
+import React, { useMemo } from 'react'
+import { useAppContext } from '../context/AppContext'
+import { getTranslations } from '../utils/i18n'
 
 // =============================================================================
 // TIPOS
@@ -20,6 +22,9 @@ interface HelpModalProps {
 // =============================================================================
 
 const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, title, content }) => {
+  const { lang } = useAppContext()
+  const t = useMemo(() => getTranslations(lang), [lang])
+
   if (!isOpen) return null
 
   return (
@@ -35,7 +40,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, title, content }
           <button
             className="modal-close"
             onClick={onClose}
-            aria-label="Cerrar"
+            aria-label={t.common?.close || 'Cerrar'}
           >
             ✕
           </button>
@@ -54,7 +59,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, title, content }
             className="btn btn-primary"
             onClick={onClose}
           >
-            Entendido
+            {t.common?.understood || 'Entendido'}
           </button>
         </div>
       </div>
