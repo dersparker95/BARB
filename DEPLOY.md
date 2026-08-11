@@ -16,10 +16,10 @@ Pasos para desplegar la parte frontend (Vite + React) en Vercel:
 
 En Vercel añade estas variables (Project > Settings > Environment Variables):
 
-- `VITE_API_BASE` : URL pública del backend (ej. `https://api.example.com`) o `/api` si usarás rewrites.
-- `VITE_LM_BASE` : URL del servicio LLM (ej. `https://lm.example.com/v1`) o un endpoint público.
+- `VITE_API_URL` : URL pública del backend (ej. `https://api.example.com`) o vacío si usarás rewrites/proxy.
+- `VITE_LM_URL` : URL del servicio LLM (ej. `http://localhost:1234/v1`) para LM Studio local.
 
-La app lee `VITE_API_BASE` y `VITE_LM_BASE` en tiempo de build/runtime y usa `/api` y `/lm` como valores por defecto.
+La app lee `VITE_API_URL` y `VITE_LM_URL` en tiempo de build/runtime y usa `''` y `http://localhost:1234/v1` como valores por defecto.
 
 # Backend (opciones)
 

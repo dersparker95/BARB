@@ -770,3 +770,47 @@ INSERT INTO SYSTEM_AUDIT_LOG (empresa_id, usuario_id, usuario_nombre, usuario_ro
 (1, 7, 'Luisa Martínez',         'tecnico',  'view',            'DocChat',  'CHAT_SESSION',   '9',    'Consultó sesión guardada: lubricación chiller',     TRUE,  '192.168.1.24', '/api/chat-sessions/9'),
 (1, 4, 'Carlos Mendoza',         'tecnico',  'export',          'OT',       'ORDEN_TRABAJO',  NULL,   'Exportó listado de OTs a CSV',                      TRUE,  '192.168.1.21', '/api/work-orders/export'),
 (1, 3, 'Subgerente Operaciones', 'gerente',  'login',           'Auth',     NULL,             NULL,   'Intento de login fallido — contraseña incorrecta', FALSE, '192.168.1.11', '/api/auth/login');
+-- =====================================================================
+-- TABLAS ADICIONALES (antes creadas on-the-fly en main.py startup)
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS sesion (
+    token       VARCHAR(64) PRIMARY KEY,
+    usuario_id  INTEGER NOT NULL REFERENCES usuario(usuario_id) ON DELETE CASCADE,
+    creado_en   TIMESTAMP NOT NULL DEFAULT NOW(),
+    expira_en   TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS documento (
+    documento_id  SERIAL PRIMARY KEY,
+    title         VARCHAR(255) NOT NULL,
+    discipline_id INTEGER REFERENCES disciplina(disciplina_id) ON DELETE SET NULL,
+    maquina_id    INTEGER REFERENCES maquina(maquina_id) ON DELETE SET NULL,
+    notes         TEXT,
+    original_name VARCHAR(255) NOT NULL,
+    stored_name   VARCHAR(255) NOT NULL,
+    file_id       VARCHAR(64) NOT NULL,
+    chunks_indexed INTEGER NOT NULL DEFAULT 0,
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS chat_debug_attachment (
+    attachment_id SERIAL PRIMARY KEY,
+    session_id    VARCHAR(64),
+    maquina_id    INTEGER REFERENCES maquina(maquina_id) ON DELETE SET NULL,
+    original_name VARCHAR(255) NOT NULL,
+    stored_name   VARCHAR(255) NOT NULL,
+    content_type  VARCHAR(50) NOT NULL,
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS chat_feedback (
+    feedback_id SERIAL PRIMARY KEY,
+    message_content TEXT,
+    rating VARCHAR(10),
+    context VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Columna de preferencias en usuario (si no existe)
+ALTER TABLE usuario ADD COLUMN IF NOT EXISTS preferencias JSONB DEFAULT '{}'::jsonb;

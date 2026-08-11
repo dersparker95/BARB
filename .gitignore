@@ -62,3 +62,6 @@ coverage-final.json
 *.tgz
 *.zip
 *.tar.gz
+
+# Large binary files
+backend/docs/*.pdf
