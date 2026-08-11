@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 // =============================================================================
 // IMPORTS
@@ -224,12 +223,12 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
     setFormError('')
     try {
       await onCreate({ ...form, title: safeTrim(form.title), description: safeTrim(form.description) })
-      showToast(t.common?.success || 'Orden de Trabajo creada exitosamente', 'success')
+      showToast(t.common?.success || 'Orden de Trabajo creada exitosamente')
       localStorage.removeItem(STORAGE_KEY)
       onClose()
     } catch (error) {
       setFormError(t.common?.error || 'No se pudo crear la OT. Inténtalo otra vez.')
-      showToast('Error', 'error')
+      showToast('Error')
     } finally {
       setSubmitting(false)
     }

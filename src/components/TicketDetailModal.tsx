@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 // =============================================================================
 // IMPORTS
 // =============================================================================
@@ -59,7 +57,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
   const advance = () => {
     const next = Math.min(statusOrder.length - 1, currentIndex + 1)
     const nextStatus = statusOrder[next]
-    onUpdateStatus(ticket.id, nextStatus as WorkOrder['status'])
+    onUpdateStatus(String(ticket.id), nextStatus as WorkOrder['status'])
   }
 
   const exportPdf = () => {
@@ -71,7 +69,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
     // por eso usa valores fijos en vez de var() — es la única excepción permitida.
     const html = `
       <div style="font-family: Arial, sans-serif; padding: 40px; color: #333;">
-        <h1 style="border-bottom: 2px solid #2563eb; padding-bottom: 10px;">${t.ticketDetail?.pdfDocTitle ? t.ticketDetail.pdfDocTitle(ticket.id) : `Orden de Trabajo: ${ticket.id}`}</h1>
+        <h1 style="border-bottom: 2px solid #2563eb; padding-bottom: 10px;">${t.ticketDetail?.pdfDocTitle ? t.ticketDetail.pdfDocTitle(String(ticket.id)) : `Orden de Trabajo: ${ticket.id}`}</h1>
         <h2>${ticket.title || (t.common?.untitled || 'Sin Título')}</h2>
         <table style="width: 100%; text-align: left; margin-top: 20px; border-collapse: collapse;">
           <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>${t.ticketDetail?.pdfMachine || 'Máquina:'}</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${ticket.machineName || ticket.machineId || 'N/A'}</td></tr>
@@ -94,14 +92,14 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
     }, 200)
   }
 
-  const closeTicket = () => onUpdateStatus(ticket.id, 'completed')
+  const closeTicket = () => onUpdateStatus(String(ticket.id), 'completed')
 
   const handleDelete = async () => {
-    const confirmed = window.confirm(t.ticketDetail?.confirmDelete ? t.ticketDetail.confirmDelete(ticket.id) : `¿Eliminar la OT ${ticket.id}?`)
+    const confirmed = window.confirm(t.ticketDetail?.confirmDelete ? t.ticketDetail.confirmDelete(String(ticket.id)) : `¿Eliminar la OT ${ticket.id}?`)
     if (!confirmed) return
 
     try {
-      await onDelete(ticket.id)
+      await onDelete(String(ticket.id))
       onClose()
       showToast(t.ticketDetail?.deletedSuccess || '🗑️ OT eliminada correctamente')
     } catch (error) {
@@ -152,7 +150,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
 
           <div className="ot-detail-grid">
             <div className="ot-detail-field">
-              <div className="ot-detail-label">{t.dashboard?.machine || 'Máquina'}</div>
+              <div className="ot-detail-label">{t.common?.machine || 'Máquina'}</div>
               {/* Usa el nombre de la máquina si está disponible; de lo contrario, muestra el ID. */}
               <div className="ot-detail-val">{ticket.machineName || ticket.machineId || 'N/A'}</div>
             </div>
