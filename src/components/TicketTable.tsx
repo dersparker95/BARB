@@ -59,7 +59,7 @@ const TicketTable: React.FC<TicketTableProps> = ({ tickets, onSelect }) => {
             const label = t.statuses?.[statusKey] || statusKey
 
             const safeDuration = ticket.durationReal || 0
-            const machineLabel = ticket.machineName || `${t.dashboard?.machine || 'Máquina'} ${ticket.machineId || '?'}`
+            const machineLabel = ticket.machineName || `${t.common?.machine || 'Máquina'} ${ticket.machineId || '?'}`
 
             // El umbral de 24 (horas o minutos según la unidad de negocio) es el SLA
             // estándar usado para alertar visualmente cuando se excede.
