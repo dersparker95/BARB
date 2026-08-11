@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 // =============================================================================
 // IMPORTS
@@ -142,8 +141,7 @@ export default function DebugChat() {
     pushDebugMessage(HISTORY_KEY, {
       role: 'user',
       content: query,
-      images: pendingAttachments.map(a => a.preview)
-    })
+    } as any)
 
     try {
       // Paso 1: si hay imágenes, se suben primero por separado (multipart)
@@ -188,15 +186,15 @@ export default function DebugChat() {
     if (files.length === 0) return
 
     const newAttachments = files
-      .filter(f => f.type.startsWith('image/'))
-      .map(f => ({ file: f, preview: URL.createObjectURL(f) }))
+      .filter((f: File) => f.type.startsWith('image/'))
+      .map((f: File) => ({ file: f, preview: URL.createObjectURL(f) }))
 
     setAttachments(prev => [...prev, ...newAttachments])
     // Permite volver a seleccionar el mismo archivo si se remueve y reagrega.
     e.target.value = ''
   }
 
-  const removeAttachment = (index) => {
+  const removeAttachment = (index: number) => {
     setAttachments(prev => {
       const target = prev[index]
       if (target) URL.revokeObjectURL(target.preview)

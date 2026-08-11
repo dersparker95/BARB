@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 /* -----------------------------------------------------------------------------
  * Imports
@@ -65,6 +64,7 @@ interface PlantRecord {
 
 interface DisciplineRecord {
   id: number | string
+  disciplina_id?: number | string
   name?: string
   nombre?: string
 }
@@ -73,6 +73,7 @@ interface MachineRecord {
   id: number | string
   name?: string
   nombre?: string
+  label?: string
   discipline_id?: number | string | null
   disciplineId?: number | string | null
   disciplina_id?: number | string | null
@@ -106,6 +107,7 @@ interface WorkOrderRecord {
   disciplina?: string | null
   discipline?: string | null
   discipline_id?: number | string | null
+  disciplina_id?: number | string | null
   discipline_name?: string | null
   priority?: string
   status?: string
@@ -710,8 +712,7 @@ export default function DocChat() {
       role: 'user',
       content: userContent,
       timestamp: Date.now(),
-      images: pendingImages.map(img => img.dataUrl),
-    })
+    } as any)
     setPendingImages([])
 
     const recentHistory = docMessages

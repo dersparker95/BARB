@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 // =============================================================================
 // IMPORTS
@@ -179,7 +178,7 @@ export default function Dashboard() {
   // Datos derivados: filtros, paginación y series para los gráficos
   // ---------------------------------------------------------------------
 
-  const machineLabel = useCallback((id: string) => machines.find(m => String(m.id) === id)?.name ?? id, [machines])
+  const machineLabel = useCallback((id: string | number | undefined) => machines.find(m => String(m.id) === String(id))?.name ?? String(id), [machines])
 
   const filtered = useMemo(() => {
     const cutoff = timeRange !== 'all' ? new Date(Date.now() - timeRange * 86400000).getTime() : 0
@@ -427,11 +426,11 @@ export default function Dashboard() {
               disciplina_id: Number(p.disciplinaId)
             });
 
-            showToast(t.common?.success || "Orden creada con éxito", "success");
+            showToast(t.common?.success || "Orden creada con éxito");
             loadData();
             setIsCreateOpen(false);
           } catch (error) {
-            showToast(t.common?.error || "Hubo un error al crear la OT", "error");
+            showToast(t.common?.error || "Hubo un error al crear la OT");
             console.error(error);
           }
         }}

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { WorkOrder, User, Message, Role } from '../types'
 
 export type AuthLoginResponse = {
