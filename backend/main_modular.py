@@ -10,10 +10,8 @@ except ImportError:
 
 import os
 
-import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from openai import AsyncOpenAI
 from psycopg2.extras import RealDictCursor
 
 from config import DATABASE_URL, DEEPSEEK_API_KEY, BARB_SYSTEM_PROMPT
@@ -21,7 +19,7 @@ from database import get_db_connection, release_db_connection
 from utils import hash_password, ensure_passwords_hashed
 
 # --- Routers ---
-from routers import health, auth, users, catalog, topology, stats
+from routers import health, auth, users, catalog, topology, stats, work_orders, documents, chat
 
 # --- App ---
 app = FastAPI(title="BARB Plant Memory API", version="2.0.0")
@@ -50,16 +48,9 @@ app.include_router(users.router)
 app.include_router(catalog.router)
 app.include_router(topology.router)
 app.include_router(stats.router)
-
-# --- Cliente IA (para routers de chat cuando se migren) ---
-_http_limits = httpx.Limits(max_connections=10, max_keepalive_connections=5, keepalive_expiry=30)
-ia_client = AsyncOpenAI(
-    api_key=DEEPSEEK_API_KEY,
-    base_url="https://api.deepseek.com",
-    timeout=60.0,
-    max_retries=2,
-    http_client=httpx.AsyncClient(timeout=60.0, limits=_http_limits),
-)
+app.include_router(work_orders.router)
+app.include_router(documents.router)
+app.include_router(chat.router)
 
 
 @app.on_event("startup")
@@ -141,19 +132,9 @@ async def startup_checks():
 
 @app.on_event("shutdown")
 async def shutdown_cleanup():
+    from routers.chat import ia_client
     await ia_client.close()
 
-
-# =============================================================================
-# TODO: Migrar estos endpoints a sus routers:
-# - work_orders → routers/work_orders.py
-# - documents  → routers/documents.py
-# - chat       → routers/chat.py
-# - force-reset-db → routers/admin.py
-# - user/preferences → routers/users.py
-#
-# Por ahora siguen en main.py original hasta que se migren y prueben.
-# =============================================================================
 
 if __name__ == "__main__":
     import uvicorn
