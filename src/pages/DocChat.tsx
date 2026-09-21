@@ -651,7 +651,7 @@ export default function DocChat() {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(() => setSaveStatus('idle'), 4000)
     } catch (error) {
-      console.error('[DocChat] Error guardando sesión:', error)
+      console.error('[DocChat] Error guardando sesión:', error instanceof Error ? error.message : error)
       setSaveStatus('error')
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(() => setSaveStatus('idle'), 4000)
@@ -1172,7 +1172,7 @@ export default function DocChat() {
                   // fetch manual anterior fallaba con 404.
                   api.chat
                     .feedback({ message_content: msg.content, rating })
-                    .catch(err => console.error('Error enviando feedback:', err))
+                    .catch(err => console.error('Error enviando feedback:', err instanceof Error ? err.message : err))
                 }}
               />
             ))

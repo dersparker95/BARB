@@ -103,7 +103,7 @@ const TicketDetailModal: React.FC<Props> = ({ ticket, onClose, onUpdateStatus, o
       onClose()
       showToast(t.ticketDetail?.deletedSuccess || '🗑️ OT eliminada correctamente')
     } catch (error) {
-      console.error('Error deleting work order from modal', error)
+      console.error('Error deleting work order from modal', error instanceof Error ? error.message : error)
       showToast(t.ticketDetail?.deleteError || '❌ No se pudo eliminar la OT')
     }
   }

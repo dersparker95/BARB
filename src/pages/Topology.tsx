@@ -110,7 +110,7 @@ const PlantTopology: React.FC = () => {
           setEdges(rawEdges.map(mapApiEdge))
         }
       } catch (error: any) {
-        if (error.name !== 'AbortError') console.error("Error cargando topología:", error)
+        if (error.name !== 'AbortError') console.error("Error cargando topología:", error instanceof Error ? error.message : error)
       } finally {
         if (!controller.signal.aborted) setLoading(false)
       }

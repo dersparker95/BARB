@@ -51,7 +51,7 @@ export default function SessionHistory() {
       })
       .catch((err: any) => {
         if (cancelled) return
-        console.error("Error cargando historial:", err)
+        console.error("Error cargando historial:", err instanceof Error ? err.message : err)
         // permisos.py restringe /api/chat-sessions a supervisor/gerente/admin;
         // si alguien llega acá sin ese rol (ej. por URL directa), el mensaje
         // real del backend dice "El rol '...' no tiene acceso a 'history'."

@@ -81,7 +81,7 @@ const Report: React.FC = () => {
       showToast(t.common?.success || (nLang === 'en' ? '✅ Report sent to central repository' : '✅ Reporte enviado a repositorio central'))
       navigate(-1)
     } catch (error) {
-      console.error('Error enviando reporte:', error)
+      console.error('Error enviando reporte:', error instanceof Error ? error.message : error)
       showToast(nLang === 'en' ? '❌ Could not send the report' : '❌ No se pudo enviar el reporte')
     } finally {
       setIsSending(false)

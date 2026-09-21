@@ -57,7 +57,7 @@ const TopBar: React.FC = () => {
         if (!response.ok) throw new Error('Fallo al cerrar sesión en el servidor')
       }
     } catch (error) {
-      console.warn("Logout warning:", error)
+      console.warn("Logout warning:", error instanceof Error ? error.message : error)
     } finally {
       setUser(null)
       setLoading(false)

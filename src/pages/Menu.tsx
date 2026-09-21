@@ -107,7 +107,7 @@ const Menu: React.FC = () => {
           discipline_id: m.discipline_id ?? null,
         })))
       } catch (error) {
-        console.error('Error cargando catálogos de disciplina/máquina:', error)
+        console.error('Error cargando catálogos:', error instanceof Error ? error.message : error)
       }
     }
 
@@ -202,7 +202,7 @@ const Menu: React.FC = () => {
       setUploadOpen(false)
     } catch (error) {
       const message = error instanceof Error ? error.message : (t.common?.error || 'No se pudo subir el documento')
-      console.error('Upload document error', error)
+      console.error('Upload document error', error instanceof Error ? error.message : error)
       setUploadError(message)
       showToast(t.common?.error || '❌ Error en la subida')
     } finally {

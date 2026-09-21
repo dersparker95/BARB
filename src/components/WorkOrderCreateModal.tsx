@@ -157,7 +157,7 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
             setPhotoPreview(photoDataUrl)
           }
         }
-      } catch (e) { console.error('Error leyendo caché', e) }
+      } catch (e) { console.error('Error leyendo caché', e instanceof Error ? e.message : e) }
     }
     void loadCache()
     return () => { cancelled = true }
@@ -202,7 +202,7 @@ const WorkOrderCreateModal: React.FC<WorkOrderCreateModalProps> = ({ isOpen, onC
           photoDataUrl = photoPreview ?? undefined
         }
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ form: { ...form, photoFile: undefined, photoDataUrl, photoName } }))
-      } catch (e) { console.warn('No se pudo persistir la caché', e) }
+      } catch (e) { console.warn('No se pudo persistir la caché', e instanceof Error ? e.message : e) }
     }
     void write()
   }, [isOpen, form, photoPreview])

@@ -95,7 +95,7 @@ export default function useFinancialStats(timeRange?: number | 'all') {
       .catch((err: any) => {
         // Ignoramos el error si fue provocado por cancelar la petición intencionalmente
         if (err.name === 'AbortError') return;
-        console.error("Error cargando stats financieras:", err);
+        console.error("Error cargando stats financieras:", err instanceof Error ? err.message : err);
       })
       .finally(() => {
         if (!controller.signal.aborted) {

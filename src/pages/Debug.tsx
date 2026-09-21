@@ -60,7 +60,7 @@ export default function DebugChat() {
   const [sessionId, setSessionId] = useState(() =>
     (typeof crypto !== 'undefined' && crypto.randomUUID)
       ? crypto.randomUUID()
-      : `debug-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      : `debug-${Date.now()}-${Array.from(crypto.getRandomValues(new Uint8Array(8)),b=>b.toString(16).padStart(2,'0')).join('')}`
   )
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export default function DebugChat() {
     setSessionId(
       (typeof crypto !== 'undefined' && crypto.randomUUID)
         ? crypto.randomUUID()
-        : `debug-${Date.now()}-${Math.random().toString(36).slice(2)}`
+        : `debug-${Date.now()}-${Array.from(crypto.getRandomValues(new Uint8Array(8)),b=>b.toString(16).padStart(2,'0')).join('')}`
     )
   }, [selectedMachineId])
 
@@ -89,7 +89,7 @@ export default function DebugChat() {
         if (machRes) setMachines(machRes)
         if (otRes) setWorkOrders(otRes.data || otRes)
       } catch (error) {
-        console.error("Error cargando datos para Debug:", error)
+        console.error("Error cargando datos para Debug:", error instanceof Error ? error.message : error)
       }
     }
     fetchData()
@@ -384,7 +384,7 @@ export default function DebugChat() {
                     message_content: msgData.content,
                     rating,
                     context: selectedMachine?.name || selectedMachine?.nombre || 'Debug General'
-                  }).catch(err => console.error("Error enviando feedback:", err));
+                  }).catch(err => console.error("Error enviando feedback:", err instanceof Error ? err.message : err));
                 }}
               />
             ))

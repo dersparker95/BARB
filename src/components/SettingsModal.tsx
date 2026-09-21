@@ -64,7 +64,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
       })
       if (apiRes.ok) apiStatus = '✅ Online'
     } catch (e) {
-      console.warn("API Test Failed", e)
+      console.warn("API Test Failed", e instanceof Error ? e.message : e)
     }
 
     setIsTesting(false)

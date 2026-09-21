@@ -57,7 +57,7 @@ const MachineMemory: React.FC = () => {
           setEvents(getMachineHistory(tickets, mid))
         }
       } catch (error) {
-        console.error('Error fetching machine history:', error)
+        console.error('Error fetching machine history:', error instanceof Error ? error.message : error)
       } finally {
         if (mounted) setLoading(false)
       }

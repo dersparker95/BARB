@@ -44,7 +44,7 @@ export async function callLMStudio(
     if (err instanceof Error && err.name === 'AbortError') {
       console.error('LM Studio tardó demasiado en responder (timeout).')
     } else {
-      console.error('Error de red al intentar contactar a LM Studio directamente:', err)
+      console.error('Error de red al contactar LM Studio:', err instanceof Error ? err.message : err)
     }
     throw err
   }

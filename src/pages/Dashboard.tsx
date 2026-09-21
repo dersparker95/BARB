@@ -431,7 +431,7 @@ export default function Dashboard() {
             setIsCreateOpen(false);
           } catch (error) {
             showToast(t.common?.error || "Hubo un error al crear la OT");
-            console.error(error);
+            console.error(error instanceof Error ? error.message : error);
           }
         }}
       />

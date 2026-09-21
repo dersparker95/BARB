@@ -94,7 +94,7 @@ def get_sesion_actual(authorization: str = Header(..., alias="Authorization")) -
     Igual que get_rol_actual pero devuelve también el usuario_id de la sesión,
     necesario para endpoints que actúan "sobre el propio usuario" (ej. preferencias).
     """
-    from main import _query_one
+    from database import _query_one
 
     token = authorization.replace("Bearer ", "").strip()
     if not token:
@@ -125,7 +125,7 @@ def get_rol_actual(authorization: str = Header(..., alias="Authorization")) -> s
     guardado en la tabla `sesion` (creada en /auth/login). Rechaza tokens
     inexistentes, expirados o de usuarios inactivos.
     """
-    from main import _query_one  # import diferido para evitar ciclo de importación
+    from database import _query_one  # import diferido para evitar ciclo de importación
 
     token = authorization.replace("Bearer ", "").strip()
     if not token:
